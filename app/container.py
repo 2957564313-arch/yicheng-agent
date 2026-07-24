@@ -17,6 +17,7 @@ from app.providers.rag import KnowledgeRepository
 from app.providers.route_static import StaticRouteProvider
 from app.providers.weather_static import StaticWeatherProvider
 from app.repositories.database import Database
+from app.repositories.academic_calendar import AcademicCalendarRepository
 from app.repositories.memories import MemoryRepository
 from app.repositories.plans import PlanRepository
 from app.repositories.runs import RunRepository
@@ -35,6 +36,7 @@ class AppContainer:
     plans: PlanRepository
     memories: MemoryRepository
     timetables: TimetableRepository
+    academic_calendar: AcademicCalendarRepository
     runs: RunRepository
     locations: LocationRepository
     geocoder: AmapGeocodingProvider | None
@@ -130,6 +132,10 @@ def build_container(settings: Settings) -> AppContainer:
         plans=PlanRepository(database),
         memories=MemoryRepository(database),
         timetables=TimetableRepository(database),
+        academic_calendar=AcademicCalendarRepository(
+            database,
+            settings.app_data_dir / "academic_calendar.json",
+        ),
         runs=RunRepository(database),
         locations=locations,
         geocoder=geocoder,
