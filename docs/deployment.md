@@ -55,12 +55,13 @@ LIVE_WEATHER_ENABLED=false
 
 ```dotenv
 LLM_ENABLED=true
-LLM_MODEL=qwen3.6-flash
-LLM_FALLBACK_MODELS=qwen3.7-plus,qwen-plus-2025-07-28
+LLM_MODEL=qwen3.7-plus
+LLM_FALLBACK_MODELS=qwen-plus-2025-07-28,glm-5
 LLM_BASE_URL=<百炼 OpenAI 兼容地址>
 LLM_API_KEY=<服务器密钥>
 LLM_ENABLE_THINKING=false
 LLM_RENDER_ENABLED=true
+LLM_PLAN_RENDER_ENABLED=false
 LLM_TIMEOUT_SECONDS=10
 
 LIVE_ROUTE_ENABLED=true
@@ -114,7 +115,7 @@ WEATHER_TIMEOUT_SECONDS=3
 
 1. 冻结需求，不在发布当天新增功能；
 2. 运行静态数据校验；
-3. 运行全部 60 项自动化测试；
+3. 运行全部 123 项自动化测试；
 4. 运行 60 例评估；
 5. 本地浏览器运行三个 Demo；
 6. 备份数据库；
