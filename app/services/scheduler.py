@@ -191,6 +191,7 @@ class Scheduler:
             task_items,
             context,
             missing_route_pairs,
+            preferences,
         )
         metrics = PlanMetrics(
             scheduled_task_count=len(task_items),
@@ -539,6 +540,7 @@ class Scheduler:
         task_items: list[PlanItem],
         context: PlanningContext,
         missing_route_pairs: set[tuple[str, str]],
+        preferences: UserPreferences,
     ) -> list[PlanItem]:
         ordered = sorted(task_items, key=lambda item: item.start_at)
         result: list[PlanItem] = []
@@ -559,25 +561,46 @@ class Scheduler:
                     (item.location_id, following.location_id)
                 )
                 continue
+            base_duration = (
+                estimate.base_duration_min
+                if estimate.base_duration_min is not None
+                else estimate.duration_min
+            )
+            desired_end = following.start_at - timedelta(
+                minutes=preferences.buffer_min
+            )
+            provisional_start = desired_end - timedelta(
+                minutes=base_duration
+            )
             adjusted_duration, congestion_delay = context.travel_details(
                 item.location_id,
                 following.location_id,
-                departure_at=item.end_at,
+                departure_at=provisional_start,
             )
             if adjusted_duration is None:
                 continue
-            travel_end = item.end_at + timedelta(minutes=adjusted_duration)
+            travel_end = desired_end
+            travel_start = travel_end - timedelta(
+                minutes=adjusted_duration
+            )
+            if travel_start < item.end_at:
+                travel_start = item.end_at
+                adjusted_duration, congestion_delay = context.travel_details(
+                    item.location_id,
+                    following.location_id,
+                    departure_at=travel_start,
+                )
+                if adjusted_duration is None:
+                    continue
+                travel_end = travel_start + timedelta(
+                    minutes=adjusted_duration
+                )
             mode_labels = {
                 "walk": "步行",
                 "bicycle": "骑自行车",
                 "electrobike": "骑电瓶车",
             }
             mode_label = mode_labels.get(estimate.mode, "通勤")
-            base_duration = (
-                estimate.base_duration_min
-                if estimate.base_duration_min is not None
-                else estimate.duration_min
-            )
             reason = (
                 f"{mode_label}基础时间 {base_duration} 分钟"
                 + (
@@ -591,7 +614,7 @@ class Scheduler:
                     id=f"travel_{uuid4().hex}",
                     item_type="travel",
                     title=f"{mode_label}前往{following.title}地点",
-                    start_at=item.end_at,
+                    start_at=travel_start,
                     end_at=travel_end,
                     location_id=following.location_id,
                     source=estimate.source,
