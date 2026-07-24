@@ -670,8 +670,12 @@ class RuleBasedRequirementParser:
         target_date: date,
     ) -> list[Task]:
         """Convert stated class periods into deterministic fixed blocks."""
-        if not self.class_periods or not any(
-            keyword in query for keyword in ("有课", "上课", "课程")
+        if not self.class_periods or not re.search(
+            r"第?\s*(?:1[0-3]|[1-9]|十三|十二|十一|十|"
+            r"[一二三四五六七八九])(?:\s*(?:到|至|[-—~～、,，])"
+            r"\s*第?\s*(?:1[0-3]|[1-9]|十三|十二|十一|十|"
+            r"[一二三四五六七八九]))?\s*节",
+            query,
         ):
             return []
 

@@ -169,6 +169,33 @@ def test_verified_class_periods_become_fixed_hard_constraints():
     assert study.earliest_start.isoformat() == "2026-07-24T11:35:00+08:00"
 
 
+def test_named_subject_periods_are_still_hard_class_constraints():
+    parser = RuleBasedRequirementParser(
+        "Asia/Shanghai",
+        Path(BASE_DIR / "data" / "class_periods.json"),
+    )
+    result = parser.parse(
+        query=(
+            "今天第1至2节有高等数学课，第3至4节有大学英语课。"
+            "下课后去图书馆自习90分钟。"
+        ),
+        now=datetime(
+            2026,
+            7,
+            24,
+            7,
+            0,
+            tzinfo=ZoneInfo("Asia/Shanghai"),
+        ),
+    )
+
+    course = next(task for task in result.tasks if "course" in task.tags)
+    study = next(task for task in result.tasks if task.id == "study")
+    assert course.fixed_start.isoformat() == "2026-07-24T08:05:00+08:00"
+    assert course.fixed_end.isoformat() == "2026-07-24T11:35:00+08:00"
+    assert study.earliest_start.isoformat() == "2026-07-24T11:35:00+08:00"
+
+
 def test_parcel_without_user_deadline_uses_opening_hours_not_fake_18_deadline():
     result = parse("明天下课后去图书馆自习2小时，再去取快递。")
     parcel = next(task for task in result.tasks if task.id == "parcel")
