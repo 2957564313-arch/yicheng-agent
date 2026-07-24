@@ -256,7 +256,7 @@ class OpenAICompatibleLLM:
         }
         last_error: Exception | None = None
         attempted_models: list[str] = []
-        for model in self.models:
+        for index, model in enumerate(self.models):
             attempted_models.append(model)
             body: dict[str, Any] = {
                 "model": model,
@@ -274,6 +274,11 @@ class OpenAICompatibleLLM:
                     url,
                     body,
                     headers,
+                    (
+                        min(self.timeout_seconds, 18)
+                        if index == 0
+                        else min(self.timeout_seconds, 6)
+                    ),
                 )
                 content = payload["choices"][0]["message"]["content"]
                 if not isinstance(content, str) or not content.strip():
@@ -314,12 +319,13 @@ class OpenAICompatibleLLM:
         url: str,
         body: dict[str, Any],
         headers: dict[str, str],
+        timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         response = requests.post(
             url,
             json=body,
             headers=headers,
-            timeout=self.timeout_seconds,
+            timeout=timeout_seconds or self.timeout_seconds,
         )
         response.raise_for_status()
         return response.json()
