@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from app.container import AppContainer
 from app.nodes.common import append_trace
+from app.schemas.calendar import AcademicDayContext
 from app.schemas.common import DataSource, Issue, IssueSeverity
 from app.schemas.context import RetrievedFact, WeatherContext
 from app.schemas.task import Task, UserPreferences
@@ -215,21 +216,128 @@ def make_enrich_node(container: AppContainer):
             )
 
         target_date = date.fromisoformat(state["requested_date"])
+        academic_day = (
+            AcademicDayContext.model_validate(state["academic_day_context"])
+            if state.get("academic_day_context")
+            else None
+        )
         congestion_windows = container.rules.congestion_contexts(target_date)
         opening_windows = {}
         for location_id in location_ids:
+            if not container.rules.has_opening_rule(location_id):
+                continue
             windows = container.rules.opening_windows(
                 location_id,
                 target_date,
+                is_national_holiday=bool(
+                    academic_day and academic_day.day_type == "holiday"
+                ),
             )
             opening_windows[location_id] = [
                 [start.isoformat(), end.isoformat()]
                 for start, end in windows
             ]
+            if (
+                not windows
+                and academic_day
+                and academic_day.day_type == "holiday"
+                and container.rules.closes_on_national_holidays(location_id)
+            ):
+                affected = [
+                    task.id
+                    for task in tasks
+                    if task.location_id == location_id
+                ]
+                if affected:
+                    location_name = (
+                        container.locations.get(location_id).name
+                        if container.locations.get(location_id)
+                        else location_id
+                    )
+                    warnings.append(
+                        Issue(
+                            code="OUTSIDE_OPENING_HOURS",
+                            severity=IssueSeverity.ERROR,
+                            message=(
+                                f"{location_name}的常规开放规则不适用于"
+                                f"{academic_day.label or '法定节假日'}，"
+                                "在没有专门开放通知前不能把任务安排进去"
+                            ),
+                            task_ids=affected,
+                            recoverable=True,
+                        )
+                    )
 
         structured_facts = container.rules.facts_for_locations(
             set(location_ids)
         )
+        if academic_day and (
+            academic_day.course_action != "normal"
+            or academic_day.day_type == "unknown"
+        ):
+            if academic_day.day_type == "unknown":
+                content = (
+                    f"{target_date.year}年国家法定节假日安排尚未录入"
+                    "已核验数据；当前仍按普通星期课表规划，但临近日期时"
+                    "需要再核对国务院通知和学校校历。"
+                )
+                warnings.append(
+                    Issue(
+                        code="ANNUAL_CALENDAR_NOT_VERIFIED",
+                        severity=IssueSeverity.WARNING,
+                        message=content,
+                        recoverable=True,
+                    )
+                )
+            elif academic_day.course_action == "no_class":
+                content = (
+                    f"{target_date:%Y年%m月%d日}为"
+                    f"{academic_day.label or '校历休息日'}，"
+                    "个人课表中的常规课程不占用当天；学习、运动和生活"
+                    "任务仍可照常规划。如学校另有临时通知，以学校通知"
+                    "为准。"
+                )
+            elif academic_day.course_action == "makeup":
+                weekday = "一二三四五六日"[
+                    int(academic_day.effective_weekday or 1) - 1
+                ]
+                content = (
+                    f"{target_date:%Y年%m月%d日}按学校校历执行"
+                    f"星期{weekday}的课表；这些补课课程已作为固定约束。"
+                )
+            else:
+                content = (
+                    f"{target_date:%Y年%m月%d日}为"
+                    f"{academic_day.label or '国家调休工作日'}。"
+                    "国家通知只说明当天上班，不能据此推断学校补星期几"
+                    "的课程；在未录入学校教务通知前，系统不会臆造课程。"
+                )
+                warnings.append(
+                    Issue(
+                        code="SCHOOL_CALENDAR_CONFIRMATION_REQUIRED",
+                        severity=IssueSeverity.WARNING,
+                        message=(
+                            "这一天属于国家调休工作日，但学校具体补课"
+                            "安排尚未录入，请以教务通知为准"
+                        ),
+                        recoverable=True,
+                    )
+                )
+            structured_facts = [
+                RetrievedFact(
+                    id=f"academic_calendar_{target_date.isoformat()}",
+                    content=content,
+                    priority=120,
+                    source=academic_day.source,
+                    source_ref=academic_day.source_ref or "个人校历设置",
+                    verified_at=academic_day.verified_at,
+                    metadata={
+                        "day_type": academic_day.day_type,
+                        "course_action": academic_day.course_action,
+                    },
+                ),
+                *structured_facts,
+            ]
         if is_knowledge_query and state.get("timetable_summary"):
             structured_facts = [
                 RetrievedFact(
