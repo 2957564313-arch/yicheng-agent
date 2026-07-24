@@ -29,8 +29,15 @@ const termStart = $("#term-start");
 const termEnd = $("#term-end");
 const timetableFile = $("#timetable-file");
 const timetableImport = $("#timetable-import");
+const timetableConfirm = $("#timetable-confirm");
 const timetableSummary = $("#timetable-summary");
 const timetableClear = $("#timetable-clear");
+const calendarDate = $("#calendar-date");
+const calendarAction = $("#calendar-action");
+const calendarWeekday = $("#calendar-weekday");
+const calendarLabel = $("#calendar-label");
+const calendarSave = $("#calendar-save");
+const calendarList = $("#calendar-list");
 const adjustmentPanel = $(".adjustment-panel");
 const consoleUserId = getOrCreateLocalIdentity(
   "yicheng_user_id",
@@ -44,8 +51,10 @@ let lastSuggestedActions = [];
 let lastDebugPayload = null;
 let serverClockBaseMs = null;
 let serverClockFetchedAtMs = null;
+let pendingTimetableImport = null;
 const memorySnapshotKey = "yicheng_memory_snapshot";
 const timetableSnapshotKey = "yicheng_timetable_snapshot";
+const calendarSnapshotKey = "yicheng_calendar_snapshot";
 const planSnapshotKey = "yicheng_current_plan_snapshot";
 
 function readLocalSnapshot(key, fallback) {
@@ -63,6 +72,7 @@ function writeLocalSnapshot(key, value) {
 function clientContextSnapshot() {
   const memories = readLocalSnapshot(memorySnapshotKey, []);
   const timetableData = readLocalSnapshot(timetableSnapshotKey, null);
+  const calendarOverrides = readLocalSnapshot(calendarSnapshotKey, []);
   const previousPlan = readLocalSnapshot(planSnapshotKey, null);
   return {
     memories: memories.map((item) => ({
@@ -81,6 +91,13 @@ function clientContextSnapshot() {
         entries: timetableData.entries,
       }
       : null,
+    calendar_overrides: calendarOverrides.map((item) => ({
+      date: item.date,
+      action: item.action,
+      replacement_weekday: item.replacement_weekday || null,
+      label: item.label,
+      source_ref: item.source_ref || null,
+    })),
     previous_plan: previousPlan,
   };
 }
@@ -719,37 +736,51 @@ function timetableWeekdayLabel(value) {
 
 async function fileToImportPayload(file) {
   const extension = file.name.split(".").pop().toLowerCase();
-  if (extension === "xlsx") {
+  if (extension === "xlsx" || extension === "pdf") {
     const bytes = new Uint8Array(await file.arrayBuffer());
     let binary = "";
     for (let index = 0; index < bytes.length; index += 0x8000) {
       binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
     }
-    return { format: "xlsx_base64", content: btoa(binary) };
+    return {
+      format: extension === "pdf" ? "pdf_base64" : "xlsx_base64",
+      content: btoa(binary),
+    };
   }
   if (extension === "csv" || extension === "json") {
     return { format: extension, content: await file.text() };
   }
-  throw new Error("请选择 .xlsx、.csv 或 .json 课表文件。");
+  throw new Error("请选择 .pdf、.xlsx、.csv 或 .json 课表文件。");
 }
 
 function renderTimetable(data) {
   const entries = data.entries || [];
+  const isPreview = Boolean(entries.length && !data.timetable?.id);
   timetableSummary.classList.toggle("muted", entries.length === 0);
-  timetableClear.hidden = entries.length === 0;
+  timetableClear.hidden = entries.length === 0 || isPreview;
   if (!entries.length) {
     timetableSummary.textContent = "当前还没有导入个人课表。";
     return;
   }
   const grouped = new Map();
-  entries.forEach((entry) => {
+  [...entries]
+    .sort(
+      (left, right) =>
+        left.weekday - right.weekday
+        || left.start_period - right.start_period
+        || left.end_period - right.end_period
+        || left.course_name.localeCompare(right.course_name, "zh-CN"),
+    )
+    .forEach((entry) => {
     if (!grouped.has(entry.weekday)) grouped.set(entry.weekday, []);
     grouped.get(entry.weekday).push(entry);
   });
   timetableSummary.innerHTML = `
     <div class="timetable-status">
       <strong>${escapeHtml(data.timetable?.name || "我的课表")}</strong>
-      <span>${entries.length}门次课程 · 已启用</span>
+      <span>${entries.length}个课程时段 · ${
+        isPreview ? "等待确认" : "已启用"
+      }</span>
     </div>
     ${[...grouped.entries()].map(([weekday, values]) => `
       <div class="timetable-day">
@@ -760,7 +791,11 @@ function renderTimetable(data) {
               entry.end_period === entry.start_period
                 ? ""
                 : `—${entry.end_period}`
-            }节${entry.location ? ` · ${escapeHtml(entry.location)}` : ""}</span>
+            }节${entry.location ? ` · ${escapeHtml(entry.location)}` : ""}${
+              entry.weeks?.length
+                ? ` · 第${escapeHtml(entry.weeks.join("、"))}周`
+                : ""
+            }</span>
           `).join("")}
         </div>
       </div>
@@ -772,12 +807,16 @@ async function loadTimetable() {
   const response = await fetch(`/api/v1/users/${consoleUserId}/timetable`);
   const data = await response.json();
   if (!response.ok) throw data;
+  const timetableData = data.entries?.length
+    ? data
+    : readLocalSnapshot(timetableSnapshotKey, data);
   if (data.entries?.length) {
     writeLocalSnapshot(timetableSnapshotKey, data);
-    renderTimetable(data);
-    return;
   }
-  renderTimetable(readLocalSnapshot(timetableSnapshotKey, data));
+  timetableName.value = timetableData.timetable?.name || "我的课表";
+  termStart.value = timetableData.timetable?.term_start || "";
+  termEnd.value = timetableData.timetable?.term_end || "";
+  renderTimetable(timetableData);
 }
 
 timetableImport.addEventListener("click", async () => {
@@ -787,29 +826,50 @@ timetableImport.addEventListener("click", async () => {
     timetableSummary.classList.remove("muted");
     return;
   }
+  if (!termStart.value) {
+    timetableSummary.textContent = (
+      "请先选择“第一教学周周一”。这样我才能把课表里的教学周次"
+      + "准确换算成真实日期。"
+    );
+    timetableSummary.classList.remove("muted");
+    termStart.focus();
+    return;
+  }
   timetableImport.disabled = true;
   timetableImport.textContent = "正在识别课表…";
   try {
     const filePayload = await fileToImportPayload(file);
+    const importPayload = {
+      name: timetableName.value.trim() || "我的课表",
+      term_start: termStart.value || null,
+      term_end: termEnd.value || null,
+      ...filePayload,
+    };
     const response = await fetch(
-      `/api/v1/users/${consoleUserId}/timetable/import`,
+      `/api/v1/users/${consoleUserId}/timetable/preview`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: timetableName.value.trim() || "我的课表",
-          term_start: termStart.value || null,
-          term_end: termEnd.value || null,
-          ...filePayload,
-        }),
+        body: JSON.stringify(importPayload),
       },
     );
     const data = await response.json();
     if (!response.ok) throw data;
-    writeLocalSnapshot(timetableSnapshotKey, data);
-    renderTimetable(data);
-    timetableFile.value = "";
-    answer.textContent = `课表已经导入，共识别 ${data.imported_count} 门次课程。之后你只要告诉我想做什么，我会自动避开上课时间。`;
+    pendingTimetableImport = importPayload;
+    if (!termEnd.value && data.term_end) termEnd.value = data.term_end;
+    renderTimetable({
+      timetable: {
+        name: importPayload.name,
+        term_start: data.term_start,
+        term_end: data.term_end,
+      },
+      entries: data.entries,
+    });
+    timetableConfirm.hidden = false;
+    answer.textContent = (
+      `我先识别出了 ${data.imported_count} 个课程时段，尚未覆盖原课表。`
+      + "请检查课程名、星期、节次、周次和地点，确认无误后再启用。"
+    );
     answer.classList.remove("muted");
   } catch (error) {
     timetableSummary.textContent = error instanceof Error
@@ -819,7 +879,48 @@ timetableImport.addEventListener("click", async () => {
     renderDebug(error);
   } finally {
     timetableImport.disabled = false;
-    timetableImport.textContent = "导入并启用课表";
+    timetableImport.textContent = "识别并预览课表";
+  }
+});
+
+timetableFile.addEventListener("change", () => {
+  pendingTimetableImport = null;
+  timetableConfirm.hidden = true;
+});
+
+timetableConfirm.addEventListener("click", async () => {
+  if (!pendingTimetableImport) return;
+  timetableConfirm.disabled = true;
+  timetableConfirm.textContent = "正在启用课表…";
+  try {
+    const response = await fetch(
+      `/api/v1/users/${consoleUserId}/timetable/import`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pendingTimetableImport),
+      },
+    );
+    const data = await response.json();
+    if (!response.ok) throw data;
+    writeLocalSnapshot(timetableSnapshotKey, data);
+    renderTimetable(data);
+    pendingTimetableImport = null;
+    timetableConfirm.hidden = true;
+    timetableFile.value = "";
+    answer.textContent = (
+      `课表已经启用，共保存 ${data.imported_count} 个课程时段。`
+      + "之后你只要告诉我日期和想做的事，我会自动避开上课时间。"
+    );
+    answer.classList.remove("muted");
+  } catch (error) {
+    timetableSummary.textContent = error?.error?.message
+      || "课表暂时没有启用成功。";
+    timetableSummary.classList.remove("muted");
+    renderDebug(error);
+  } finally {
+    timetableConfirm.disabled = false;
+    timetableConfirm.textContent = "确认启用这份课表";
   }
 });
 
@@ -831,6 +932,123 @@ timetableClear.addEventListener("click", async () => {
   if (response.ok) {
     localStorage.removeItem(timetableSnapshotKey);
     renderTimetable({ timetable: null, entries: [] });
+  }
+});
+
+const calendarActionLabels = {
+  no_class: "不上课",
+  normal: "按当天课表",
+  makeup: "补课",
+};
+
+function renderCalendarOverrides(items) {
+  calendarList.classList.toggle("muted", !items.length);
+  if (!items.length) {
+    calendarList.textContent = "暂无学校校历调整。";
+    return;
+  }
+  calendarList.innerHTML = items.map((item) => {
+    const weekday = item.replacement_weekday
+      ? ` · 按周${"一二三四五六日"[item.replacement_weekday - 1]}课表`
+      : "";
+    return `
+      <div class="calendar-item">
+        <span>
+          <strong>${escapeHtml(item.date)}</strong> ·
+          ${calendarActionLabels[item.action] || escapeHtml(item.action)}
+          ${weekday}<br />
+          ${escapeHtml(item.label || "学校校历调整")}
+        </span>
+        <button type="button" data-calendar-delete="${escapeHtml(item.date)}">
+          删除
+        </button>
+      </div>
+    `;
+  }).join("");
+}
+
+async function loadCalendarOverrides() {
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/calendar-overrides`,
+  );
+  const data = await response.json();
+  if (!response.ok) throw data;
+  const items = data.items?.length
+    ? data.items
+    : readLocalSnapshot(calendarSnapshotKey, []);
+  if (data.items?.length) {
+    writeLocalSnapshot(calendarSnapshotKey, data.items);
+  }
+  renderCalendarOverrides(items);
+}
+
+calendarAction.addEventListener("change", () => {
+  calendarWeekday.hidden = calendarAction.value !== "makeup";
+});
+
+calendarSave.addEventListener("click", async () => {
+  if (!calendarDate.value) {
+    calendarList.textContent = "请先选择需要调整的日期。";
+    calendarList.classList.remove("muted");
+    calendarDate.focus();
+    return;
+  }
+  const payload = {
+    date: calendarDate.value,
+    action: calendarAction.value,
+    replacement_weekday: calendarAction.value === "makeup"
+      ? Number(calendarWeekday.value)
+      : null,
+    label: calendarLabel.value.trim() || "学校校历调整",
+  };
+  calendarSave.disabled = true;
+  try {
+    const response = await fetch(
+      `/api/v1/users/${consoleUserId}/calendar-overrides`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+    const data = await response.json();
+    if (!response.ok) throw data;
+    const current = readLocalSnapshot(calendarSnapshotKey, []);
+    const items = [
+      data,
+      ...current.filter((item) => item.date !== data.date),
+    ].sort((left, right) => left.date.localeCompare(right.date));
+    writeLocalSnapshot(calendarSnapshotKey, items);
+    renderCalendarOverrides(items);
+    calendarLabel.value = "";
+    answer.textContent = (
+      `已记下 ${data.date} 的校历安排。之后规划这一天时，`
+      + "我会先按这条学校通知处理课程，再安排其他活动。"
+    );
+    answer.classList.remove("muted");
+  } catch (error) {
+    calendarList.textContent = error?.error?.message
+      || "这条校历调整暂时没有保存成功。";
+    calendarList.classList.remove("muted");
+    renderDebug(error);
+  } finally {
+    calendarSave.disabled = false;
+  }
+});
+
+calendarList.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-calendar-delete]");
+  if (!button) return;
+  const eventDate = button.dataset.calendarDelete;
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/calendar-overrides/${eventDate}`,
+    { method: "DELETE" },
+  );
+  if (response.ok || response.status === 404) {
+    const items = readLocalSnapshot(calendarSnapshotKey, [])
+      .filter((item) => item.date !== eventDate);
+    writeLocalSnapshot(calendarSnapshotKey, items);
+    renderCalendarOverrides(items);
   }
 });
 
@@ -856,6 +1074,7 @@ setInterval(renderClock, 30000);
 updateMemoryPlaceholder();
 loadMemories().catch((error) => renderDebug(error));
 loadTimetable().catch((error) => renderDebug(error));
+loadCalendarOverrides().catch((error) => renderDebug(error));
 loadDemos().catch(() => {
   demoButtons.textContent = "案例加载失败";
 });
