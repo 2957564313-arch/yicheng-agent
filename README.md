@@ -9,18 +9,19 @@
 
 ## 当前状态
 
-- 主模型：`qwen3.6-flash`；
+- 模型容错链：主模型不可用或额度耗尽时自动切换备用千问模型，
+  全部在线模型不可用时继续使用本地确定性解析；
 - 高德路线与天气：已真实联调；
 - 校园知识库：206 页学生手册 + 已核验校园服务时间知识；
 - 校园知识分块：约 97 个；
 - 检索：查询扩展 + 来源分级 + 二阶段重排去重；
 - 长期记忆：SQLite 持久化，支持前端增改、启停和删除；
 - 课程节次：用户声明后按已核验作息锁定为硬约束；
-- 自动化测试：60 项通过；
+- 自动化测试：108 项通过；
 - 离线评估：60/60 通过；
 - 三个固定 Demo：全部通过；
 - 真实端到端响应：7.17 秒、0 个硬约束错误、0 个告警；
-- 运行范围：当前按要求冻结在 localhost，不进行公网部署。
+- 运行范围：本地版本与 Vercel 公网版本均可直接运行。
 
 ## 本地启动
 
@@ -33,7 +34,6 @@
 或执行：
 
 ```bash
-cd /Users/xuwenhang/Desktop/易程智策项目
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -52,6 +52,7 @@ cd /Users/xuwenhang/Desktop/易程智策项目
 ```dotenv
 LLM_ENABLED=true
 LLM_MODEL=qwen3.6-flash
+LLM_FALLBACK_MODELS=qwen3.7-plus,qwen-plus-2025-07-28
 LLM_ENABLE_THINKING=false
 LLM_RENDER_ENABLED=true
 LLM_TIMEOUT_SECONDS=10
@@ -61,7 +62,7 @@ LIVE_WEATHER_ENABLED=true
 ```
 
 高德天气城市编码默认从 `data/campus_profile.json` 读取。模型、路线或天气
-失败时，系统会自动使用本地解析和静态数据，不阻断核心规划。
+失败时，系统依次切换备用模型、本地解析和静态数据，不阻断核心规划。
 
 ## 验收
 
@@ -102,8 +103,8 @@ knowledge/
 
 ## 文档
 
-- 当前交付状态：[`易程智策_项目交付清单与待办.md`](易程智策_项目交付清单与待办.md)
-- 完整工程方案：[`易程智策_新版工程执行计划.md`](易程智策_新版工程执行计划.md)
+- 当前交付状态：[`docs/plans/项目交付清单与待办.md`](docs/plans/项目交付清单与待办.md)
+- 完整工程方案：[`docs/plans/新版工程执行计划.md`](docs/plans/新版工程执行计划.md)
 - 校园配置：[`docs/CAMPUS_PROFILE.md`](docs/CAMPUS_PROFILE.md)
 - 环境：[`docs/environment.md`](docs/environment.md)
 - API：[`docs/api.md`](docs/api.md)
