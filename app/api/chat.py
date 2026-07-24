@@ -549,6 +549,9 @@ async def execute_chat(
         content=payload.query,
         created_at=now,
     )
+    reset_llm_usage = getattr(container.llm, "reset_usage", None)
+    if callable(reset_llm_usage):
+        reset_llm_usage()
     run_id = container.runs.start(
         request_id=request_id,
         trace_id=trace_id,
@@ -556,7 +559,13 @@ async def execute_chat(
         input_payload=payload.model_dump(mode="json"),
         created_at=now,
         model_name=(
-            container.settings.llm_model if container.llm.configured else None
+            getattr(
+                container.llm,
+                "model_chain_label",
+                container.settings.llm_model,
+            )
+            if container.llm.configured
+            else None
         ),
     )
     started = perf_counter()
@@ -750,6 +759,11 @@ async def execute_chat(
             latency_ms=round((perf_counter() - started) * 1000),
             route_source=freshness.route.value,
             weather_source=freshness.weather.value,
+            model_name=getattr(
+                container.llm,
+                "used_model_label",
+                None,
+            ),
         )
         return response
     except Exception as exc:
@@ -762,6 +776,11 @@ async def execute_chat(
             completed_at=datetime.now(timezone),
             latency_ms=round((perf_counter() - started) * 1000),
             error_code=error_code,
+            model_name=getattr(
+                container.llm,
+                "used_model_label",
+                None,
+            ),
         )
         raise
 
