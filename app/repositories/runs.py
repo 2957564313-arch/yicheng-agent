@@ -56,6 +56,7 @@ class RunRepository:
         route_source: str | None = None,
         weather_source: str | None = None,
         error_code: str | None = None,
+        model_name: str | None = None,
     ) -> None:
         with self.database.transaction() as connection:
             connection.execute(
@@ -63,7 +64,8 @@ class RunRepository:
                 UPDATE runs
                 SET output_json = ?, status = ?, node_trace_json = ?,
                     completed_at = ?, latency_ms = ?, route_source = ?,
-                    weather_source = ?, error_code = ?
+                    weather_source = ?, error_code = ?,
+                    model_name = COALESCE(?, model_name)
                 WHERE id = ?
                 """,
                 (
@@ -79,7 +81,7 @@ class RunRepository:
                     route_source,
                     weather_source,
                     error_code,
+                    model_name,
                     run_id,
                 ),
             )
-
