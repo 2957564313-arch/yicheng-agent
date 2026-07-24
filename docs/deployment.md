@@ -4,11 +4,25 @@
 
 - 单实例 FastAPI；
 - Python 3.12；
-- SQLite 位于持久化磁盘；
+- 正式版数据库使用持久化存储；
 - HTTPS 由反向代理或托管平台提供；
 - 固定 Demo 默认离线，普通输入使用实时增强；
 - 密钥只通过环境变量注入，禁止写进仓库；
 - 每次发布前备份 `runtime/app.db`。
+
+## Vercel 预览版
+
+仓库根目录的 `server.py` 是 Vercel 识别 FastAPI 应用的入口。Vercel
+运行时只允许把临时文件写到 `/tmp`，因此预览版会把 SQLite 数据库放在
+`/tmp/yicheng-agent/`。这种数据会在冷启动、实例切换或重新部署后丢失，
+只适合公开体验和功能测试，不应作为长期记忆的最终存储。
+
+Vercel 预览版无需配置额外启动命令。导入 GitHub 仓库后，框架保持自动
+识别，根目录保持仓库根目录。首次部署可以先不开启外部 API，确认首页、
+健康检查和三个离线 Demo 均可访问，再配置模型、高德路线和天气环境变量。
+
+需要长期保存计划、记忆和跨学校配置时，应把 SQLite 迁移到 PostgreSQL；
+学校知识文件应迁移到对象存储，并按 `campus_id` 隔离。
 
 ## 启动命令
 
@@ -42,6 +56,7 @@ LIVE_WEATHER_ENABLED=false
 ```dotenv
 LLM_ENABLED=true
 LLM_MODEL=qwen3.6-flash
+LLM_FALLBACK_MODELS=qwen3.7-plus,qwen-plus-2025-07-28
 LLM_BASE_URL=<百炼 OpenAI 兼容地址>
 LLM_API_KEY=<服务器密钥>
 LLM_ENABLE_THINKING=false
@@ -62,6 +77,7 @@ WEATHER_TIMEOUT_SECONDS=3
 实时增强版必须同时满足以下条件：
 
 - 模型：兼容接口已用结构化输出案例验证；
+- 模型容错：主模型额度耗尽、限流或不可用时能切换备用模型；
 - 路线：地点真实坐标已核验，Web 服务 Key 可用；
 - 天气：城市 adcode 已核验，返回字段完成联调。
 
