@@ -13,10 +13,75 @@ const cases = [
         expectEqual(data.status, "completed", "应生成完整计划"),
         expectAtLeast(tasks.length, 3, "课程和生活任务应全部保留"),
         expectTrue(
-          tasks.some((item) => item.title.includes("课程")),
-          "明确节次必须形成固定课程约束",
+          tasks.some((item) => item.title.includes("高等数学")),
+          "高等数学课程名称不能丢失",
+        ),
+        expectTrue(
+          tasks.some((item) => item.title.includes("大学英语")),
+          "大学英语课程名称不能丢失",
         ),
         expectText(data.answer, "取快递", "回复应提到取快递"),
+      ];
+    },
+  },
+  {
+    id: "non_contiguous_course_periods",
+    now: "2026-07-24T07:00:00+08:00",
+    query: "今天第1、3节有课，第四节以后去图书馆自习1小时。",
+    check(data) {
+      const courses = taskItems(data).filter(
+        (item) => item.title.includes("课程"),
+      );
+      return [
+        expectAtLeast(courses.length, 2, "不连续节次必须保留为两个固定块"),
+        expectTrue(
+          courses.some((item) => item.start_at.slice(11, 16) === "08:05"),
+          "第1节开始时间应为08:05",
+        ),
+        expectTrue(
+          courses.some((item) => item.start_at.slice(11, 16) === "10:00"),
+          "第3节开始时间应为10:00",
+        ),
+      ];
+    },
+  },
+  {
+    id: "next_week_date",
+    query: "下周一去图书馆自习1小时。",
+    check(data) {
+      return [
+        expectEqual(
+          data.time_context?.target_date,
+          "2026-07-27",
+          "下周一必须换算为正确日期",
+        ),
+      ];
+    },
+  },
+  {
+    id: "month_day_date",
+    query: "7月31日去图书馆自习1小时。",
+    check(data) {
+      return [
+        expectEqual(
+          data.time_context?.target_date,
+          "2026-07-31",
+          "月日表达必须换算为正确日期",
+        ),
+      ];
+    },
+  },
+  {
+    id: "past_date_clarification",
+    query: "本周三去图书馆自习1小时。",
+    check(data) {
+      return [
+        expectEqual(
+          data.status,
+          "needs_clarification",
+          "明确的过去日期不能静默生成计划",
+        ),
+        expectText(data.answer, "已经过去", "应说明日期已过去并请用户确认"),
       ];
     },
   },

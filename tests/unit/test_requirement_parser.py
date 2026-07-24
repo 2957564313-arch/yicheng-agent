@@ -204,10 +204,16 @@ def test_named_subject_periods_are_still_hard_class_constraints():
         ),
     )
 
-    course = next(task for task in result.tasks if "course" in task.tags)
+    courses = [task for task in result.tasks if "course" in task.tags]
     study = next(task for task in result.tasks if task.id == "study")
-    assert course.fixed_start.isoformat() == "2026-07-24T08:05:00+08:00"
-    assert course.fixed_end.isoformat() == "2026-07-24T11:35:00+08:00"
+    assert [(task.id, task.title) for task in courses] == [
+        ("course_1_2", "高等数学课"),
+        ("course_3_4", "大学英语课"),
+    ]
+    assert courses[0].fixed_start.isoformat() == "2026-07-24T08:05:00+08:00"
+    assert courses[0].fixed_end.isoformat() == "2026-07-24T09:40:00+08:00"
+    assert courses[1].fixed_start.isoformat() == "2026-07-24T10:00:00+08:00"
+    assert courses[1].fixed_end.isoformat() == "2026-07-24T11:35:00+08:00"
     assert study.earliest_start.isoformat() == "2026-07-24T11:35:00+08:00"
 
 

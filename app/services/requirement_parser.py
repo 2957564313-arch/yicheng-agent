@@ -710,19 +710,13 @@ class RuleBasedRequirementParser:
         query: str,
         target_date: date,
     ) -> list[Task]:
-        """Convert stated class periods into deterministic fixed blocks."""
-        if not self.class_periods or not re.search(
-            r"第?\s*(?:1[0-3]|[1-9]|十三|十二|十一|十|"
-            r"[一二三四五六七八九])(?:\s*(?:到|至|[-—~～、,，])"
-            r"\s*第?\s*(?:1[0-3]|[1-9]|十三|十二|十一|十|"
-            r"[一二三四五六七八九]))?\s*节",
-            query,
-        ):
+        """Convert each stated course into its own immutable time block."""
+        if not self.class_periods:
             return []
 
         number = r"(?:1[0-3]|[1-9]|十三|十二|十一|十|[一二三四五六七八九])"
-        periods: set[int] = set()
         covered_spans: list[tuple[int, int]] = []
+        descriptors: list[tuple[re.Match[str], list[int]]] = []
         range_pattern = re.compile(
             rf"第?\s*({number})\s*(?:到|至|[-—~～])\s*"
             rf"第?\s*({number})\s*节"
@@ -733,20 +727,24 @@ class RuleBasedRequirementParser:
             if start is None or end is None:
                 continue
             lower, upper = sorted((start, end))
-            periods.update(range(lower, upper + 1))
             covered_spans.append(match.span())
+            descriptors.append((match, list(range(lower, upper + 1))))
 
         list_pattern = re.compile(
             rf"第\s*({number}(?:\s*[、,，]\s*{number})+)\s*节"
         )
         for match in list_pattern.finditer(query):
-            covered_spans.append(match.span())
+            values = []
             for raw in re.split(r"\s*[、,，]\s*", match.group(1)):
                 value = self._period_number(raw)
                 if value is not None:
-                    periods.add(value)
+                    values.append(value)
+            if not values:
+                continue
+            covered_spans.append(match.span())
+            descriptors.append((match, sorted(set(values))))
 
-        single_pattern = re.compile(rf"第\s*({number})\s*节")
+        single_pattern = re.compile(rf"第?\s*({number})\s*节")
         for match in single_pattern.finditer(query):
             if any(
                 start <= match.start() and match.end() <= end
@@ -755,56 +753,131 @@ class RuleBasedRequirementParser:
                 continue
             value = self._period_number(match.group(1))
             if value is not None:
-                periods.add(value)
-
-        valid_periods = sorted(
-            period for period in periods if period in self.class_periods
-        )
-        if not valid_periods:
-            return []
-
-        groups: list[list[int]] = []
-        for period in valid_periods:
-            if groups and period == groups[-1][-1] + 1:
-                groups[-1].append(period)
-            else:
-                groups.append([period])
+                descriptors.append((match, [value]))
 
         tasks: list[Task] = []
-        for group in groups:
-            first, last = group[0], group[-1]
-            start_at = datetime.combine(
-                target_date,
-                self.class_periods[first][0],
-                self.timezone,
+        used_ids: set[str] = set()
+        for match, raw_periods in sorted(
+            descriptors,
+            key=lambda item: item[0].start(),
+        ):
+            valid_periods = [
+                value for value in raw_periods if value in self.class_periods
+            ]
+            groups: list[list[int]] = []
+            for period in valid_periods:
+                if groups and period == groups[-1][-1] + 1:
+                    groups[-1].append(period)
+                else:
+                    groups.append([period])
+            clause = self._course_clause(query, match)
+            course_title, location = self._course_title_and_location(
+                clause=clause,
+                matched_periods=match.group(0),
             )
-            end_at = datetime.combine(
-                target_date,
-                self.class_periods[last][1],
-                self.timezone,
-            )
-            title = (
-                f"第{first}节课程"
-                if first == last
-                else f"第{first}—{last}节课程"
-            )
-            tasks.append(
-                Task(
-                    id=f"course_{first}_{last}",
-                    title=title,
-                    date=target_date,
-                    duration_min=int(
-                        (end_at - start_at).total_seconds() // 60
-                    ),
-                    fixed_start=start_at,
-                    fixed_end=end_at,
-                    flexibility=TaskFlexibility.FIXED,
-                    importance=5,
-                    tags=["course", "verified_timetable", "hard_constraint"],
-                    notes="依据已核验校内上课时间表锁定，不可被规划器移动",
+            for group in groups:
+                first, last = group[0], group[-1]
+                start_at = datetime.combine(
+                    target_date,
+                    self.class_periods[first][0],
+                    self.timezone,
                 )
-            )
+                end_at = datetime.combine(
+                    target_date,
+                    self.class_periods[last][1],
+                    self.timezone,
+                )
+                fallback_title = (
+                    f"第{first}节课程"
+                    if first == last
+                    else f"第{first}—{last}节课程"
+                )
+                title = course_title or fallback_title
+                base_id = f"course_{first}_{last}"
+                task_id = base_id
+                suffix = 2
+                while task_id in used_ids:
+                    task_id = f"{base_id}_{suffix}"
+                    suffix += 1
+                used_ids.add(task_id)
+                tasks.append(
+                    Task(
+                        id=task_id,
+                        title=title,
+                        date=target_date,
+                        duration_min=int(
+                            (end_at - start_at).total_seconds() // 60
+                        ),
+                        location_raw=location,
+                        fixed_start=start_at,
+                        fixed_end=end_at,
+                        flexibility=TaskFlexibility.FIXED,
+                        importance=5,
+                        tags=[
+                            "course",
+                            "verified_timetable",
+                            "hard_constraint",
+                            f"period:{first}-{last}",
+                        ],
+                        notes=(
+                            "依据已核验校内上课时间表锁定，不可被规划器移动"
+                        ),
+                    )
+                )
         return tasks
+
+    @staticmethod
+    def _course_clause(query: str, match: re.Match[str]) -> str:
+        clause_start = max(
+            query.rfind(separator, 0, match.start())
+            for separator in ("，", "。", "；", ",", ";")
+        )
+        following = [
+            position
+            for separator in ("，", "。", "；", ",", ";")
+            if (position := query.find(separator, match.end())) >= 0
+        ]
+        clause_end = min(following, default=len(query))
+        return query[clause_start + 1 : clause_end].strip()
+
+    @staticmethod
+    def _course_title_and_location(
+        *,
+        clause: str,
+        matched_periods: str,
+    ) -> tuple[str | None, str | None]:
+        location = next(
+            (
+                name
+                for name in (
+                    "第六教学楼",
+                    "第七教学楼",
+                    "六教",
+                    "七教",
+                    "图书馆",
+                    "实验室",
+                )
+                if name in clause
+            ),
+            None,
+        )
+        title = clause.replace(matched_periods, "", 1)
+        title = re.sub(
+            r"^(?:今天|明天|后天)?\s*(?:我)?\s*"
+            r"(?:有|要上|上|需要上)?\s*",
+            "",
+            title,
+        )
+        if location:
+            title = re.sub(
+                rf"(?:在|地点是|地点为)?\s*{re.escape(location)}",
+                "",
+                title,
+            )
+        title = title.strip(" ，。；、")
+        if title in {"", "课", "课程", "有课", "上课"}:
+            title = None
+        return title[:120] if title else None, location
 
     def _tasks_from_old_plan(
         self,
