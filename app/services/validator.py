@@ -248,9 +248,9 @@ class PlanValidator:
         for item in self._task_items(items):
             if not item.location_id:
                 continue
-            windows = context.opening_windows.get(item.location_id)
-            if not windows:
+            if item.location_id not in context.opening_windows:
                 continue
+            windows = context.opening_windows[item.location_id]
             if not any(
                 start <= item.start_at and item.end_at <= end
                 for start, end in windows
