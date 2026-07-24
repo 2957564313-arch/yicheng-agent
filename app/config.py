@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import os
 from pathlib import Path
 
 from pydantic import Field
@@ -8,6 +9,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _runtime_dir() -> Path:
+    """Return a writable runtime directory for local and Vercel execution."""
+    if os.getenv("VERCEL"):
+        return Path("/tmp") / "yicheng-agent"
+    return BASE_DIR / "runtime"
+
+
+def _app_database_path() -> Path:
+    return _runtime_dir() / "app.db"
+
+
+def _checkpoint_database_path() -> Path:
+    return _runtime_dir() / "checkpoints.db"
 
 
 class Settings(BaseSettings):
@@ -19,9 +35,9 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     app_timezone: str = "Asia/Shanghai"
-    app_database_path: Path = BASE_DIR / "runtime" / "app.db"
-    app_checkpoint_database_path: Path = (
-        BASE_DIR / "runtime" / "checkpoints.db"
+    app_database_path: Path = Field(default_factory=_app_database_path)
+    app_checkpoint_database_path: Path = Field(
+        default_factory=_checkpoint_database_path
     )
     app_data_dir: Path = BASE_DIR / "data"
     app_demo_dir: Path = BASE_DIR / "fixtures"
