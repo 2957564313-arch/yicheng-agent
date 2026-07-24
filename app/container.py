@@ -158,6 +158,7 @@ def build_container(settings: Settings) -> AppContainer:
         llm=OpenAICompatibleLLM(
             enabled=settings.llm_enabled,
             model=settings.llm_model,
+            fallback_models=settings.llm_models[1:],
             base_url=settings.llm_base_url,
             api_key=settings.llm_api_key,
             enable_thinking=settings.llm_enable_thinking,
