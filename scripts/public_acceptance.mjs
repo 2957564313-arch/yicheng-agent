@@ -33,7 +33,7 @@ const cases = [
         (item) => item.title.includes("课程"),
       );
       return [
-        expectAtLeast(courses.length, 2, "不连续节次必须保留为两个固定块"),
+        expectEqual(courses.length, 2, "只能锁定用户明确说有课的两节"),
         expectTrue(
           courses.some((item) => item.start_at.slice(11, 16) === "08:05"),
           "第1节开始时间应为08:05",
@@ -188,8 +188,9 @@ const cases = [
   },
   {
     id: "live_weather_and_unknown_poi",
+    useServerClock: true,
     query:
-      "今天下午4点从第七教学楼出发，去图书馆学习90分钟，之后到东操场跑步30分钟，请结合今天的天气安排，校内骑电瓶车。",
+      "明天下午4点从第七教学楼出发，去图书馆学习90分钟，之后到东操场跑步30分钟，请结合明天的天气安排，校内骑电瓶车。",
     check(data) {
       const tasks = taskItems(data);
       const firstTravel = (data.plan?.items || []).find(
@@ -199,8 +200,8 @@ const cases = [
         expectEqual(data.status, "completed", "未知教学楼应能由高德补齐"),
         expectEqual(tasks.length, 2, "学习和跑步都应安排"),
         expectEqual(
-          firstTravel?.start_at,
-          "2026-07-24T16:00:00+08:00",
+          firstTravel?.start_at?.slice(11, 16),
+          "16:00",
           "首段通勤必须从用户给定时间开始",
         ),
         expectEqual(
@@ -400,9 +401,11 @@ async function runCase(testCase, index) {
         thread_id: `acceptance_${testCase.id}_${Date.now()}_${index}`,
         query: testCase.query,
         mode: "live",
-        client_context: {
-          now: testCase.now || "2026-07-24T13:00:00+08:00",
-        },
+        client_context: testCase.useServerClock
+          ? {}
+          : {
+              now: testCase.now || "2026-07-24T13:00:00+08:00",
+            },
       }),
       signal: controller.signal,
     });
