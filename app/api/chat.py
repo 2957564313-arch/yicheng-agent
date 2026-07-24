@@ -296,7 +296,29 @@ def _planning_insights(
         )
     seen_content: set[str] = set()
     fact_limit = 3 if result.get("intent") == "query" else 2
+    top_rag_priority = max(
+        (
+            int(fact.get("priority", 0))
+            for fact in facts
+            if fact.get("source") == DataSource.RAG.value
+        ),
+        default=0,
+    )
+    top_rag_source = next(
+        (
+            str(fact.get("source_ref") or "")
+            for fact in facts
+            if fact.get("source") == DataSource.RAG.value
+        ),
+        "",
+    )
     for fact in facts:
+        if (
+            fact.get("source") == DataSource.RAG.value
+            and int(fact.get("priority", 0)) < top_rag_priority - 8
+            and str(fact.get("source_ref") or "") != top_rag_source
+        ):
+            continue
         content = _fact_excerpt(str(fact.get("content", "")), query)
         fingerprint = content[:80]
         if not content or fingerprint in seen_content:
@@ -307,6 +329,10 @@ def _planning_insights(
         if source == DataSource.STRUCTURED.value:
             title = "已核对校园规则"
             source_label = "校内结构化规则"
+            importance = "required"
+        elif "gov.cn" in source_ref:
+            title = "法定节假日依据"
+            source_label = "国务院办公厅"
             importance = "required"
         elif "学生手册" in source_ref:
             title = "学生手册依据"
@@ -602,8 +628,17 @@ async def execute_chat(
             and payload.client_context.timetable is not None
             else None
         ),
+        "client_calendar_overrides": [
+            item.model_dump(mode="json")
+            for item in (
+                payload.client_context.calendar_overrides
+                if payload.client_context
+                else []
+            )
+        ],
         "user_memories": [],
         "timetable_summary": None,
+        "academic_day_context": None,
         "initial_location_raw": None,
         "initial_location_id": None,
         "initial_departure_at": None,
