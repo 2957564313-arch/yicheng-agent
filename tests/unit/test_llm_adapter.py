@@ -135,7 +135,12 @@ async def test_provider_failure_switches_to_fallback_model(
     )
     attempted: list[str] = []
 
-    def fake_post(url: str, body: dict, headers: dict) -> dict:
+    def fake_post(
+        url: str,
+        body: dict,
+        headers: dict,
+        timeout_seconds: float,
+    ) -> dict:
         attempted.append(body["model"])
         if body["model"] == "qwen-primary":
             raise requests.HTTPError("quota exhausted")
@@ -175,7 +180,7 @@ async def test_malformed_provider_response_switches_model(
     monkeypatch.setattr(
         llm,
         "_post_sync",
-        lambda url, body, headers: next(responses),
+        lambda url, body, headers, timeout_seconds: next(responses),
     )
 
     assert await llm.polish_answer(draft="草稿", context={}) == "已恢复"
