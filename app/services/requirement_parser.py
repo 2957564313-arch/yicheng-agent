@@ -269,14 +269,20 @@ class RuleBasedRequirementParser:
             not any(word in fixed_text for word in ("快递", "驿站"))
             and any(
             keyword in query
-            for keyword in ("取快递", "拿快递", "去快递站")
+            for keyword in ("取快递", "拿快递", "去快递站", "取件")
             )
         ):
+            (
+                parcel_title,
+                parcel_location,
+                service_open,
+                service_close,
+            ) = self._courier_profile(query)
             stated_closing_hour = self._closing_hour(query)
             scoped_parcel_deadline = self._task_deadline(
                 query,
                 target_date,
-                ("取快递", "拿快递", "快递"),
+                ("取快递", "拿快递", "快递", "取件"),
             )
             parcel_limit = scoped_parcel_deadline or overall_deadline
             parcel_latest = (
@@ -285,7 +291,7 @@ class RuleBasedRequirementParser:
                 else (
                     time(stated_closing_hour, 0)
                     if stated_closing_hour is not None
-                    else time(22, 30)
+                    else service_close
                 )
             )
             parcel_deadline = (
@@ -294,28 +300,42 @@ class RuleBasedRequirementParser:
                 else (
                     time(stated_closing_hour, 0)
                     if stated_closing_hour is not None
-                    else None
+                    else (
+                        service_close
+                        if parcel_location != "快递站"
+                        else None
+                    )
                 )
             )
             tasks.append(
                 self._movable_task(
                     task_id="parcel",
-                    title="取快递",
+                    title=parcel_title,
                     target_date=target_date,
                     duration=30,
-                    location_raw="快递站",
+                    location_raw=parcel_location,
                     earliest=(
                         overall_start
                         or (
                             time(13, 0)
                             if "下午" in query
-                            else time(8, 30)
+                            else service_open
                         )
                     ),
                     latest=parcel_latest,
                     deadline=parcel_deadline,
                     importance=4,
                 )
+            )
+            tasks[-1] = tasks[-1].model_copy(
+                update={
+                    "tags": ["courier", "service_hours", "hard_constraint"],
+                    "notes": (
+                        f"{parcel_location}营业时间为"
+                        f"{service_open:%H:%M}—{service_close:%H:%M}，"
+                        "属于已核验的场所开放硬约束"
+                    ),
+                }
             )
         if (
             not any(word in fixed_text for word in ("晚饭", "吃饭", "食堂"))
@@ -962,11 +982,40 @@ class RuleBasedRequirementParser:
         return hour if 0 <= hour <= 23 else None
 
     @staticmethod
+    def _courier_profile(
+        query: str,
+    ) -> tuple[str, str, time, time]:
+        if "顺丰" in query:
+            return (
+                "取顺丰快递",
+                "顺丰快递",
+                time(8, 0),
+                time(18, 0),
+            )
+        if "京东" in query:
+            return (
+                "取京东快递",
+                "京东快递",
+                time(8, 0),
+                time(22, 0),
+            )
+        return (
+            "取快递",
+            "菜鸟驿站" if "菜鸟" in query else "快递站",
+            time(8, 30),
+            time(22, 30),
+        )
+
+    @staticmethod
     def _overall_start(query: str) -> time | None:
         match = re.search(
-            r"(?:(上午|下午|晚上)\s*)?"
-            r"(\d{1,2})(?:\s*[:：]\s*(\d{1,2}))?\s*点?\s*"
-            r"(?:后|以后|之后|开始|(?=[^，。；、]{0,24}出发))",
+            r"(?<![\d年月日])(?:(上午|下午|晚上)\s*)?"
+            r"(\d{1,2})(?!\d)(?:\s*[:：]\s*(\d{1,2}))?"
+            r"(?!\s*(?:年|月|日|分钟|小时))"
+            r"(?!\s*点?\s*前)\s*点?\s*"
+            r"(?:后|以后|之后|开始|"
+            r"(?=[^，。；、]{0,24}(?:"
+            r"出发|前往|去|到(?!\s*\d))))",
             query,
         )
         if not match:

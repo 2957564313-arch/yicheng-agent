@@ -113,6 +113,19 @@ def test_departure_time_and_origin_are_hard_start_context():
     )
 
 
+def test_specific_courier_hours_are_hard_constraints():
+    result = parse("今天19点去顺丰快递取件，帮我看看能不能安排。")
+    parcel = next(task for task in result.tasks if task.id == "parcel")
+
+    assert parcel.title == "取顺丰快递"
+    assert parcel.location_raw == "顺丰快递"
+    assert parcel.earliest_start.isoformat() == "2026-07-23T19:00:00+08:00"
+    assert parcel.latest_end.isoformat() == "2026-07-23T18:00:00+08:00"
+    assert parcel.deadline.isoformat() == "2026-07-23T18:00:00+08:00"
+    assert "08:00—18:00" in (parcel.notes or "")
+    assert "hard_constraint" in parcel.tags
+
+
 def test_adjustment_without_current_plan_requires_baseline():
     result = parse("把学习延长30分钟，其他任务保持不变。")
     assert result.tasks == []

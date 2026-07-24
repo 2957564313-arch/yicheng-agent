@@ -600,6 +600,21 @@ def _infeasible_answer(
         )
     elif error_messages:
         lines.append("冲突原因：" + "；".join(dict.fromkeys(error_messages)))
+    hard_rule_notes = [
+        task.notes
+        for task in unscheduled
+        if task.notes
+        and any(
+            marker in task.notes
+            for marker in ("营业时间", "开放时间", "硬约束")
+        )
+    ]
+    if hard_rule_notes:
+        lines.append(
+            "需要特别说明的场所规则："
+            + "；".join(dict.fromkeys(hard_rule_notes))
+            + "。"
+        )
 
     suggestions = _adjustment_suggestions(
         tasks=active_tasks,
@@ -805,6 +820,16 @@ def _polished_answer_is_grounded(
             f"{item.start_at:%H:%M}" not in answer
             or f"{item.end_at:%H:%M}" not in answer
         ):
+            return False
+
+    for task in tasks:
+        if not task.notes or not any(
+            marker in task.notes
+            for marker in ("营业时间", "开放时间")
+        ):
+            continue
+        required_times = re.findall(r"\b\d{2}:\d{2}\b", task.notes)
+        if any(value not in answer for value in required_times):
             return False
 
     has_peak_congestion = any(

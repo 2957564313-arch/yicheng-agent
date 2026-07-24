@@ -679,3 +679,29 @@ def test_departure_time_and_origin_create_first_travel_leg(tmp_path):
         assert first_travel["location_id"] == "library"
         assert study["start_at"] >= first_travel["end_at"]
         assert tasks["run"]["start_at"] >= study["end_at"]
+
+
+def test_specific_courier_closing_time_blocks_late_pickup(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "courier_user",
+                "thread_id": "courier_thread",
+                "query": "今天19点去顺丰快递取件，帮我看看能不能安排。",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00"
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["status"] == "partial"
+        assert not task_items(payload)
+        assert "08:00—18:00" in payload["answer"]
+        assert any(
+            warning["code"] == "TASK_UNSCHEDULED"
+            for warning in payload["warnings"]
+        )
