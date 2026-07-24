@@ -3,6 +3,7 @@ from zoneinfo import ZoneInfo
 
 from app.nodes.respond import (
     _claims_peak_was_avoided,
+    _plain_text_answer,
     _polished_answer_is_grounded,
     _success_answer,
 )
@@ -170,3 +171,15 @@ def test_missing_requested_weather_is_explained_without_provider_jargon():
 
     assert "大模型暂时不可用" not in answer
     assert "目标日期暂时没有可靠的天气预报" in answer
+
+
+def test_markdown_bullets_are_normalized_for_plain_text_frontend():
+    answer = _plain_text_answer(
+        "好的，安排如下：\n* 第一项提醒\n- 第二项提醒"
+    )
+
+    assert answer.startswith("安排如下：")
+    assert "* " not in answer
+    assert "- " not in answer
+    assert "• 第一项提醒" in answer
+    assert "• 第二项提醒" in answer
