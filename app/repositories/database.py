@@ -68,6 +68,25 @@ CREATE TABLE IF NOT EXISTS course_sessions (
 CREATE INDEX IF NOT EXISTS idx_course_sessions_timetable_day
 ON course_sessions(timetable_id, weekday, start_period);
 
+CREATE TABLE IF NOT EXISTS academic_calendar_overrides (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    event_date TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('no_class', 'normal', 'makeup')),
+    replacement_weekday INTEGER CHECK (
+        replacement_weekday IS NULL
+        OR replacement_weekday BETWEEN 1 AND 7
+    ),
+    label TEXT NOT NULL,
+    source_ref TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(user_id, event_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_academic_calendar_user_date
+ON academic_calendar_overrides(user_id, event_date);
+
 CREATE TABLE IF NOT EXISTS threads (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
