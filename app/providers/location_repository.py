@@ -47,3 +47,17 @@ class LocationRepository:
     def all(self) -> list[CampusLocation]:
         return list(self._locations.values())
 
+    def register_runtime(
+        self,
+        location: CampusLocation,
+    ) -> CampusLocation:
+        """Register an API-resolved location for the current process."""
+        existing = self.resolve(location.name)
+        if existing:
+            return existing
+        self._locations[location.id] = location
+        for alias in {location.name, location.id, *location.aliases}:
+            key = _normalize_name(alias)
+            if key and key not in self._alias_index:
+                self._alias_index[key] = location.id
+        return location

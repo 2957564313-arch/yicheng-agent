@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from hashlib import sha1
 import math
 from datetime import date, datetime
 from time import monotonic
@@ -10,7 +11,98 @@ import httpx
 
 from app.providers.location_repository import LocationRepository
 from app.schemas.common import DataSource
-from app.schemas.context import TravelEstimate, WeatherContext
+from app.schemas.context import (
+    CampusLocation,
+    SourceMetadata,
+    TravelEstimate,
+    WeatherContext,
+)
+
+
+class AmapGeocodingProvider:
+    """Resolve previously unseen campus building names through AMap."""
+
+    def __init__(
+        self,
+        *,
+        locations: LocationRepository,
+        api_key: str,
+        campus_query: str,
+        search_city: str,
+        timeout_seconds: float = 3,
+        base_url: str = "https://restapi.amap.com/v3/geocode/geo",
+    ) -> None:
+        self.locations = locations
+        self.api_key = api_key
+        self.campus_query = campus_query.strip()
+        self.search_city = search_city.strip()
+        self.timeout_seconds = timeout_seconds
+        self.base_url = base_url
+        self._cache: dict[str, CampusLocation | None] = {}
+
+    async def resolve(
+        self,
+        raw_name: str,
+    ) -> CampusLocation | None:
+        name = raw_name.strip()
+        if not name:
+            return None
+        if name in self._cache:
+            cached = self._cache[name]
+            return cached.model_copy(deep=True) if cached else None
+        address = (
+            f"{self.campus_query} {name}"
+            if self.campus_query and self.campus_query not in name
+            else name
+        )
+        params = {
+            "key": self.api_key,
+            "address": address,
+            "output": "JSON",
+        }
+        if self.search_city:
+            params["city"] = self.search_city
+        async with httpx.AsyncClient(
+            timeout=self.timeout_seconds
+        ) as client:
+            response = await client.get(self.base_url, params=params)
+            response.raise_for_status()
+        payload = response.json()
+        geocodes = payload.get("geocodes", [])
+        if payload.get("status") != "1" or not geocodes:
+            self._cache[name] = None
+            return None
+        raw_location = geocodes[0].get("location", "")
+        try:
+            longitude_text, latitude_text = raw_location.split(",", 1)
+            longitude = float(longitude_text)
+            latitude = float(latitude_text)
+        except (TypeError, ValueError):
+            self._cache[name] = None
+            return None
+        location = CampusLocation(
+            id=(
+                "amap_"
+                + sha1(
+                    f"{address}|{raw_location}".encode("utf-8")
+                ).hexdigest()[:14]
+            ),
+            name=name,
+            aliases=[address],
+            category="campus_poi",
+            longitude=longitude,
+            latitude=latitude,
+            source=SourceMetadata(
+                type="amap_geocode",
+                reference=(
+                    geocodes[0].get("formatted_address")
+                    or address
+                ),
+            ),
+        )
+        registered = self.locations.register_runtime(location)
+        self._cache[name] = registered
+        return registered.model_copy(deep=True)
 
 
 class AmapRouteProvider:

@@ -6,7 +6,11 @@ from pathlib import Path
 
 from app.config import BASE_DIR, Settings
 from app.providers.campus_rules import CampusRulesRepository
-from app.providers.amap import AmapRouteProvider, AmapWeatherProvider
+from app.providers.amap import (
+    AmapGeocodingProvider,
+    AmapRouteProvider,
+    AmapWeatherProvider,
+)
 from app.providers.fallback import RouteFallbackService, WeatherFallbackService
 from app.providers.location_repository import LocationRepository
 from app.providers.rag import KnowledgeRepository
@@ -33,6 +37,7 @@ class AppContainer:
     timetables: TimetableRepository
     runs: RunRepository
     locations: LocationRepository
+    geocoder: AmapGeocodingProvider | None
     routes: RouteFallbackService
     weather: WeatherFallbackService
     rules: CampusRulesRepository
@@ -44,24 +49,28 @@ class AppContainer:
     llm: OpenAICompatibleLLM
 
 
-def _profile_weather_adcode(data_dir: Path) -> str:
-    """Read the non-secret weather city code from the active campus profile."""
+def _profile_amap_settings(data_dir: Path) -> dict[str, str]:
+    """Read non-secret AMap settings from the active campus profile."""
     profile_path = data_dir / "campus_profile.json"
     try:
         profile = json.loads(profile_path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
-        return ""
-    return str(
+        return {}
+    raw = (
         profile.get("external_services", {})
         .get("amap", {})
-        .get("weather_adcode", "")
-    ).strip()
+    )
+    return {
+        key: str(raw.get(key, "")).strip()
+        for key in ("weather_adcode", "search_city", "campus_query")
+    }
 
 
 def build_container(settings: Settings) -> AppContainer:
     database = Database(settings.app_database_path)
     database.initialize()
     locations = LocationRepository(settings.app_data_dir / "locations.json")
+    amap_profile = _profile_amap_settings(settings.app_data_dir)
     scheduler = Scheduler()
     static_routes = StaticRouteProvider(
         settings.app_data_dir / "travel_times.json",
@@ -85,7 +94,18 @@ def build_container(settings: Settings) -> AppContainer:
     )
     weather_city_adcode = (
         settings.weather_city_adcode
-        or _profile_weather_adcode(settings.app_data_dir)
+        or amap_profile.get("weather_adcode", "")
+    )
+    geocoder = (
+        AmapGeocodingProvider(
+            locations=locations,
+            api_key=settings.route_api_key,
+            campus_query=amap_profile.get("campus_query", ""),
+            search_city=amap_profile.get("search_city", ""),
+            timeout_seconds=settings.route_timeout_seconds,
+        )
+        if settings.live_route_enabled and settings.route_api_key
+        else None
     )
     live_weather = (
         AmapWeatherProvider(
@@ -112,6 +132,7 @@ def build_container(settings: Settings) -> AppContainer:
         timetables=TimetableRepository(database),
         runs=RunRepository(database),
         locations=locations,
+        geocoder=geocoder,
         routes=RouteFallbackService(
             static=static_routes,
             live=live_routes,

@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from app.providers.amap import AmapRouteProvider, AmapWeatherProvider
+from app.providers.amap import (
+    AmapGeocodingProvider,
+    AmapRouteProvider,
+    AmapWeatherProvider,
+)
 from app.providers.location_repository import LocationRepository
 from app.schemas.common import DataSource
 
@@ -81,6 +85,50 @@ def build_locations(tmp_path: Path, *, with_coordinates: bool = True):
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
     return LocationRepository(path)
+
+
+@pytest.mark.asyncio
+async def test_amap_geocoder_registers_unknown_campus_building(
+    monkeypatch,
+    tmp_path: Path,
+):
+    fake = type("GeocodingClient", (FakeAsyncClient,), {})
+    fake.payload = {
+        "status": "1",
+        "geocodes": [
+            {
+                "formatted_address": (
+                    "浙江省杭州市钱塘区杭州电子科技大学第七教学楼"
+                ),
+                "location": "120.350123,30.318456",
+                "level": "兴趣点",
+            }
+        ],
+    }
+    fake.calls = []
+    monkeypatch.setattr("app.providers.amap.httpx.AsyncClient", fake)
+    locations = build_locations(tmp_path)
+    provider = AmapGeocodingProvider(
+        locations=locations,
+        api_key="test-key",
+        campus_query="杭州电子科技大学下沙校区",
+        search_city="杭州",
+    )
+
+    result = await provider.resolve("第七教学楼")
+
+    assert result is not None
+    assert result.name == "第七教学楼"
+    assert result.longitude == 120.350123
+    assert locations.resolve("第七教学楼") is not None
+    url, params = fake.calls[0]
+    assert url.endswith("/v3/geocode/geo")
+    assert params["address"] == "杭州电子科技大学下沙校区 第七教学楼"
+    assert params["city"] == "杭州"
+    assert params["key"] == "test-key"
+    cached = await provider.resolve("第七教学楼")
+    assert cached is not None
+    assert len(fake.calls) == 1
 
 
 @pytest.mark.asyncio

@@ -24,13 +24,28 @@ def make_enrich_node(container: AppContainer):
         preferences = UserPreferences.model_validate(state["preferences"])
         transport_mode = preferences.transport_mode.value
         normalized_locations = {}
+        prefer_live = (
+            state.get("mode") in {"auto", "live"}
+            and container.settings.live_route_enabled
+        )
 
         for index, task in enumerate(tasks):
+            raw_location = task.location_raw or task.location_id
             location = (
                 container.locations.get(task.location_id)
                 if task.location_id
                 else container.locations.resolve(task.location_raw)
             )
+            if (
+                location is None
+                and raw_location
+                and prefer_live
+                and container.geocoder is not None
+            ):
+                try:
+                    location = await container.geocoder.resolve(raw_location)
+                except Exception:
+                    location = None
             if location:
                 tasks[index] = task.model_copy(
                     update={"location_id": location.id}
@@ -38,13 +53,13 @@ def make_enrich_node(container: AppContainer):
                 normalized_locations[location.id] = location.model_dump(
                     mode="json"
                 )
-            elif task.location_raw or task.location_id:
+            elif raw_location:
                 warnings.append(
                     Issue(
                         code="UNKNOWN_LOCATION",
                         severity=IssueSeverity.WARNING,
                         message=(
-                            f"“{task.location_raw or task.location_id}”"
+                            f"“{raw_location}”"
                             "暂未匹配到本校地点库；这项固定安排会保留，"
                             "但相关通勤时间建议出发前再确认"
                         ),
@@ -69,10 +84,6 @@ def make_enrich_node(container: AppContainer):
             location_ids = sorted(set(location_ids))
 
         routes = []
-        prefer_live = (
-            state.get("mode") in {"auto", "live"}
-            and container.settings.live_route_enabled
-        )
         for origin, destination in combinations(location_ids, 2):
             for start, end in (
                 (origin, destination),
