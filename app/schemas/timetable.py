@@ -32,8 +32,8 @@ class CourseSession(CourseSessionCreate):
 
 class TimetableImportRequest(BaseModel):
     name: str = Field(default="我的课表", min_length=1, max_length=80)
-    format: Literal["csv", "json", "xlsx_base64"]
-    content: str = Field(min_length=1)
+    format: Literal["csv", "json", "xlsx_base64", "pdf_base64"]
+    content: str = Field(min_length=1, max_length=8_000_000)
     term_start: date | None = None
     term_end: date | None = None
     enabled: bool = True
@@ -69,3 +69,12 @@ class TimetableImportResponse(TimetableResponse):
     imported_count: int = Field(ge=0)
     skipped_count: int = Field(ge=0)
     messages: list[str] = Field(default_factory=list)
+
+
+class TimetablePreviewResponse(BaseModel):
+    entries: list[CourseSessionCreate] = Field(default_factory=list)
+    imported_count: int = Field(ge=0)
+    skipped_count: int = Field(ge=0)
+    messages: list[str] = Field(default_factory=list)
+    term_start: date | None = None
+    term_end: date | None = None
