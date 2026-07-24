@@ -44,6 +44,9 @@ class Settings(BaseSettings):
 
     llm_enabled: bool = False
     llm_model: str = "qwen3.6-flash"
+    llm_fallback_models: str = (
+        "qwen3.7-plus,qwen-plus-2025-07-28"
+    )
     llm_base_url: str = ""
     llm_api_key: str = Field(default="", repr=False)
     llm_enable_thinking: bool = False
@@ -60,6 +63,19 @@ class Settings(BaseSettings):
     weather_api_key: str = Field(default="", repr=False)
     weather_timeout_seconds: float = Field(default=3, ge=0.5, le=30)
     weather_city_adcode: str = ""
+
+    @property
+    def llm_models(self) -> list[str]:
+        """Return the configured model chain without duplicate names."""
+        models: list[str] = []
+        for raw_name in (
+            self.llm_model,
+            *self.llm_fallback_models.split(","),
+        ):
+            name = raw_name.strip()
+            if name and name not in models:
+                models.append(name)
+        return models
 
     def ensure_runtime_dirs(self) -> None:
         self.app_database_path.parent.mkdir(parents=True, exist_ok=True)
