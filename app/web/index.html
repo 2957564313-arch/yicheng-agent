@@ -79,8 +79,9 @@
               </div>
             </div>
             <p class="panel-note">
-              支持 Excel、CSV 和 JSON。课程会成为不可移动的时间约束，
-              之后可以直接问“明天哪几节有课”。
+              当前支持杭电教务系统课表 PDF，以及适用于其他学校的
+              Excel、CSV、JSON通用格式。确认预览后，课程才会成为
+              不可移动的时间约束。
             </p>
             <div class="timetable-form">
               <input
@@ -92,8 +93,8 @@
               />
               <div class="term-fields">
                 <label>
-                  学期开始
-                  <input id="term-start" type="date" />
+                  第一教学周周一
+                  <input id="term-start" type="date" required />
                 </label>
                 <label>
                   学期结束
@@ -105,10 +106,13 @@
                 <input
                   id="timetable-file"
                   type="file"
-                  accept=".xlsx,.csv,.json"
+                  accept=".pdf,.xlsx,.csv,.json"
                 />
               </label>
-              <button id="timetable-import" class="ghost">导入并启用课表</button>
+              <button id="timetable-import" class="ghost">识别并预览课表</button>
+              <button id="timetable-confirm" class="primary" hidden>
+                确认启用这份课表
+              </button>
             </div>
             <div id="timetable-summary" class="timetable-summary muted">
               当前还没有导入个人课表。
@@ -116,6 +120,48 @@
             <button id="timetable-clear" class="text-button danger-link" hidden>
               清空我的课表
             </button>
+            <details class="calendar-editor">
+              <summary>学校临时调课与停课</summary>
+              <p class="panel-note">
+                法定节假日会自动参考国家日历；学校补哪天的课必须以
+                教务通知为准，可在这里手动覆盖。
+              </p>
+              <div class="calendar-form">
+                <input
+                  id="calendar-date"
+                  type="date"
+                  aria-label="校历调整日期"
+                />
+                <select id="calendar-action" aria-label="当天课程安排">
+                  <option value="no_class">当天不上课</option>
+                  <option value="makeup">按其他星期补课</option>
+                  <option value="normal">按当天正常课表</option>
+                </select>
+                <select
+                  id="calendar-weekday"
+                  aria-label="补星期几的课程"
+                  hidden
+                >
+                  <option value="1">补星期一的课</option>
+                  <option value="2">补星期二的课</option>
+                  <option value="3">补星期三的课</option>
+                  <option value="4">补星期四的课</option>
+                  <option value="5">补星期五的课</option>
+                  <option value="6">补星期六的课</option>
+                  <option value="7">补星期日的课</option>
+                </select>
+                <input
+                  id="calendar-label"
+                  type="text"
+                  placeholder="例如：校庆停课 / 补周五课程"
+                  maxlength="100"
+                />
+                <button id="calendar-save" class="ghost">保存这天的安排</button>
+              </div>
+              <div id="calendar-list" class="calendar-list muted">
+                暂无学校校历调整。
+              </div>
+            </details>
             <p class="storage-note">
               当前为公开测试版；系统更新时，体验数据可能重置。
             </p>
