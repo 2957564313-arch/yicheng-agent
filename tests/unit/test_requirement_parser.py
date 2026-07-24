@@ -43,6 +43,27 @@ def test_weekday_and_month_day_target_dates_are_resolved():
     )
 
 
+def test_period_used_as_after_anchor_is_not_invented_as_course():
+    parser = RuleBasedRequirementParser(
+        "Asia/Shanghai",
+        BASE_DIR / "data" / "class_periods.json",
+    )
+    result = parser.parse(
+        query="今天第1、3节有课，第四节以后去图书馆自习1小时。",
+        now=datetime(
+            2026,
+            7,
+            23,
+            8,
+            0,
+            tzinfo=ZoneInfo("Asia/Shanghai"),
+        ),
+    )
+    courses = [task for task in result.tasks if "course" in task.tags]
+    assert len(courses) == 2
+    assert [task.fixed_start.hour for task in courses] == [8, 10]
+
+
 def test_chinese_duration_and_deadline_are_parsed():
     result = parse("明天下午自习两个小时，再取快递，18点前完成。")
     study = next(task for task in result.tasks if task.id == "study")
