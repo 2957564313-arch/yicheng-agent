@@ -22,8 +22,10 @@ class CampusAgentState(TypedDict, total=False):
     preferences: dict[str, Any]
     client_memories: list[dict[str, Any]]
     client_timetable: dict[str, Any] | None
+    client_calendar_overrides: list[dict[str, Any]]
     user_memories: list[dict[str, Any]]
     timetable_summary: str | None
+    academic_day_context: dict[str, Any] | None
     initial_location_raw: str | None
     initial_location_id: str | None
     initial_departure_at: str | None
