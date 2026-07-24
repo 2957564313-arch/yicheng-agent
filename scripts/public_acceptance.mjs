@@ -242,10 +242,10 @@ const cases = [
     query: "今天20:45去东操场跑步30分钟，可以吗？",
     check(data) {
       return [
-        expectEqual(data.status, "partial", "跑步超过21点应判为不可行"),
+        expectEqual(data.status, "completed", "操场全天开放，普通跑步可以超过21点"),
         expectTrue(
-          /21:00|开放|时段|调整/.test(data.answer),
-          "回复应解释操场计入时段或给出调整",
+          /21:00|不计入阳光长跑|计入时段/.test(data.answer),
+          "回复应区分场地开放与阳光长跑计入时段",
         ),
       ];
     },

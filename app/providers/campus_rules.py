@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -64,19 +64,31 @@ class CampusRulesRepository:
         raw_windows = rule.get("weekly", {}).get(key, [])
         return [
             (
-                datetime.combine(
-                    target_date,
-                    time.fromisoformat(start),
-                    self.timezone,
-                ),
-                datetime.combine(
-                    target_date,
-                    time.fromisoformat(end),
-                    self.timezone,
-                ),
+                self._clock_datetime(target_date, start),
+                self._clock_datetime(target_date, end, is_end=True),
             )
             for start, end in raw_windows
         ]
+
+    def _clock_datetime(
+        self,
+        target_date: date,
+        value: str,
+        *,
+        is_end: bool = False,
+    ) -> datetime:
+        """Parse campus clock values, including the conventional 24:00."""
+        if value == "24:00":
+            return datetime.combine(
+                target_date + timedelta(days=1),
+                time(0, 0),
+                self.timezone,
+            )
+        parsed = time.fromisoformat(value)
+        result = datetime.combine(target_date, parsed, self.timezone)
+        if is_end and parsed == time(0, 0):
+            result += timedelta(days=1)
+        return result
 
     def facts_for_locations(
         self,

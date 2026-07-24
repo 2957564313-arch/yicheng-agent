@@ -118,6 +118,15 @@ class RuleBasedRequirementParser:
             )
 
         clarifications = []
+        if (
+            intent != Intent.QUERY
+            and old_plan is None
+            and target_date < now.date()
+        ):
+            clarifications.append(
+                f"你说的日期是{target_date:%Y年%m月%d日}，"
+                "这一天已经过去；请确认是否要安排到下一次对应日期。"
+            )
         if not tasks and intent != Intent.QUERY:
             clarifications.append("请告诉我需要安排的具体任务。")
         return UnderstandResult(
@@ -194,10 +203,42 @@ class RuleBasedRequirementParser:
                 int(explicit.group(2)),
                 int(explicit.group(3)),
             )
+        month_day = re.search(r"(?<!\d)(\d{1,2})月(\d{1,2})日", query)
+        if month_day:
+            return date(
+                now.year,
+                int(month_day.group(1)),
+                int(month_day.group(2)),
+            )
         if "后天" in query:
             return now.date() + timedelta(days=2)
         if "明天" in query:
             return now.date() + timedelta(days=1)
+        weekday_match = re.search(
+            r"(下周|下星期|本周|这周|本星期|这星期|周|星期)\s*"
+            r"([一二三四五六日天])",
+            query,
+        )
+        if weekday_match:
+            target_weekday = {
+                "一": 0,
+                "二": 1,
+                "三": 2,
+                "四": 3,
+                "五": 4,
+                "六": 5,
+                "日": 6,
+                "天": 6,
+            }[weekday_match.group(2)]
+            current_monday = now.date() - timedelta(days=now.weekday())
+            prefix = weekday_match.group(1)
+            target = current_monday + timedelta(days=target_weekday)
+            if prefix in {"下周", "下星期"}:
+                target += timedelta(days=7)
+            elif prefix in {"周", "星期"}:
+                if target < now.date():
+                    target += timedelta(days=7)
+            return target
         return now.date()
 
     def _extract_plan_tasks(

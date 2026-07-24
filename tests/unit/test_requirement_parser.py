@@ -28,6 +28,21 @@ def test_learning_duration_uses_actual_keyword():
     assert result.tasks[0].duration_min == 60
 
 
+def test_weekday_and_month_day_target_dates_are_resolved():
+    assert parse("下周一去图书馆学习一小时。").requested_date.isoformat() == (
+        "2026-07-27"
+    )
+    assert parse("周三去图书馆学习一小时。").requested_date.isoformat() == (
+        "2026-07-29"
+    )
+    past_weekday = parse("本周三去图书馆学习一小时。")
+    assert past_weekday.requested_date.isoformat() == "2026-07-22"
+    assert "已经过去" in past_weekday.clarifications[0]
+    assert parse("7月31日去图书馆学习一小时。").requested_date.isoformat() == (
+        "2026-07-31"
+    )
+
+
 def test_chinese_duration_and_deadline_are_parsed():
     result = parse("明天下午自习两个小时，再取快递，18点前完成。")
     study = next(task for task in result.tasks if task.id == "study")

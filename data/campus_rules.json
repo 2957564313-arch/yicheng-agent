@@ -20,7 +20,7 @@
     },
     {
       "id": "east_track_sun_run",
-      "content": "项目知识快照记录东操场阳光长跑计入时段为7:00-21:00。",
+      "content": "东操场场地全天开放；阳光长跑计入时段为7:00-21:00，超过该时段仍可普通跑步，但不计入阳光长跑。",
       "applies_to": ["track"],
       "priority": 90,
       "source_url": "杭电时间知识库.docx",

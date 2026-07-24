@@ -1,0 +1,214 @@
+const baseUrl = (process.env.YICHENG_BASE_URL || "http://127.0.0.1:8000")
+  .replace(/\/$/, "");
+const stamp = Date.now();
+
+async function chat(payload) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 65_000);
+  try {
+    const response = await fetch(`${baseUrl}/api/v1/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${JSON.stringify(data)}`);
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function taskItems(data) {
+  return (data.plan?.items || []).filter((item) => item.item_type === "task");
+}
+
+function travelItems(data) {
+  return (data.plan?.items || []).filter((item) => item.item_type === "travel");
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+async function runCase(id, runner) {
+  try {
+    await runner();
+    console.log(`PASS ${id}`);
+    return true;
+  } catch (error) {
+    console.error(`FAIL ${id} — ${error.message}`);
+    return false;
+  }
+}
+
+const results = [];
+
+results.push(await runCase("browser_plan_snapshot_cold_start", async () => {
+  const first = await chat({
+    user_id: `stateful_seed_${stamp}`,
+    thread_id: `stateful_seed_thread_${stamp}`,
+    query: "今天14点后去图书馆自习1小时，再去取快递，18点前结束。",
+    mode: "offline",
+    client_context: { now: "2026-07-24T13:00:00+08:00" },
+  });
+  assert(first.status === "completed", "基线计划未完成");
+  const coldUser = `stateful_cold_${stamp}`;
+  const coldThread = `stateful_cold_thread_${stamp}`;
+  const browserPlan = {
+    ...first.plan,
+    id: `client_plan_${stamp}`,
+    user_id: coldUser,
+    thread_id: coldThread,
+  };
+  const second = await chat({
+    user_id: coldUser,
+    thread_id: coldThread,
+    query: "把图书馆自习延长30分钟，其他任务保持不变，还是18点前结束。",
+    mode: "offline",
+    client_context: {
+      now: "2026-07-24T13:05:00+08:00",
+      previous_plan: browserPlan,
+    },
+  });
+  assert(second.previous_plan?.id === browserPlan.id, "浏览器计划快照未被接续");
+  assert(second.plan?.version === browserPlan.version + 1, "计划版本未递增");
+  assert(second.plan_diff?.length > 0, "没有返回新旧计划差异");
+}));
+
+results.push(await runCase("memory_snapshot_applied", async () => {
+  const data = await chat({
+    user_id: `stateful_memory_${stamp}`,
+    thread_id: `stateful_memory_thread_${stamp}`,
+    query: "今天14点后去图书馆自习1小时，再去菜鸟驿站取快递，18点前结束。",
+    mode: "offline",
+    client_context: {
+      now: "2026-07-24T13:00:00+08:00",
+      memories: [{
+        category: "preference",
+        key: "buffer_min",
+        label: "日程缓冲时间",
+        value: 20,
+        enabled: true,
+      }],
+    },
+  });
+  const items = data.plan?.items || [];
+  const parcel = items.find((item) => item.task_id === "parcel");
+  const precedingTravel = [...items]
+    .reverse()
+    .find((item) => item.item_type === "travel" && item.end_at <= parcel.start_at);
+  assert(parcel && precedingTravel, "没有生成快递及其通勤");
+  const gap = (new Date(parcel.start_at) - new Date(precedingTravel.end_at)) / 60000;
+  assert(gap >= 20, `长期偏好缓冲仅 ${gap} 分钟`);
+  assert(
+    data.insights?.some((item) => item.title.includes("长期偏好")),
+    "界面证据未说明已应用长期偏好",
+  );
+}));
+
+const timetable = {
+  name: "验收课表",
+  term_start: "2026-07-20",
+  term_end: "2026-08-31",
+  enabled: true,
+  entries: [{
+    course_name: "数据结构",
+    weekday: 5,
+    start_period: 6,
+    end_period: 7,
+    location: "第六教学楼",
+    weeks: [1],
+  }],
+};
+
+results.push(await runCase("timetable_snapshot_query", async () => {
+  const data = await chat({
+    user_id: `stateful_timetable_query_${stamp}`,
+    thread_id: `stateful_timetable_query_thread_${stamp}`,
+    query: "我今天哪几节有课？",
+    mode: "offline",
+    client_context: {
+      now: "2026-07-24T07:00:00+08:00",
+      timetable,
+    },
+  });
+  assert(data.answer.includes("数据结构"), "课表问答漏掉课程名");
+  assert(data.answer.includes("第6—7节"), "课表问答漏掉节次");
+  assert(data.answer.includes("13:30—15:05"), "课表问答漏掉准确时间");
+}));
+
+results.push(await runCase("timetable_snapshot_hard_constraint", async () => {
+  const data = await chat({
+    user_id: `stateful_timetable_plan_${stamp}`,
+    thread_id: `stateful_timetable_plan_thread_${stamp}`,
+    query: "今天13点以后去图书馆自习1小时，再取快递，18点前结束。",
+    mode: "offline",
+    client_context: {
+      now: "2026-07-24T12:30:00+08:00",
+      timetable,
+    },
+  });
+  const course = taskItems(data).find((item) => item.title === "数据结构");
+  assert(course, "规划时漏掉个人课表课程");
+  assert(course.start_at === "2026-07-24T13:30:00+08:00", "课程开始时间被修改");
+  assert(course.end_at === "2026-07-24T15:05:00+08:00", "课程结束时间被修改");
+}));
+
+results.push(await runCase("new_query_does_not_reuse_old_plan", async () => {
+  const seed = await chat({
+    user_id: `stateful_isolation_${stamp}`,
+    thread_id: `stateful_isolation_seed_${stamp}`,
+    query: "今天14点后去图书馆自习1小时。",
+    mode: "offline",
+    client_context: { now: "2026-07-24T13:00:00+08:00" },
+  });
+  const cleanThread = `stateful_isolation_clean_${stamp}`;
+  const snapshot = {
+    ...seed.plan,
+    id: `isolation_plan_${stamp}`,
+    thread_id: cleanThread,
+  };
+  const data = await chat({
+    user_id: seed.plan.user_id,
+    thread_id: cleanThread,
+    query: "图书馆七楼晚上几点关闭？",
+    mode: "offline",
+    client_context: {
+      now: "2026-07-24T13:05:00+08:00",
+      previous_plan: snapshot,
+    },
+  });
+  assert(data.plan === null, "独立知识问答错误复用了旧计划");
+  assert(data.previous_plan === null, "独立问答不应显示计划调整对比");
+  assert(data.answer.includes("21:30"), "独立问答答案错误");
+}));
+
+results.push(await runCase("explicit_transport_overrides_memory", async () => {
+  const data = await chat({
+    user_id: `stateful_mode_${stamp}`,
+    thread_id: `stateful_mode_thread_${stamp}`,
+    query: "今天14点从第六教学楼出发，步行去图书馆自习1小时。",
+    mode: "offline",
+    client_context: {
+      now: "2026-07-24T13:00:00+08:00",
+      memories: [{
+        category: "preference",
+        key: "transport_mode",
+        label: "常用出行方式",
+        value: "electrobike",
+        enabled: true,
+      }],
+    },
+  });
+  const travel = travelItems(data)[0];
+  assert(travel, "没有生成通勤段");
+  assert(travel.travel_mode === "walk", "本轮明确步行没有覆盖长期偏好");
+}));
+
+const passed = results.filter(Boolean).length;
+console.log(`\n${passed}/${results.length} stateful scenarios passed against ${baseUrl}`);
+if (passed !== results.length) process.exitCode = 1;
