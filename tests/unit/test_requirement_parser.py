@@ -33,8 +33,26 @@ def test_chinese_duration_and_deadline_are_parsed():
     study = next(task for task in result.tasks if task.id == "study")
     parcel = next(task for task in result.tasks if task.id == "parcel")
     assert study.duration_min == 120
+    assert study.deadline.hour == 18
     assert parcel.deadline.hour == 18
     assert parcel.deadline.tzinfo is not None
+
+
+def test_task_scoped_deadline_does_not_leak_to_evening_run():
+    result = parse(
+        "明天下课后去图书馆学习90分钟，"
+        "18点前到菜鸟驿站取快递，晚上去东操场跑步30分钟。"
+    )
+    study = next(task for task in result.tasks if task.id == "study")
+    parcel = next(task for task in result.tasks if task.id == "parcel")
+    run = next(task for task in result.tasks if task.id == "run")
+
+    assert study.deadline is None
+    assert parcel.deadline.isoformat() == "2026-07-24T18:00:00+08:00"
+    assert run.deadline is None
+    assert run.earliest_start.isoformat() == "2026-07-24T18:00:00+08:00"
+    assert run.latest_end.isoformat() == "2026-07-24T22:00:00+08:00"
+    assert result.preferences.buffer_min == 10
 
 
 def test_empty_task_request_requires_clarification():
