@@ -16,8 +16,11 @@
 - 校园知识分块：约 97 个；
 - 检索：查询扩展 + 来源分级 + 二阶段重排去重；
 - 长期记忆：SQLite 持久化，支持前端增改、启停和删除；
-- 课程节次：用户声明后按已核验作息锁定为硬约束；
-- 自动化测试：108 项通过；
+- 个人课表：支持杭电 PDF 预览确认，以及通用 Excel、CSV、JSON 导入；
+- 学期映射：按第一教学周周一换算周次、单双周和真实上课日期；
+- 校历约束：法定节假日、调休工作日与学校补课/停课分层处理；
+- 课程节次：个人课表和用户语言描述都会按已核验作息锁定为硬约束；
+- 自动化测试：123 项通过；
 - 离线评估：60/60 通过；
 - 三个固定 Demo：全部通过；
 - 真实端到端响应：7.17 秒、0 个硬约束错误、0 个告警；
@@ -51,10 +54,11 @@
 
 ```dotenv
 LLM_ENABLED=true
-LLM_MODEL=qwen3.6-flash
-LLM_FALLBACK_MODELS=qwen3.7-plus,qwen-plus-2025-07-28
+LLM_MODEL=qwen3.7-plus
+LLM_FALLBACK_MODELS=qwen-plus-2025-07-28,glm-5
 LLM_ENABLE_THINKING=false
 LLM_RENDER_ENABLED=true
+LLM_PLAN_RENDER_ENABLED=false
 LLM_TIMEOUT_SECONDS=10
 
 LIVE_ROUTE_ENABLED=true
