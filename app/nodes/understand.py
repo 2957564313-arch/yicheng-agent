@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import re
 
 from app.container import AppContainer
@@ -106,6 +106,12 @@ def make_understand_node(container: AppContainer):
         else:
             result = rule_result
             parser_name = "offline_rules"
+
+        result = _apply_explicit_date_guard(
+            query=state["query"],
+            result=result,
+            rule_result=rule_result,
+        )
 
         initial_location_raw = (
             container.parser.journey_origin_from_query(state["query"])
@@ -538,4 +544,73 @@ def _can_apply_rule_guard(
         task.earliest_start is not None
         and (task.latest_end is not None or task.deadline is not None)
         for task in rule_result.tasks
+    )
+
+
+def _apply_explicit_date_guard(
+    *,
+    query: str,
+    result: UnderstandResult,
+    rule_result: UnderstandResult,
+) -> UnderstandResult:
+    """Keep explicit calendar expressions deterministic.
+
+    A language model may interpret “本周三” as the next Wednesday even when
+    the date has already passed. Calendar expressions are hard constraints,
+    so the rule parser owns the date while the model may still own task
+    semantics.
+    """
+    if not re.search(
+        r"(?:今天|明天|后天|"
+        r"(?:本周|这周|本星期|这星期|下周|下星期|周|星期)"
+        r"\s*[一二三四五六日天]|"
+        r"20\d{2}[-/年]\d{1,2}[-/月]\d{1,2}|"
+        r"\d{1,2}月\d{1,2}日)",
+        query,
+    ):
+        return result
+
+    source_date = result.requested_date
+    target_date = rule_result.requested_date
+    shifted_tasks = [
+        _shift_task_to_date(task, source_date, target_date)
+        for task in result.tasks
+    ]
+    clarifications = list(result.clarifications)
+    for clarification in rule_result.clarifications:
+        if "已经过去" in clarification and clarification not in clarifications:
+            clarifications.append(clarification)
+    return result.model_copy(
+        update={
+            "requested_date": target_date,
+            "tasks": shifted_tasks,
+            "clarifications": clarifications,
+        }
+    )
+
+
+def _shift_task_to_date(
+    task: Task,
+    source_date: date,
+    target_date: date,
+) -> Task:
+    def shift(value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        day_offset = (value.date() - source_date).days
+        shifted_date = target_date + timedelta(days=day_offset)
+        return datetime.combine(
+            shifted_date,
+            value.timetz(),
+        )
+
+    return task.model_copy(
+        update={
+            "date": target_date,
+            "earliest_start": shift(task.earliest_start),
+            "latest_end": shift(task.latest_end),
+            "fixed_start": shift(task.fixed_start),
+            "fixed_end": shift(task.fixed_end),
+            "deadline": shift(task.deadline),
+        }
     )
