@@ -502,9 +502,9 @@ class Scheduler:
     ) -> bool:
         if not location_id:
             return True
-        windows = context.opening_windows.get(location_id)
-        if not windows:
+        if location_id not in context.opening_windows:
             return True
+        windows = context.opening_windows[location_id]
         return any(
             window_start <= start_at and end_at <= window_end
             for window_start, window_end in windows
