@@ -24,7 +24,7 @@ Docker、Conda 和 Node 构建链不是本项目本地开发前置。
 
 外部能力当前也已完成本地联调：
 
-- 千问：`qwen3.6-flash`；
+- 千问：`qwen3.7-plus`；
 - 高德：地点搜索、步行路线和天气；
 - 校园知识：学生手册与结构化时间规则；
 - `.env`：本机已配置，禁止复制到提交材料或 Git。
@@ -55,17 +55,19 @@ uv run python -m pytest
 
 ```dotenv
 LLM_ENABLED=true
-LLM_MODEL=qwen3.6-flash
-LLM_FALLBACK_MODELS=qwen3.7-plus,qwen-plus-2025-07-28
+LLM_MODEL=qwen3.7-plus
+LLM_FALLBACK_MODELS=qwen-plus-2025-07-28,glm-5
 LLM_ENABLE_THINKING=false
 LLM_RENDER_ENABLED=true
+LLM_PLAN_RENDER_ENABLED=false
 LLM_TIMEOUT_SECONDS=10
 ```
 
 关闭深度思考是必要配置。规划节点需要快速、稳定的 JSON，而不是长推理
 文本。系统按主模型、备用模型顺序调用；额度耗尽、限流、暂时不可用或响应
 结构异常时自动换下一个模型。全部在线模型不可用时，仍由本地规则和确定性
-排程继续完成核心功能。
+排程继续完成核心功能。比赛版默认不对已校验计划进行第二次模型润色，
+避免模型改动时间事实并降低端到端响应时间；知识问答仍可使用模型组织语言。
 
 ## 外部能力启用与验收顺序
 
@@ -82,7 +84,7 @@ LLM_TIMEOUT_SECONDS=10
 真实接口验收：
 
 ```bash
-.venv/bin/python scripts/probe_qwen_model.py --model qwen3.6-flash
+.venv/bin/python scripts/probe_qwen_model.py --model qwen3.7-plus
 .venv/bin/python scripts/live_amap_smoke.py
 .venv/bin/python scripts/live_end_to_end_smoke.py
 ```
