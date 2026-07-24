@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.common import Issue
+from app.schemas.calendar import CalendarOverrideCreate
 from app.schemas.memory import MemoryCreate
 from app.schemas.plan import DataFreshness, Plan
 from app.schemas.timetable import CourseSessionCreate
@@ -27,6 +28,10 @@ class ClientContext(BaseModel):
     now: datetime | None = None
     memories: list[MemoryCreate] = Field(default_factory=list, max_length=30)
     timetable: ClientTimetableSnapshot | None = None
+    calendar_overrides: list[CalendarOverrideCreate] = Field(
+        default_factory=list,
+        max_length=60,
+    )
     previous_plan: Plan | None = None
 
     @model_validator(mode="after")
