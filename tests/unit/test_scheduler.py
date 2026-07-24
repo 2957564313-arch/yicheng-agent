@@ -224,6 +224,53 @@ async def test_peak_window_extends_travel_and_keeps_user_time_choice(tz):
 
 
 @pytest.mark.asyncio
+async def test_travel_is_placed_close_to_following_task_when_gap_is_long(tz):
+    target_date = date(2026, 7, 24)
+    now = datetime(2026, 7, 23, 20, 0, tzinfo=tz)
+    context = await build_context(
+        target_date,
+        now,
+        [("parcel_station", "track")],
+    )
+    tasks = [
+        Task(
+            id="parcel",
+            title="取快递",
+            date=target_date,
+            duration_min=30,
+            location_id="parcel_station",
+            fixed_start=datetime(2026, 7, 24, 13, 30, tzinfo=tz),
+            fixed_end=datetime(2026, 7, 24, 14, 0, tzinfo=tz),
+            flexibility=TaskFlexibility.FIXED,
+        ),
+        Task(
+            id="run",
+            title="跑步",
+            date=target_date,
+            duration_min=30,
+            location_id="track",
+            fixed_start=datetime(2026, 7, 24, 18, 0, tzinfo=tz),
+            fixed_end=datetime(2026, 7, 24, 18, 30, tzinfo=tz),
+            flexibility=TaskFlexibility.FIXED,
+        ),
+    ]
+
+    result = Scheduler().schedule(
+        user_id="demo_user",
+        thread_id="thread_late_travel",
+        tasks=tasks,
+        preferences=UserPreferences(buffer_min=10),
+        context=context,
+    )
+    travel = next(
+        item for item in result.plan.items if item.item_type == "travel"
+    )
+
+    assert travel.start_at > tasks[0].fixed_end
+    assert travel.end_at == tasks[1].fixed_start - timedelta(minutes=10)
+
+
+@pytest.mark.asyncio
 async def test_validator_rejects_any_change_to_fixed_course_time(tz):
     target_date = date(2026, 7, 24)
     now = datetime(2026, 7, 23, 20, 0, tzinfo=tz)
