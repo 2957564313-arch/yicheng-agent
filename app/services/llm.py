@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextvars import ContextVar
 import json
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ class OpenAICompatibleLLM:
         *,
         enabled: bool,
         model: str,
+        fallback_models: list[str] | None,
         base_url: str,
         api_key: str,
         enable_thinking: bool,
@@ -29,18 +31,47 @@ class OpenAICompatibleLLM:
     ) -> None:
         self.enabled = enabled
         self.model = model
+        self.models = tuple(
+            dict.fromkeys(
+                name.strip()
+                for name in [model, *(fallback_models or [])]
+                if name.strip()
+            )
+        )
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.enable_thinking = enable_thinking
         self.timeout_seconds = timeout_seconds
         self.prompt_dir = prompt_dir
         self.campus_context_path = campus_context_path
+        self._used_models: ContextVar[tuple[str, ...]] = ContextVar(
+            f"used_llm_models_{id(self)}",
+            default=(),
+        )
 
     @property
     def configured(self) -> bool:
         return bool(
-            self.enabled and self.base_url and self.api_key and self.model
+            self.enabled and self.base_url and self.api_key and self.models
         )
+
+    @property
+    def model_chain_label(self) -> str:
+        return " → ".join(self.models)
+
+    @property
+    def used_model_label(self) -> str | None:
+        used = self._used_models.get()
+        return " → ".join(used) if used else None
+
+    def reset_usage(self) -> None:
+        """Start request-local model usage tracking."""
+        self._used_models.set(())
+
+    def _record_successful_model(self, model: str) -> None:
+        used = self._used_models.get()
+        if model not in used:
+            self._used_models.set((*used, model))
 
     async def parse_requirement(
         self,
@@ -219,42 +250,64 @@ class OpenAICompatibleLLM:
             if self.base_url.endswith("/chat/completions")
             else f"{self.base_url}/chat/completions"
         )
-        body: dict[str, Any] = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-            # Qwen3.7-Plus enables hybrid thinking by default. The planner
-            # needs low-latency, deterministic JSON more than visible
-            # reasoning, so thinking stays off unless explicitly enabled.
-            "enable_thinking": self.enable_thinking,
-        }
-        if response_format:
-            body["response_format"] = response_format
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        try:
-            payload = await asyncio.to_thread(
-                self._post_sync,
-                url,
-                body,
-                headers,
-            )
-        except requests.RequestException as exc:
-            raise AppError(
-                "LLM_PROVIDER_ERROR",
-                "模型服务调用失败",
-                status_code=502,
-                retryable=True,
-                details=[
-                    {
-                        "reason": str(exc),
-                        "provider_error_type": type(exc).__name__,
-                    }
-                ],
-            ) from exc
-        return payload["choices"][0]["message"]["content"]
+        last_error: Exception | None = None
+        attempted_models: list[str] = []
+        for model in self.models:
+            attempted_models.append(model)
+            body: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "temperature": temperature,
+                # The planner needs deterministic JSON more than visible
+                # reasoning, so hybrid thinking stays explicitly controlled.
+                "enable_thinking": self.enable_thinking,
+            }
+            if response_format:
+                body["response_format"] = response_format
+            try:
+                payload = await asyncio.to_thread(
+                    self._post_sync,
+                    url,
+                    body,
+                    headers,
+                )
+                content = payload["choices"][0]["message"]["content"]
+                if not isinstance(content, str) or not content.strip():
+                    raise ValueError("provider returned empty content")
+                self._record_successful_model(model)
+                return content
+            except (
+                requests.RequestException,
+                KeyError,
+                IndexError,
+                TypeError,
+                ValueError,
+            ) as exc:
+                # Quota exhaustion, rate limiting, a temporarily unavailable
+                # model, and malformed provider responses all move to the
+                # next configured model. No provider detail reaches the user.
+                last_error = exc
+                continue
+        raise AppError(
+            "LLM_PROVIDER_ERROR",
+            "模型服务暂时不可用，已切换为基础规划模式",
+            status_code=502,
+            retryable=True,
+            details=[
+                {
+                    "attempted_model_count": len(attempted_models),
+                    "provider_error_type": (
+                        type(last_error).__name__
+                        if last_error is not None
+                        else "UnknownError"
+                    ),
+                }
+            ],
+        ) from last_error
 
     def _post_sync(
         self,
