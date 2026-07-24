@@ -103,6 +103,8 @@ def test_departure_time_and_origin_are_hard_start_context():
     study = next(task for task in result.tasks if task.id == "study")
 
     assert study.earliest_start.isoformat() == "2026-07-24T16:00:00+08:00"
+    assert study.latest_end.isoformat() == "2026-07-24T22:00:00+08:00"
+    assert study.preferred_period is None
     assert (
         parser.journey_origin_from_query(
             "今天下午4点从第七教学楼出发，去图书馆学习。"

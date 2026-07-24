@@ -95,13 +95,11 @@ async def test_amap_geocoder_registers_unknown_campus_building(
     fake = type("GeocodingClient", (FakeAsyncClient,), {})
     fake.payload = {
         "status": "1",
-        "geocodes": [
+        "pois": [
             {
-                "formatted_address": (
-                    "浙江省杭州市钱塘区杭州电子科技大学第七教学楼"
-                ),
-                "location": "120.350123,30.318456",
-                "level": "兴趣点",
+                "name": "杭州电子科技大学下沙校区第七教学科研楼",
+                "address": "高教园区杭州电子科技大学高教园校区",
+                "location": "120.343791,30.314490",
             }
         ],
     }
@@ -119,16 +117,53 @@ async def test_amap_geocoder_registers_unknown_campus_building(
 
     assert result is not None
     assert result.name == "第七教学楼"
-    assert result.longitude == 120.350123
+    assert result.longitude == 120.343791
     assert locations.resolve("第七教学楼") is not None
     url, params = fake.calls[0]
-    assert url.endswith("/v3/geocode/geo")
-    assert params["address"] == "杭州电子科技大学下沙校区 第七教学楼"
+    assert url.endswith("/v3/place/text")
+    assert params["keywords"] == "杭州电子科技大学下沙校区 第七教学楼"
     assert params["city"] == "杭州"
+    assert params["citylimit"] == "true"
     assert params["key"] == "test-key"
     cached = await provider.resolve("第七教学楼")
     assert cached is not None
     assert len(fake.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_amap_geocoder_falls_back_when_place_search_is_empty(
+    monkeypatch,
+    tmp_path: Path,
+):
+    fake = type("FallbackGeocodingClient", (SequencedFakeAsyncClient,), {})
+    fake.payloads = [
+        {"status": "1", "pois": []},
+        {
+            "status": "1",
+            "geocodes": [
+                {
+                    "formatted_address": "浙江省杭州市钱塘区测试楼",
+                    "location": "120.350123,30.318456",
+                }
+            ],
+        },
+    ]
+    fake.calls = []
+    monkeypatch.setattr("app.providers.amap.httpx.AsyncClient", fake)
+    provider = AmapGeocodingProvider(
+        locations=build_locations(tmp_path),
+        api_key="test-key",
+        campus_query="杭州电子科技大学下沙校区",
+        search_city="杭州",
+    )
+
+    result = await provider.resolve("测试楼")
+
+    assert result is not None
+    assert result.source.type == "amap_geocode"
+    assert len(fake.calls) == 2
+    assert fake.calls[0][0].endswith("/v3/place/text")
+    assert fake.calls[1][0].endswith("/v3/geocode/geo")
 
 
 @pytest.mark.asyncio

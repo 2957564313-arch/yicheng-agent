@@ -250,14 +250,18 @@ class RuleBasedRequirementParser:
                     latest=(
                         study_limit.time()
                         if study_limit
-                        else (time(18, 0) if "下午" in query else time(22, 0))
+                        else time(22, 0)
                     ),
                     deadline=(
                         study_limit.time()
                         if study_limit
                         else None
                     ),
-                    preferred_period="afternoon" if "下午" in query else None,
+                    preferred_period=(
+                        "afternoon"
+                        if "下午" in query and overall_start is None
+                        else None
+                    ),
                     importance=5,
                 )
             )

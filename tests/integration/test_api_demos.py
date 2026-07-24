@@ -674,4 +674,8 @@ def test_departure_time_and_origin_create_first_travel_leg(tmp_path):
             "estimated",
             "demo_fixture",
         }
+        tasks = task_items(payload)
+        assert set(tasks) == {"study", "run"}
+        assert first_travel["location_id"] == "library"
         assert study["start_at"] >= first_travel["end_at"]
+        assert tasks["run"]["start_at"] >= study["end_at"]

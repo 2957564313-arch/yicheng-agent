@@ -31,6 +31,7 @@ class AmapGeocodingProvider:
         search_city: str,
         timeout_seconds: float = 3,
         base_url: str = "https://restapi.amap.com/v3/geocode/geo",
+        place_url: str = "https://restapi.amap.com/v3/place/text",
     ) -> None:
         self.locations = locations
         self.api_key = api_key
@@ -38,6 +39,7 @@ class AmapGeocodingProvider:
         self.search_city = search_city.strip()
         self.timeout_seconds = timeout_seconds
         self.base_url = base_url
+        self.place_url = place_url
         self._cache: dict[str, CampusLocation | None] = {}
 
     async def resolve(
@@ -55,24 +57,73 @@ class AmapGeocodingProvider:
             if self.campus_query and self.campus_query not in name
             else name
         )
-        params = {
-            "key": self.api_key,
-            "address": address,
-            "output": "JSON",
-        }
-        if self.search_city:
-            params["city"] = self.search_city
         async with httpx.AsyncClient(
             timeout=self.timeout_seconds
         ) as client:
-            response = await client.get(self.base_url, params=params)
-            response.raise_for_status()
-        payload = response.json()
-        geocodes = payload.get("geocodes", [])
-        if payload.get("status") != "1" or not geocodes:
-            self._cache[name] = None
-            return None
-        raw_location = geocodes[0].get("location", "")
+            place_params = {
+                "key": self.api_key,
+                "keywords": address,
+                "citylimit": "true",
+                "offset": "10",
+                "page": "1",
+                "extensions": "base",
+                "output": "JSON",
+            }
+            if self.search_city:
+                place_params["city"] = self.search_city
+            place_response = await client.get(
+                self.place_url,
+                params=place_params,
+            )
+            place_response.raise_for_status()
+            place_payload = place_response.json()
+            pois = (
+                place_payload.get("pois", [])
+                if place_payload.get("status") == "1"
+                else []
+            )
+
+            if pois:
+                result = pois[0]
+                source_type = "amap_poi"
+                reference = " ".join(
+                    str(value).strip()
+                    for value in (
+                        result.get("name"),
+                        result.get("address"),
+                    )
+                    if value
+                ) or address
+            else:
+                geocode_params = {
+                    "key": self.api_key,
+                    "address": address,
+                    "output": "JSON",
+                }
+                if self.search_city:
+                    geocode_params["city"] = self.search_city
+                geocode_response = await client.get(
+                    self.base_url,
+                    params=geocode_params,
+                )
+                geocode_response.raise_for_status()
+                geocode_payload = geocode_response.json()
+                geocodes = (
+                    geocode_payload.get("geocodes", [])
+                    if geocode_payload.get("status") == "1"
+                    else []
+                )
+                if not geocodes:
+                    self._cache[name] = None
+                    return None
+                result = geocodes[0]
+                source_type = "amap_geocode"
+                reference = (
+                    result.get("formatted_address")
+                    or address
+                )
+
+        raw_location = result.get("location", "")
         try:
             longitude_text, latitude_text = raw_location.split(",", 1)
             longitude = float(longitude_text)
@@ -88,16 +139,22 @@ class AmapGeocodingProvider:
                 ).hexdigest()[:14]
             ),
             name=name,
-            aliases=[address],
+            aliases=list(
+                dict.fromkeys(
+                    value
+                    for value in (
+                        address,
+                        str(result.get("name", "")).strip(),
+                    )
+                    if value and value != name
+                )
+            ),
             category="campus_poi",
             longitude=longitude,
             latitude=latitude,
             source=SourceMetadata(
-                type="amap_geocode",
-                reference=(
-                    geocodes[0].get("formatted_address")
-                    or address
-                ),
+                type=source_type,
+                reference=reference,
             ),
         )
         registered = self.locations.register_runtime(location)
