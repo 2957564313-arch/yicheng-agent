@@ -6,6 +6,7 @@ import re
 from app.container import AppContainer
 from app.nodes.common import append_trace
 from app.schemas.common import Issue, IssueSeverity
+from app.schemas.calendar import CalendarOverrideCreate
 from app.schemas.common import TaskFlexibility
 from app.schemas.memory import MemoryCreate, MemoryItem
 from app.schemas.plan import Plan
@@ -150,22 +151,36 @@ def make_understand_node(container: AppContainer):
                 }
             )
 
+        calendar_context = container.academic_calendar.resolve(
+            user_id=state["user_id"],
+            target_date=result.requested_date,
+            client_overrides=[
+                CalendarOverrideCreate.model_validate(raw)
+                for raw in state.get("client_calendar_overrides", [])
+            ],
+        )
         timetable_tasks = container.timetables.tasks_for_date(
             user_id=state["user_id"],
             target_date=result.requested_date,
             class_periods=container.parser.class_periods,
             timezone_name=container.settings.app_timezone,
+            effective_weekday=calendar_context.effective_weekday,
         )
         client_timetable_tasks = _client_timetable_tasks(
             raw=state.get("client_timetable"),
             target_date=result.requested_date,
             class_periods=container.parser.class_periods,
             timezone=container.parser.timezone,
+            effective_weekday=calendar_context.effective_weekday,
         )
         if client_timetable_tasks:
             timetable_tasks = client_timetable_tasks
         timetable_summary = (
-            _timetable_summary(result.requested_date, timetable_tasks)
+            _timetable_summary(
+                result.requested_date,
+                timetable_tasks,
+                calendar_context=calendar_context,
+            )
             if _is_timetable_query(state["query"])
             else None
         )
@@ -217,6 +232,7 @@ def make_understand_node(container: AppContainer):
                 memory.model_dump(mode="json") for memory in memories
             ],
             "timetable_summary": timetable_summary,
+            "academic_day_context": calendar_context.model_dump(mode="json"),
             "initial_location_raw": initial_location_raw,
             "initial_departure_at": (
                 initial_departure_at.isoformat()
@@ -240,6 +256,7 @@ def make_understand_node(container: AppContainer):
                     "task_count": len(result.tasks),
                     "memory_count": len(memories),
                     "timetable_task_count": len(timetable_tasks),
+                    "academic_day": calendar_context.course_action,
                     "clarification_count": len(result.clarifications),
                 },
             ),
@@ -286,8 +303,11 @@ def _client_timetable_tasks(
     target_date: date,
     class_periods,
     timezone,
+    effective_weekday: int | None,
 ) -> list[Task]:
     if not raw or not raw.get("enabled", True):
+        return []
+    if effective_weekday is None:
         return []
     try:
         term_start = (
@@ -317,7 +337,7 @@ def _client_timetable_tasks(
             entry = CourseSessionCreate.model_validate(value)
         except Exception:
             continue
-        if entry.weekday != target_date.isoweekday():
+        if entry.weekday != effective_weekday:
             continue
         if entry.weeks and (
             academic_week is None or academic_week not in entry.weeks
@@ -374,6 +394,7 @@ def _is_timetable_query(query: str) -> bool:
             r"(?:有|没|没有)课吗",
             r"有没有课",
             r"是否有课",
+            r"(?:要|需要|应该|是否要)上课吗",
         )
     )
 
@@ -407,8 +428,23 @@ def _merge_timetable_tasks(
 def _timetable_summary(
     target_date: date,
     tasks,
+    *,
+    calendar_context,
 ) -> str:
     weekday = "一二三四五六日"[target_date.isoweekday() - 1]
+    if calendar_context.course_action == "no_class":
+        return (
+            f"你的个人课表在{target_date:%Y年%m月%d日}（星期{weekday}）"
+            f"因{calendar_context.label or '学校校历安排'}不执行常规课程；"
+            "当天仍可以安排学习、运动和生活任务。"
+        )
+    if calendar_context.course_action == "awaiting_school_notice":
+        return (
+            f"{target_date:%Y年%m月%d日}（星期{weekday}）是"
+            f"{calendar_context.label or '国家调休工作日'}，但尚未录入"
+            "学校具体补星期几课程的通知；系统暂不臆测课程，请以教务"
+            "通知为准。"
+        )
     if not tasks:
         return (
             f"你的个人课表在{target_date:%Y年%m月%d日}（星期{weekday}）"
@@ -418,10 +454,18 @@ def _timetable_summary(
         _timetable_task_summary(task)
         for task in sorted(tasks, key=lambda item: item.fixed_start)
     )
-    return (
+    summary = (
         f"你的个人课表在{target_date:%Y年%m月%d日}（星期{weekday}）为："
         f"{details}。这些课程属于固定时间约束。"
     )
+    if calendar_context.course_action == "makeup":
+        effective_weekday = "一二三四五六日"[
+            int(calendar_context.effective_weekday) - 1
+        ]
+        summary += (
+            f"学校校历设置为当天按星期{effective_weekday}课表执行。"
+        )
+    return summary
 
 
 def _timetable_task_summary(task) -> str:
