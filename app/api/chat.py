@@ -549,6 +549,20 @@ async def execute_chat(
         "old_plan_id": effective_old_plan_id,
         "tasks": [],
         "preferences": {},
+        "client_memories": [
+            item.model_dump(mode="json")
+            for item in (
+                payload.client_context.memories
+                if payload.client_context
+                else []
+            )
+        ],
+        "client_timetable": (
+            payload.client_context.timetable.model_dump(mode="json")
+            if payload.client_context
+            and payload.client_context.timetable is not None
+            else None
+        ),
         "user_memories": [],
         "timetable_summary": None,
         "initial_location_raw": None,

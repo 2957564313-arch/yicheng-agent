@@ -44,6 +44,43 @@ let lastSuggestedActions = [];
 let lastDebugPayload = null;
 let serverClockBaseMs = null;
 let serverClockFetchedAtMs = null;
+const memorySnapshotKey = "yicheng_memory_snapshot";
+const timetableSnapshotKey = "yicheng_timetable_snapshot";
+
+function readLocalSnapshot(key, fallback) {
+  try {
+    return JSON.parse(localStorage.getItem(key)) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeLocalSnapshot(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function clientContextSnapshot() {
+  const memories = readLocalSnapshot(memorySnapshotKey, []);
+  const timetableData = readLocalSnapshot(timetableSnapshotKey, null);
+  return {
+    memories: memories.map((item) => ({
+      category: item.category,
+      key: item.key,
+      label: item.label,
+      value: item.value,
+      enabled: item.enabled,
+    })),
+    timetable: timetableData?.entries?.length
+      ? {
+        name: timetableData.timetable?.name || "我的课表",
+        term_start: timetableData.timetable?.term_start || null,
+        term_end: timetableData.timetable?.term_end || null,
+        enabled: timetableData.timetable?.enabled ?? true,
+        entries: timetableData.entries,
+      }
+      : null,
+  };
+}
 
 function getOrCreateLocalIdentity(storageKey, prefix) {
   const stored = localStorage.getItem(storageKey);
@@ -430,6 +467,7 @@ async function submitQuery(rawQuery) {
       thread_id: consoleThreadId,
       query,
       mode: modeSelect.value,
+      client_context: clientContextSnapshot(),
     }),
   }).catch(() => {});
 }
@@ -560,7 +598,13 @@ async function loadMemories() {
   const response = await fetch(`/api/v1/users/${consoleUserId}/memories`);
   const data = await response.json();
   if (!response.ok) throw data;
-  const items = data.items || [];
+  let items = data.items || [];
+  const localItems = readLocalSnapshot(memorySnapshotKey, []);
+  if (items.length) {
+    writeLocalSnapshot(memorySnapshotKey, items);
+  } else if (localItems.length) {
+    items = localItems;
+  }
   memoryList.classList.toggle("muted", items.length === 0);
   memoryList.innerHTML = items.length
     ? items.map((item) => `
@@ -600,6 +644,12 @@ async function loadMemories() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: !item.enabled }),
       });
+      writeLocalSnapshot(
+        memorySnapshotKey,
+        items.map((value) => value.id === item.id
+          ? { ...value, enabled: !value.enabled }
+          : value),
+      );
       await loadMemories();
     });
   });
@@ -608,6 +658,10 @@ async function loadMemories() {
       await fetch(
         `/api/v1/users/${consoleUserId}/memories/${button.dataset.memoryDelete}`,
         { method: "DELETE" },
+      );
+      writeLocalSnapshot(
+        memorySnapshotKey,
+        items.filter((value) => value.id !== button.dataset.memoryDelete),
       );
       await loadMemories();
     });
@@ -632,6 +686,14 @@ memorySave.addEventListener("click", async () => {
     });
     const data = await response.json();
     if (!response.ok) throw data;
+    const current = readLocalSnapshot(memorySnapshotKey, []);
+    writeLocalSnapshot(
+      memorySnapshotKey,
+      [
+        data,
+        ...current.filter((item) => item.key !== data.key),
+      ],
+    );
     memoryValue.value = "";
     await loadMemories();
   } catch (error) {
@@ -703,7 +765,12 @@ async function loadTimetable() {
   const response = await fetch(`/api/v1/users/${consoleUserId}/timetable`);
   const data = await response.json();
   if (!response.ok) throw data;
-  renderTimetable(data);
+  if (data.entries?.length) {
+    writeLocalSnapshot(timetableSnapshotKey, data);
+    renderTimetable(data);
+    return;
+  }
+  renderTimetable(readLocalSnapshot(timetableSnapshotKey, data));
 }
 
 timetableImport.addEventListener("click", async () => {
@@ -732,6 +799,7 @@ timetableImport.addEventListener("click", async () => {
     );
     const data = await response.json();
     if (!response.ok) throw data;
+    writeLocalSnapshot(timetableSnapshotKey, data);
     renderTimetable(data);
     timetableFile.value = "";
     answer.textContent = `课表已经导入，共识别 ${data.imported_count} 门次课程。之后你只要告诉我想做什么，我会自动避开上课时间。`;
@@ -754,6 +822,7 @@ timetableClear.addEventListener("click", async () => {
     { method: "DELETE" },
   );
   if (response.ok) {
+    localStorage.removeItem(timetableSnapshotKey);
     renderTimetable({ timetable: null, entries: [] });
   }
 });

@@ -7,16 +7,24 @@ from app.container import AppContainer
 from app.nodes.common import append_trace
 from app.schemas.common import Issue, IssueSeverity
 from app.schemas.common import TaskFlexibility
+from app.schemas.memory import MemoryCreate, MemoryItem
 from app.schemas.task import UserPreferences
+from app.schemas.task import Task
+from app.schemas.timetable import CourseSessionCreate
 from app.schemas.understand import UnderstandResult
 from app.state import CampusAgentState
 
 
 def make_understand_node(container: AppContainer):
     async def understand(state: CampusAgentState) -> dict:
-        memories = container.memories.list(
-            state["user_id"],
-            enabled_only=True,
+        memories = _merge_client_memories(
+            stored=container.memories.list(
+                state["user_id"],
+                enabled_only=True,
+            ),
+            client_items=state.get("client_memories", []),
+            user_id=state["user_id"],
+            now=datetime.fromisoformat(state["now_iso"]),
         )
         old_plan = (
             container.plans.get(state["old_plan_id"])
@@ -137,6 +145,14 @@ def make_understand_node(container: AppContainer):
             class_periods=container.parser.class_periods,
             timezone_name=container.settings.app_timezone,
         )
+        client_timetable_tasks = _client_timetable_tasks(
+            raw=state.get("client_timetable"),
+            target_date=result.requested_date,
+            class_periods=container.parser.class_periods,
+            timezone=container.parser.timezone,
+        )
+        if client_timetable_tasks:
+            timetable_tasks = client_timetable_tasks
         timetable_summary = (
             _timetable_summary(result.requested_date, timetable_tasks)
             if _is_timetable_query(state["query"])
@@ -219,6 +235,111 @@ def make_understand_node(container: AppContainer):
         }
 
     return understand
+
+
+def _merge_client_memories(
+    *,
+    stored: list[MemoryItem],
+    client_items: list[dict],
+    user_id: str,
+    now: datetime,
+) -> list[MemoryItem]:
+    """Let the browser snapshot survive stateless server deployments."""
+    by_key = {item.key: item for item in stored}
+    for raw in client_items:
+        try:
+            item = MemoryCreate.model_validate(raw)
+        except Exception:
+            continue
+        if not item.enabled:
+            by_key.pop(item.key, None)
+            continue
+        by_key[item.key] = MemoryItem(
+            id=f"client_{item.key}",
+            user_id=user_id,
+            category=item.category,
+            key=item.key,
+            label=item.label,
+            value=item.value,
+            enabled=True,
+            source="browser_snapshot",
+            created_at=now,
+            updated_at=now,
+        )
+    return sorted(by_key.values(), key=lambda item: (item.label, item.key))
+
+
+def _client_timetable_tasks(
+    *,
+    raw: dict | None,
+    target_date: date,
+    class_periods,
+    timezone,
+) -> list[Task]:
+    if not raw or not raw.get("enabled", True):
+        return []
+    try:
+        term_start = (
+            date.fromisoformat(raw["term_start"])
+            if raw.get("term_start")
+            else None
+        )
+        term_end = (
+            date.fromisoformat(raw["term_end"])
+            if raw.get("term_end")
+            else None
+        )
+    except (TypeError, ValueError):
+        return []
+    if term_start and target_date < term_start:
+        return []
+    if term_end and target_date > term_end:
+        return []
+    academic_week = (
+        ((target_date - term_start).days // 7) + 1
+        if term_start
+        else None
+    )
+    tasks: list[Task] = []
+    for index, value in enumerate(raw.get("entries", []), start=1):
+        try:
+            entry = CourseSessionCreate.model_validate(value)
+        except Exception:
+            continue
+        if entry.weekday != target_date.isoweekday():
+            continue
+        if entry.weeks and (
+            academic_week is None or academic_week not in entry.weeks
+        ):
+            continue
+        start_value = class_periods.get(entry.start_period)
+        end_value = class_periods.get(entry.end_period)
+        if not start_value or not end_value:
+            continue
+        start_at = datetime.combine(target_date, start_value[0], timezone)
+        end_at = datetime.combine(target_date, end_value[1], timezone)
+        tasks.append(
+            Task(
+                id=f"client_course_{index}_{entry.start_period}_{entry.end_period}",
+                title=entry.course_name,
+                date=target_date,
+                duration_min=int((end_at - start_at).total_seconds() // 60),
+                location_raw=entry.location,
+                fixed_start=start_at,
+                fixed_end=end_at,
+                flexibility=TaskFlexibility.FIXED,
+                importance=5,
+                tags=[
+                    "course",
+                    "personal_timetable",
+                    "browser_snapshot",
+                    "hard_constraint",
+                    f"period:{entry.start_period}-{entry.end_period}",
+                ],
+                notes="来自浏览器保存的个人课表，按已核验节次锁定",
+            )
+        )
+    return tasks
 
 
 def _explicit_no_class_exception(query: str) -> bool:

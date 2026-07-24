@@ -19,6 +19,8 @@ class CampusAgentState(TypedDict, total=False):
 
     tasks: list[dict[str, Any]]
     preferences: dict[str, Any]
+    client_memories: list[dict[str, Any]]
+    client_timetable: dict[str, Any] | None
     user_memories: list[dict[str, Any]]
     timetable_summary: str | None
     initial_location_raw: str | None

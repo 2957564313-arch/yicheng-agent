@@ -6,12 +6,27 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.common import Issue
+from app.schemas.memory import MemoryCreate
 from app.schemas.plan import DataFreshness, Plan
+from app.schemas.timetable import CourseSessionCreate
+
+
+class ClientTimetableSnapshot(BaseModel):
+    name: str = Field(default="我的课表", min_length=1, max_length=80)
+    term_start: date | None = None
+    term_end: date | None = None
+    enabled: bool = True
+    entries: list[CourseSessionCreate] = Field(
+        default_factory=list,
+        max_length=200,
+    )
 
 
 class ClientContext(BaseModel):
     current_location_id: str | None = Field(default=None, max_length=100)
     now: datetime | None = None
+    memories: list[MemoryCreate] = Field(default_factory=list, max_length=30)
+    timetable: ClientTimetableSnapshot | None = None
 
     @model_validator(mode="after")
     def validate_now(self) -> "ClientContext":

@@ -705,3 +705,87 @@ def test_specific_courier_closing_time_blocks_late_pickup(tmp_path):
             warning["code"] == "TASK_UNSCHEDULED"
             for warning in payload["warnings"]
         )
+
+
+def test_browser_memory_snapshot_survives_without_server_record(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "snapshot_memory_user",
+                "thread_id": "snapshot_memory_thread",
+                "query": (
+                    "今天14点后去图书馆自习1小时，再去取快递，"
+                    "18点前结束。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "memories": [
+                        {
+                            "category": "preference",
+                            "key": "buffer_min",
+                            "label": "日程缓冲时间",
+                            "value": 20,
+                            "enabled": True,
+                        }
+                    ],
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        ordered = sorted(
+            payload["plan"]["items"],
+            key=lambda item: item["start_at"],
+        )
+        travel = next(item for item in ordered if item["item_type"] == "travel")
+        parcel = next(
+            item for item in ordered if item.get("task_id") == "parcel"
+        )
+        assert (
+            datetime.fromisoformat(parcel["start_at"])
+            - datetime.fromisoformat(travel["end_at"])
+        ).total_seconds() >= 20 * 60
+        assert any(
+            item["source_label"] == "个人记忆库"
+            for item in payload["insights"]
+        )
+
+
+def test_browser_timetable_snapshot_is_a_fixed_constraint(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "snapshot_timetable_user",
+                "thread_id": "snapshot_timetable_thread",
+                "query": "今天哪几节有课？",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T07:00:00+08:00",
+                    "timetable": {
+                        "name": "浏览器课表",
+                        "term_start": "2026-07-20",
+                        "enabled": True,
+                        "entries": [
+                            {
+                                "course_name": "高等数学",
+                                "weekday": 5,
+                                "start_period": 1,
+                                "end_period": 2,
+                                "location": "第六教学楼",
+                                "weeks": [1],
+                            }
+                        ],
+                    },
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["status"] == "completed"
+        assert "高等数学" in payload["answer"]
+        assert "第1—2节" in payload["answer"]
