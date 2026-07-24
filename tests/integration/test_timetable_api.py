@@ -101,6 +101,13 @@ def test_timetable_question_uses_personal_schedule(tmp_path):
         assert payload["plan"] is None
         assert "高等数学" in payload["answer"]
         assert "大学英语" in payload["answer"]
+        assert "第1—2节" in payload["answer"]
+        assert "第3—4节" in payload["answer"]
+        assert "第1节和第2节" not in payload["answer"]
+        assert not any(
+            insight["source_label"] == "2025年学生手册"
+            for insight in payload["insights"]
+        )
         assert payload["data_freshness"]["knowledge"] == "user"
 
 

@@ -239,16 +239,36 @@ def _timetable_summary(
             "没有已启用的课程记录。"
         )
     details = "；".join(
-        (
-            f"{task.fixed_start:%H:%M}—{task.fixed_end:%H:%M} "
-            f"{task.title}"
-            + (f"（{task.location_raw}）" if task.location_raw else "")
-        )
+        _timetable_task_summary(task)
         for task in sorted(tasks, key=lambda item: item.fixed_start)
     )
     return (
         f"你的个人课表在{target_date:%Y年%m月%d日}（星期{weekday}）为："
         f"{details}。这些课程属于固定时间约束。"
+    )
+
+
+def _timetable_task_summary(task) -> str:
+    period_tag = next(
+        (
+            tag.removeprefix("period:")
+            for tag in task.tags
+            if tag.startswith("period:")
+        ),
+        None,
+    )
+    period_label = ""
+    if period_tag:
+        start_period, _, end_period = period_tag.partition("-")
+        period_label = (
+            f"第{start_period}节"
+            if not end_period or end_period == start_period
+            else f"第{start_period}—{end_period}节"
+        )
+    return (
+        f"{period_label}（{task.fixed_start:%H:%M}—"
+        f"{task.fixed_end:%H:%M}） {task.title}"
+        + (f"（{task.location_raw}）" if task.location_raw else "")
     )
 
 

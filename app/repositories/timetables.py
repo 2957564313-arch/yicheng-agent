@@ -180,6 +180,10 @@ class TimetableRepository:
                         "course",
                         "personal_timetable",
                         "hard_constraint",
+                        (
+                            f"period:{entry.start_period}"
+                            f"-{entry.end_period}"
+                        ),
                     ],
                     notes="来自你导入并启用的个人课表，不可被规划器移动",
                 )

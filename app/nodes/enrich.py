@@ -186,14 +186,16 @@ def make_enrich_node(container: AppContainer):
                 ),
                 *structured_facts,
             ]
-        rag_facts = await container.rag.retrieve(
-            [
-                state["query"],
-                *[task.title for task in tasks],
-                *location_ids,
-            ],
-            top_k=5 if is_knowledge_query else 3,
-        )
+        rag_facts = []
+        if not (is_knowledge_query and state.get("timetable_summary")):
+            rag_facts = await container.rag.retrieve(
+                [
+                    state["query"],
+                    *[task.title for task in tasks],
+                    *location_ids,
+                ],
+                top_k=5 if is_knowledge_query else 3,
+            )
         weather = []
         if not is_knowledge_query:
             weather = await container.weather.get_forecast(

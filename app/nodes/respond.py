@@ -36,7 +36,14 @@ def make_respond_node(container: AppContainer):
                 RetrievedFact.model_validate(raw)
                 for raw in state.get("retrieved_facts", [])
             ]
-            if not facts:
+            timetable_fact = next(
+                (fact for fact in facts if fact.id == "personal_timetable"),
+                None,
+            )
+            if timetable_fact is not None:
+                answer = _timetable_answer(timetable_fact.content)
+                used_llm = False
+            elif not facts:
                 answer = (
                     "当前知识库中没有检索到足够依据。"
                     "请提供更具体的制度名称，或以上传的正式文件为准。"
@@ -197,6 +204,30 @@ def make_respond_node(container: AppContainer):
         }
 
     return respond
+
+
+def _timetable_answer(summary: str) -> str:
+    if "没有已启用的课程记录" in summary:
+        return (
+            "我帮你看过个人课表了。\n\n"
+            f"{summary}\n\n"
+            "这一天暂时没有课程占用，你可以直接告诉我想安排的"
+            "学习、运动或生活任务，我会继续帮你把时间和通勤一起排好。"
+        )
+    prefix, separator, remainder = summary.partition("为：")
+    details = remainder if separator else summary
+    details = details.replace("。这些课程属于固定时间约束。", "")
+    entries = [item.strip() for item in details.split("；") if item.strip()]
+    lines = [
+        "我帮你看过个人课表了。",
+        "",
+        f"{prefix}有以下课程：",
+        *[f"• {item}" for item in entries],
+        "",
+        "这些上课时间已经自动记为固定约束。接下来无论安排自习、"
+        "取快递还是运动，我都会先避开课程，再把通勤和开放时间留好。",
+    ]
+    return "\n".join(lines)
 
 
 def _success_answer(
