@@ -61,10 +61,10 @@ def make_respond_node(container: AppContainer):
                     answer = _plain_text_answer(answer)
                     used_llm = True
                 except Exception:
-                    answer = _facts_answer(facts)
+                    answer = _facts_answer(facts, query=state["query"])
                     used_llm = False
             else:
-                answer = _facts_answer(facts)
+                answer = _facts_answer(facts, query=state["query"])
                 used_llm = False
             return {
                 "final_answer": answer,
@@ -132,7 +132,7 @@ def make_respond_node(container: AppContainer):
         answer = draft
         used_llm = False
         if (
-            container.settings.llm_render_enabled
+            container.settings.llm_plan_render_enabled
             and container.llm.configured
         ):
             try:
@@ -207,6 +207,20 @@ def make_respond_node(container: AppContainer):
 
 
 def _timetable_answer(summary: str) -> str:
+    if "不执行常规课程" in summary:
+        return (
+            "我把个人课表和校历一起核对过了。\n\n"
+            f"{summary}\n\n"
+            "假期并不等于这一天不能规划。你可以告诉我想自习、运动、"
+            "出行还是休息，我会照常结合开放时间、通勤和天气帮你安排。"
+        )
+    if "尚未录入学校具体补星期几课程" in summary:
+        return (
+            "我先把不确定的地方替你拦住了。\n\n"
+            f"{summary}\n\n"
+            "拿到学校调课通知后，在“学校临时调课与停课”里选择"
+            "补星期几的课即可；在此之前，我不会擅自把某一天的课搬过来。"
+        )
     if "没有已启用的课程记录" in summary:
         return (
             "我帮你看过个人课表了。\n\n"
@@ -214,6 +228,11 @@ def _timetable_answer(summary: str) -> str:
             "这一天暂时没有课程占用，你可以直接告诉我想安排的"
             "学习、运动或生活任务，我会继续帮你把时间和通勤一起排好。"
         )
+    calendar_note = ""
+    calendar_match = re.search(r"(学校校历设置为.*?。)$", summary)
+    if calendar_match:
+        calendar_note = calendar_match.group(1)
+        summary = summary[: calendar_match.start()].rstrip()
     prefix, separator, remainder = summary.partition("为：")
     details = remainder if separator else summary
     details = details.replace("。这些课程属于固定时间约束。", "")
@@ -224,6 +243,7 @@ def _timetable_answer(summary: str) -> str:
         f"{prefix}有以下课程：",
         *[f"• {item}" for item in entries],
         "",
+        *([calendar_note, ""] if calendar_note else []),
         "这些上课时间已经自动记为固定约束。接下来无论安排自习、"
         "取快递还是运动，我都会先避开课程，再把通勤和开放时间留好。",
     ]
@@ -315,6 +335,7 @@ def _success_answer(
                 "PARTIAL_LIVE_ROUTE_COVERAGE",
                 "ROUTE_FALLBACK",
                 "PEAK_CONGESTION",
+                "SCHOOL_CALENDAR_CONFIRMATION_REQUIRED",
             }
         )
     ]
@@ -569,6 +590,37 @@ def _infeasible_answer(
         if available_minutes is not None
         else 0
     )
+    venue_errors = [
+        Issue.model_validate(raw).message
+        for raw in warnings
+        if (
+            raw.get("severity") == IssueSeverity.ERROR.value
+            and raw.get("code") == "OUTSIDE_OPENING_HOURS"
+        )
+    ]
+    if venue_errors:
+        lines = [
+            "这一天仍然可以继续规划，但有一项不能按原地点直接排进去。"
+            "我先替你拦住，免得到了门口才发现无法使用。",
+            "我核对到：" + "；".join(dict.fromkeys(venue_errors)) + "。",
+        ]
+        if unscheduled_names:
+            lines.append(
+                f"{unscheduled_names}没有被删除，只是暂时标为“待调整”。"
+                "你可以改到宿舍或其他已经确认开放的地点，也可以等场馆"
+                "发布节假日专门通知后再告诉我。"
+            )
+        if plan.items:
+            completed_names = "、".join(
+                item.title
+                for item in plan.items
+                if item.item_type == "task"
+            )
+            lines.append(
+                f"{completed_names}等不受影响的安排已经保留在下方时间轴，"
+                "不需要因为一个场所关闭就推翻整天。"
+            )
+        return "\n".join(lines), []
 
     lines = [
         f"你想把{all_task_names}都顾上，我明白。"
@@ -871,6 +923,7 @@ def _plain_text_answer(answer: str) -> str:
         .replace("# ", "")
         .strip()
     )
+    cleaned = re.sub(r"(?m)^\s*[-*]\s+", "• ", cleaned)
     cleaned = re.sub(
         (
             r"^(?:(?:你好|您好|没问题|好的|当然可以|可以(?:的)?)"
@@ -890,13 +943,123 @@ def _plain_text_answer(answer: str) -> str:
     )
 
 
-def _facts_answer(facts: list[RetrievedFact]) -> str:
-    lines = ["根据当前校园知识库："]
+def _facts_answer(
+    facts: list[RetrievedFact],
+    *,
+    query: str,
+) -> str:
+    primary = facts[0]
+    selected = [
+        primary,
+        *[
+            fact
+            for fact in facts[1:]
+            if fact.source_ref == primary.source_ref
+        ][:1],
+    ]
+    excerpts = [
+        excerpt
+        for fact in selected
+        if (excerpt := _knowledge_answer_excerpt(fact.content, query))
+    ]
+    lines = [
+        "我帮你从已核验的资料里找到了直接相关的依据：",
+        "",
+        *[f"• {excerpt}" for excerpt in excerpts],
+    ]
     seen_sources: list[str] = []
-    for fact in facts[:3]:
-        lines.append(f"- {fact.content}")
+    for fact in selected:
         if fact.source_ref and fact.source_ref not in seen_sources:
             seen_sources.append(fact.source_ref)
     if seen_sources:
-        lines.append("来源：" + "；".join(seen_sources))
+        lines.extend(["", "依据来源：" + "；".join(seen_sources)])
+    lines.extend(
+        [
+            "",
+            "如果你还想把这条规则用于具体某一天的安排，告诉我日期和"
+            "要做的事情，我会继续把课程、开放时间和通勤一起核对。",
+        ]
+    )
     return "\n".join(lines)
+
+
+def _knowledge_answer_excerpt(content: str, query: str) -> str:
+    for holiday_name in (
+        "元旦",
+        "春节",
+        "清明节",
+        "劳动节",
+        "端午节",
+        "中秋节",
+        "国庆节",
+    ):
+        if holiday_name not in query:
+            continue
+        holiday_match = re.search(
+            rf"(?:^|\n)[-*]\s*({holiday_name}：.*?)(?=\n[-*]\s|\n##|\Z)",
+            content,
+            flags=re.DOTALL,
+        )
+        if holiday_match:
+            compact = " ".join(holiday_match.group(1).split())
+            return re.sub(r"([，。；：])\s+", r"\1", compact)
+    content = re.sub(r"\n[ \t]{2,}", " ", content)
+    units = [
+        re.sub(r"^#+\s*|^[-*]\s*", "", item.strip())
+        for item in re.split(r"\n+|(?<=[。！？；])", content)
+        if item.strip()
+        and not re.match(r"^#{1,6}\s*", item.strip())
+    ]
+    known_terms = (
+        "元旦",
+        "春节",
+        "清明节",
+        "劳动节",
+        "端午节",
+        "中秋节",
+        "国庆节",
+        "放假",
+        "调休",
+        "上课",
+        "补课",
+        "门禁",
+        "图书馆",
+        "快递",
+        "处分",
+        "作弊",
+        "奖学金",
+        "请假",
+    )
+    query_terms = {term for term in known_terms if term in query}
+    for chinese_run in re.findall(r"[\u4e00-\u9fff]+", query):
+        for width in (2, 3):
+            query_terms.update(
+                chinese_run[index : index + width]
+                for index in range(len(chinese_run) - width + 1)
+                if chinese_run[index : index + width]
+                not in {"什么", "时候", "怎么", "可以", "是否", "需要"}
+            )
+
+    def score(unit: str) -> tuple[int, int]:
+        exact = sum(len(term) ** 2 for term in query_terms if term in unit)
+        digit_bonus = sum(
+            4
+            for value in re.findall(r"\d{1,4}", query)
+            if value in unit
+        )
+        return exact + digit_bonus, -len(unit)
+
+    ranked = sorted(units, key=score, reverse=True)
+    selected: list[str] = []
+    for unit in ranked:
+        if score(unit)[0] <= 0:
+            continue
+        if any(unit[:50] == existing[:50] for existing in selected):
+            continue
+        selected.append(unit)
+        if len(selected) >= 2 or sum(map(len, selected)) >= 360:
+            break
+    if not selected and units:
+        selected = [units[0]]
+    excerpt = " ".join(selected)
+    return excerpt if len(excerpt) <= 420 else excerpt[:420].rstrip() + "…"
