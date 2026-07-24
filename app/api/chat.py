@@ -148,7 +148,7 @@ def _constraint_checks(
             "deadline",
             "截止时间满足",
             {"DEADLINE_MISSED"},
-            "全部任务在截止时间前完成",
+            "设置了截止要求的任务均按时完成",
         ),
         (
             "opening",
