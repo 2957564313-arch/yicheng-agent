@@ -751,6 +751,18 @@ class RuleBasedRequirementParser:
                 for start, end in covered_spans
             ):
                 continue
+            clause = self._course_clause(query, match)
+            tail = query[match.end() : match.end() + 6]
+            if (
+                re.match(r"\s*(?:以后|之后|后)", tail)
+                and not any(
+                    marker in clause
+                    for marker in ("有课", "上课", "下课", "课程")
+                )
+            ):
+                # “第四节以后去自习” uses the period as a time anchor;
+                # it does not assert that the user has a fourth-period class.
+                continue
             value = self._period_number(match.group(1))
             if value is not None:
                 descriptors.append((match, [value]))
