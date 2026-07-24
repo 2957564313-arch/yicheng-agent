@@ -233,9 +233,9 @@ class KnowledgeRepository:
             RetrievedFact(
                 id=chunk_id,
                 content=content[:1200],
-                priority=source_tier * 15 + (25 if verified else 0) + min(
+                priority=source_tier * 10 + (15 if verified else 0) + min(
                     score,
-                    20,
+                    50,
                 ),
                 source=DataSource.RAG,
                 source_ref=source_ref,
