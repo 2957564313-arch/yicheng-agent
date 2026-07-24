@@ -152,6 +152,8 @@ class RuleBasedRequirementParser:
                 r"(?:有|没|没有)课吗",
                 r"有没有课",
                 r"是否有课",
+                r"(?:要|需要|应该|是否要)上课吗",
+                r"(?:放假|节假日|调休|补课)",
             )
         ):
             return True
@@ -185,6 +187,10 @@ class RuleBasedRequirementParser:
                 "推免",
                 "学分",
                 "请假",
+                "放假",
+                "节假日",
+                "调休",
+                "补课",
             )
         )
 
