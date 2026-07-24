@@ -43,14 +43,15 @@ class Settings(BaseSettings):
     app_demo_dir: Path = BASE_DIR / "fixtures"
 
     llm_enabled: bool = False
-    llm_model: str = "qwen3.6-flash"
+    llm_model: str = "qwen3.7-plus"
     llm_fallback_models: str = (
-        "qwen3.7-plus,qwen-plus-2025-07-28"
+        "qwen-plus-2025-07-28,glm-5"
     )
     llm_base_url: str = ""
     llm_api_key: str = Field(default="", repr=False)
     llm_enable_thinking: bool = False
     llm_render_enabled: bool = True
+    llm_plan_render_enabled: bool = False
     llm_timeout_seconds: float = Field(default=20, ge=1, le=120)
 
     live_route_enabled: bool = False
