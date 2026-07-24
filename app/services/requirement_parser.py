@@ -209,6 +209,12 @@ class RuleBasedRequirementParser:
         overall_deadline = self._overall_deadline(query, target_date)
         if "自习" in query or "学习" in query:
             study_keyword = "自习" if "自习" in query else "学习"
+            study_deadline = self._task_deadline(
+                query,
+                target_date,
+                ("自习", "学习"),
+            )
+            study_limit = study_deadline or overall_deadline
             duration = self._duration_near(
                 query,
                 study_keyword,
@@ -226,13 +232,13 @@ class RuleBasedRequirementParser:
                         or (time(13, 0) if "下午" in query else time(8, 0))
                     ),
                     latest=(
-                        overall_deadline.time()
-                        if overall_deadline
+                        study_limit.time()
+                        if study_limit
                         else (time(18, 0) if "下午" in query else time(22, 0))
                     ),
                     deadline=(
-                        overall_deadline.time()
-                        if overall_deadline
+                        study_limit.time()
+                        if study_limit
                         else None
                     ),
                     preferred_period="afternoon" if "下午" in query else None,
@@ -244,9 +250,15 @@ class RuleBasedRequirementParser:
             for keyword in ("取快递", "拿快递", "去快递站")
         ):
             stated_closing_hour = self._closing_hour(query)
+            scoped_parcel_deadline = self._task_deadline(
+                query,
+                target_date,
+                ("取快递", "拿快递", "快递"),
+            )
+            parcel_limit = scoped_parcel_deadline or overall_deadline
             parcel_latest = (
-                overall_deadline.time()
-                if overall_deadline
+                parcel_limit.time()
+                if parcel_limit
                 else (
                     time(stated_closing_hour, 0)
                     if stated_closing_hour is not None
@@ -254,8 +266,8 @@ class RuleBasedRequirementParser:
                 )
             )
             parcel_deadline = (
-                overall_deadline.time()
-                if overall_deadline
+                parcel_limit.time()
+                if parcel_limit
                 else (
                     time(stated_closing_hour, 0)
                     if stated_closing_hour is not None
@@ -297,6 +309,12 @@ class RuleBasedRequirementParser:
                 )
             )
         if any(keyword in query for keyword in ("跑步", "运动")):
+            run_deadline = self._task_deadline(
+                query,
+                target_date,
+                ("跑步", "运动"),
+            )
+            run_limit = run_deadline or overall_deadline
             tasks.append(
                 self._movable_task(
                     task_id="run",
@@ -313,13 +331,13 @@ class RuleBasedRequirementParser:
                         or (time(18, 0) if "晚上" in query else time(8, 0))
                     ),
                     latest=(
-                        overall_deadline.time()
-                        if overall_deadline
+                        run_limit.time()
+                        if run_limit
                         else time(22, 0)
                     ),
                     deadline=(
-                        overall_deadline.time()
-                        if overall_deadline
+                        run_limit.time()
+                        if run_limit
                         else None
                     ),
                     preferred_period="evening" if "晚上" in query else None,
@@ -710,9 +728,56 @@ class RuleBasedRequirementParser:
     ) -> datetime | None:
         match = re.search(
             r"(\d{1,2})(?:\s*[:：]\s*(\d{1,2}))?\s*点?\s*"
-            r"前(?:结束|完成|回来|搞定)?",
+            r"前(?:(?:结束|完成|回来|搞定)(?:全部|所有|这些)?"
+            r"(?:任务|事情|事项)?|(?=$|[，。；、]))",
             query,
         )
+        return self._deadline_from_match(match, target_date)
+
+    def _task_deadline(
+        self,
+        query: str,
+        target_date: date,
+        keywords: tuple[str, ...],
+    ) -> datetime | None:
+        """Return a deadline explicitly attached to one task clause.
+
+        “18点前取快递” only constrains the parcel task, while
+        “18点前结束” remains an overall deadline.  Clause boundaries keep a
+        time expression from leaking into later tasks.
+        """
+        keyword_pattern = "|".join(re.escape(item) for item in keywords)
+        time_pattern = (
+            r"(\d{1,2})(?:\s*[:：]\s*(\d{1,2}))?\s*点?\s*前"
+        )
+        before_task = re.search(
+            rf"{time_pattern}[^，。；、]{{0,16}}(?:{keyword_pattern})",
+            query,
+        )
+        if before_task:
+            return self._deadline_from_match(before_task, target_date)
+
+        task_before = re.search(
+            rf"(?:{keyword_pattern})[^，。；、]{{0,16}}?{time_pattern}",
+            query,
+        )
+        if not task_before:
+            return None
+        hour = int(task_before.group(1))
+        minute = int(task_before.group(2) or 0)
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            return None
+        return datetime.combine(
+            target_date,
+            time(hour, minute),
+            self.timezone,
+        )
+
+    def _deadline_from_match(
+        self,
+        match: re.Match[str] | None,
+        target_date: date,
+    ) -> datetime | None:
         if not match:
             return None
         hour = int(match.group(1))
