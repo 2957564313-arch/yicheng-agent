@@ -1,0 +1,18 @@
+{
+  "id": "demo_03_degraded",
+  "title": "案例三 · 天气调整",
+  "description": "17:00后降雨，系统把室外跑步提前，并重新计算后续通勤与任务。",
+  "now": "2026-07-24T13:10:00+08:00",
+  "query": "检查当前计划的天气风险。17点以后有雨，请调整计划，仍然在18点前结束。",
+  "mode": "offline",
+  "user_id": "demo_user",
+  "thread_id": "demo_competition",
+  "old_plan_fixture": "demo_01_saved_plan",
+  "prefer_latest_plan": false,
+  "initial_context": {},
+  "expected": {
+    "hard_violation_count": 0,
+    "run_start": "2026-07-24T14:00:00+08:00",
+    "final_end": "2026-07-24T17:25:00+08:00"
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "schema_version": "1.0",
+  "campus_id": "hdu_xiasha_reference",
+  "data_quality": "project_owner_verified_names_amap_poi_partial",
+  "updated_at": "2026-07-24T02:50:00+08:00",
+  "locations": [
+    {
+      "id": "teaching_building_6",
+      "name": "第六教学楼",
+      "aliases": ["六教", "6教"],
+      "category": "teaching",
+      "longitude": 120.341217,
+      "latitude": 30.314252,
+      "zone": "teaching_area",
+      "is_outdoor": false,
+      "source": {
+        "type": "amap_poi",
+        "reference": "B023B19OM8｜杭州电子科技大学高教园校区-第六教学科研楼｜entr_location",
+        "verified_at": "2026-07-24"
+      }
+    },
+    {
+      "id": "library",
+      "name": "图书馆",
+      "aliases": ["校图书馆"],
+      "category": "study",
+      "longitude": 120.343325,
+      "latitude": 30.314857,
+      "zone": "teaching_area",
+      "is_outdoor": false,
+      "source": {
+        "type": "amap_poi",
+        "reference": "B023B07CIH｜杭州电子科技大学下沙校区图书馆｜entr_location",
+        "verified_at": "2026-07-24"
+      }
+    },
+    {
+      "id": "parcel_station",
+      "name": "菜鸟驿站",
+      "aliases": ["快递站", "驿站", "菜鸟"],
+      "category": "service",
+      "longitude": 120.341485,
+      "latitude": 30.318455,
+      "zone": "living_area",
+      "is_outdoor": false,
+      "source": {
+        "type": "amap_poi",
+        "reference": "B0IK9R9FMP｜菜鸟驿站(学林街店)｜entr_location",
+        "verified_at": "2026-07-24"
+      }
+    },
+    {
+      "id": "canteen",
+      "name": "学校食堂",
+      "aliases": ["食堂", "餐厅"],
+      "category": "food",
+      "longitude": 120.344653,
+      "latitude": 30.316024,
+      "zone": "living_area",
+      "is_outdoor": false,
+      "source": {
+        "type": "amap_poi",
+        "reference": "B0FFFCUOE5｜电子科技大学-第3餐厅(金沙东路店)｜entr_location；作为“食堂”默认目的地",
+        "verified_at": "2026-07-24"
+      }
+    },
+    {
+      "id": "track",
+      "name": "东操场",
+      "aliases": ["操场", "田径场", "东区", "东面田径场"],
+      "category": "sports",
+      "longitude": 120.348365,
+      "latitude": 30.314845,
+      "zone": "sports_area",
+      "is_outdoor": true,
+      "source": {
+        "type": "amap_poi",
+        "reference": "B0J64Z5VL2｜杭州电子科技大学下沙校区田径场｜entr_location",
+        "verified_at": "2026-07-24"
+      }
+    },
+    {
+      "id": "laboratory",
+      "name": "实验室",
+      "aliases": ["实验楼"],
+      "category": "teaching",
+      "longitude": null,
+      "latitude": null,
+      "zone": "teaching_area",
+      "is_outdoor": false,
+      "source": {
+        "type": "demo_fixture",
+        "reference": "待从项目知识库核验",
+        "verified_at": null
+      }
+    }
+  ]
+}

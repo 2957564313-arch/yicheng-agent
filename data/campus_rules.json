@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "data_quality": "project_owner_verified",
+  "rules": [
+    {
+      "id": "library_overall_hours",
+      "content": "图书馆整体周一至周日（法定节假日除外）7:00-22:30开放；不同楼层开放时间可能不同。",
+      "applies_to": ["library"],
+      "priority": 100,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "id": "parcel_station_hours",
+      "content": "项目知识快照记录菜鸟驿站开放时间为8:30-22:30。",
+      "applies_to": ["parcel_station"],
+      "priority": 100,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "id": "east_track_sun_run",
+      "content": "项目知识快照记录东操场阳光长跑计入时段为7:00-21:00。",
+      "applies_to": ["track"],
+      "priority": 90,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    }
+  ]
+}

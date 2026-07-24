@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "data_quality": "project_owner_verified",
+  "rules": [
+    {
+      "location_id": "library",
+      "effective_from": "2026-01-01",
+      "effective_to": null,
+      "weekly": {
+        "mon": [["07:00", "22:30"]],
+        "tue": [["07:00", "22:30"]],
+        "wed": [["07:00", "22:30"]],
+        "thu": [["07:00", "22:30"]],
+        "fri": [["07:00", "22:30"]],
+        "sat": [["07:00", "22:30"]],
+        "sun": [["07:00", "22:30"]]
+      },
+      "exceptions": [],
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "location_id": "parcel_station",
+      "effective_from": "2026-01-01",
+      "effective_to": null,
+      "weekly": {
+        "mon": [["08:30", "22:30"]],
+        "tue": [["08:30", "22:30"]],
+        "wed": [["08:30", "22:30"]],
+        "thu": [["08:30", "22:30"]],
+        "fri": [["08:30", "22:30"]],
+        "sat": [["08:30", "22:30"]],
+        "sun": [["08:30", "22:30"]]
+      },
+      "exceptions": [],
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "location_id": "track",
+      "effective_from": "2026-01-01",
+      "effective_to": null,
+      "weekly": {
+        "mon": [["07:00", "21:00"]],
+        "tue": [["07:00", "21:00"]],
+        "wed": [["07:00", "21:00"]],
+        "thu": [["07:00", "21:00"]],
+        "fri": [["07:00", "21:00"]],
+        "sat": [["07:00", "21:00"]],
+        "sun": [["07:00", "21:00"]]
+      },
+      "exceptions": [],
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    }
+  ]
+}

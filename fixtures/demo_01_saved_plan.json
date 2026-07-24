@@ -1,0 +1,78 @@
+{
+  "id": "plan_demo_competition_baseline",
+  "user_id": "demo_user",
+  "thread_id": "demo_competition",
+  "date": "2026-07-24",
+  "status": "valid",
+  "version": 1,
+  "items": [
+    {
+      "id": "baseline_study",
+      "task_id": "study",
+      "item_type": "task",
+      "title": "图书馆自习",
+      "start_at": "2026-07-24T14:00:00+08:00",
+      "end_at": "2026-07-24T16:00:00+08:00",
+      "location_id": "library",
+      "source": "user",
+      "reason": "案例一基准计划"
+    },
+    {
+      "id": "baseline_to_parcel",
+      "task_id": null,
+      "item_type": "travel",
+      "title": "前往取快递地点",
+      "start_at": "2026-07-24T16:00:00+08:00",
+      "end_at": "2026-07-24T16:13:00+08:00",
+      "location_id": "parcel_station",
+      "source": "demo_fixture",
+      "reason": "library → parcel_station"
+    },
+    {
+      "id": "baseline_parcel",
+      "task_id": "parcel",
+      "item_type": "task",
+      "title": "取快递",
+      "start_at": "2026-07-24T16:15:00+08:00",
+      "end_at": "2026-07-24T16:45:00+08:00",
+      "location_id": "parcel_station",
+      "source": "user",
+      "reason": "案例一基准计划"
+    },
+    {
+      "id": "baseline_to_track",
+      "task_id": null,
+      "item_type": "travel",
+      "title": "前往跑步地点",
+      "start_at": "2026-07-24T16:45:00+08:00",
+      "end_at": "2026-07-24T17:00:00+08:00",
+      "location_id": "track",
+      "source": "demo_fixture",
+      "reason": "parcel_station → track"
+    },
+    {
+      "id": "baseline_run",
+      "task_id": "run",
+      "item_type": "task",
+      "title": "跑步",
+      "start_at": "2026-07-24T17:00:00+08:00",
+      "end_at": "2026-07-24T17:30:00+08:00",
+      "location_id": "track",
+      "source": "user",
+      "reason": "案例一基准计划"
+    }
+  ],
+  "warnings": [],
+  "metrics": {
+    "hard_violation_count": 0,
+    "scheduled_task_count": 3,
+    "requested_task_count": 3,
+    "travel_minutes": 28,
+    "buffer_minutes": 0,
+    "moved_task_count": 0,
+    "total_shift_minutes": 0,
+    "preservation_rate": 1,
+    "score": 97.2
+  },
+  "created_at": "2026-07-24T13:00:00+08:00"
+}

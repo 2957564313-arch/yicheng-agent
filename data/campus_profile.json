@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "hdu_xiasha",
+  "display_name": "杭州电子科技大学下沙校区",
+  "timezone": "Asia/Shanghai",
+  "language": "zh-CN",
+  "profile_version": "2026.07.24",
+  "external_services": {
+    "amap": {
+      "search_city": "杭州",
+      "campus_query": "杭州电子科技大学下沙校区",
+      "weather_adcode": "330114",
+      "coordinate_policy": "优先采用高德POI入口坐标，地点不存在或名称含糊时使用本地静态通勤数据",
+      "quota_policy": "个人开发者免费月配额内使用；接口超时、超额或无匹配时自动降级"
+    }
+  },
+  "capabilities": {
+    "policy_qa": true,
+    "class_period_resolution": true,
+    "opening_hours_validation": true,
+    "static_route_fallback": true,
+    "live_route_ready": true,
+    "live_weather_ready": true
+  },
+  "required_files": [
+    "locations.json",
+    "travel_times.json",
+    "opening_hours.json",
+    "campus_rules.json",
+    "class_periods.json",
+    "knowledge/"
+  ],
+  "optional_files": [
+    "campus_timetables.json",
+    "weather_fallback.json"
+  ],
+  "data_quality": "project_owner_verified_knowledge_with_amap_poi_and_static_fallback"
+}
