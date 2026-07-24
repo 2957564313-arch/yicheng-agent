@@ -4,8 +4,10 @@ from zoneinfo import ZoneInfo
 from app.nodes.respond import (
     _claims_peak_was_avoided,
     _polished_answer_is_grounded,
+    _success_answer,
 )
 from app.schemas.common import DataSource, PlanStatus
+from app.schemas.context import WeatherContext
 from app.schemas.plan import Plan, PlanItem
 from app.schemas.task import Task
 
@@ -115,3 +117,28 @@ def test_offline_route_cannot_be_described_as_live_amap_result():
         plan=_plan(),
         warnings=[],
     )
+
+
+def test_day_level_weather_adds_reminder_without_claiming_timed_adjustment():
+    answer = _success_answer(
+        _plan(),
+        [],
+        intent="plan",
+        query="请结合天气安排今天的事情。",
+        facts=[],
+        weather=[
+            WeatherContext(
+                date=datetime(2026, 7, 24, tzinfo=TZ).date(),
+                period="day",
+                condition="晴",
+                temperature_c=37,
+                source=DataSource.LIVE_API,
+            )
+        ],
+        congestion_windows=[],
+    )
+
+    assert "天气有变化时" not in answer
+    assert "先避开风险时段" not in answer
+    assert "户外任务安排在已知风险时段之前" not in answer
+    assert "当前预报约 37℃" in answer
