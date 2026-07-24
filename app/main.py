@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
-from app.api import chat, demos, health, memories
+from app.api import chat, demos, health, memories, timetables
 from app.config import BASE_DIR, Settings, get_settings
 from app.container import build_container
 from app.errors import AppError
@@ -88,6 +88,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
     application.include_router(chat.router)
     application.include_router(demos.router)
     application.include_router(memories.router)
+    application.include_router(timetables.router)
     application.mount(
         "/",
         StaticFiles(directory=BASE_DIR / "app" / "web", html=True),

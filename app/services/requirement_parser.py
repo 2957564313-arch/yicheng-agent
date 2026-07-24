@@ -135,6 +135,17 @@ class RuleBasedRequirementParser:
 
     @staticmethod
     def _is_knowledge_query(query: str) -> bool:
+        if any(
+            re.search(pattern, query)
+            for pattern in (
+                r"课表",
+                r"哪几节.*课",
+                r"(?:有|没|没有)课吗",
+                r"有没有课",
+                r"是否有课",
+            )
+        ):
+            return True
         planning_keywords = (
             "安排",
             "规划",
@@ -196,6 +207,8 @@ class RuleBasedRequirementParser:
         target_date: date,
     ) -> tuple[list[Task], UserPreferences]:
         course_tasks = self._course_tasks(query, target_date)
+        fixed_tasks = self._fixed_arrangement_tasks(query, target_date)
+        fixed_text = " ".join(task.title for task in fixed_tasks)
         tasks: list[Task] = []
         overall_start = self._overall_start(query)
         if (
@@ -207,7 +220,10 @@ class RuleBasedRequirementParser:
             )
             overall_start = last_course_end.time()
         overall_deadline = self._overall_deadline(query, target_date)
-        if "自习" in query or "学习" in query:
+        if (
+            ("自习" in query or "学习" in query)
+            and not any(word in fixed_text for word in ("自习", "学习"))
+        ):
             study_keyword = "自习" if "自习" in query else "学习"
             study_deadline = self._task_deadline(
                 query,
@@ -245,9 +261,12 @@ class RuleBasedRequirementParser:
                     importance=5,
                 )
             )
-        if any(
+        if (
+            not any(word in fixed_text for word in ("快递", "驿站"))
+            and any(
             keyword in query
             for keyword in ("取快递", "拿快递", "去快递站")
+            )
         ):
             stated_closing_hour = self._closing_hour(query)
             scoped_parcel_deadline = self._task_deadline(
@@ -294,7 +313,10 @@ class RuleBasedRequirementParser:
                     importance=4,
                 )
             )
-        if any(keyword in query for keyword in ("吃晚饭", "晚饭", "吃饭")):
+        if (
+            not any(word in fixed_text for word in ("晚饭", "吃饭", "食堂"))
+            and any(keyword in query for keyword in ("吃晚饭", "晚饭", "吃饭"))
+        ):
             tasks.append(
                 self._movable_task(
                     task_id="dinner",
@@ -308,7 +330,10 @@ class RuleBasedRequirementParser:
                     importance=3,
                 )
             )
-        if any(keyword in query for keyword in ("跑步", "运动")):
+        if (
+            not any(word in fixed_text for word in ("跑步", "运动"))
+            and any(keyword in query for keyword in ("跑步", "运动"))
+        ):
             run_deadline = self._task_deadline(
                 query,
                 target_date,
@@ -349,11 +374,243 @@ class RuleBasedRequirementParser:
             )
 
         tasks = self._apply_explicit_order(query, tasks)
-        return [*course_tasks, *tasks], UserPreferences(
+        tasks = self._link_movables_across_fixed_tasks(
+            query,
+            fixed_tasks,
+            tasks,
+        )
+        return [*course_tasks, *fixed_tasks, *tasks], UserPreferences(
             buffer_min=0 if overall_deadline else 10,
             transport_mode=self.transport_mode_from_query(query),
             avoid_congestion=self.avoid_congestion_from_query(query),
         )
+
+    @staticmethod
+    def _link_movables_across_fixed_tasks(
+        query: str,
+        fixed_tasks: list[Task],
+        movable_tasks: list[Task],
+    ) -> list[Task]:
+        """Keep an explicitly narrated order when a fixed event is in between."""
+        if not fixed_tasks or not movable_tasks:
+            return movable_tasks
+
+        known_keywords = {
+            "study": ("自习", "学习"),
+            "parcel": ("取快递", "拿快递", "快递"),
+            "dinner": ("吃晚饭", "晚饭", "吃饭"),
+            "run": ("跑步", "运动"),
+        }
+
+        def position(task: Task) -> int:
+            candidates = list(known_keywords.get(task.id, ()))
+            compact_title = re.sub(
+                r"^(?:参加|进行|前往|去)",
+                "",
+                task.title,
+            )
+            candidates.extend((task.title, compact_title))
+            positions = [
+                query.find(candidate)
+                for candidate in candidates
+                if candidate and query.find(candidate) >= 0
+            ]
+            return min(positions) if positions else len(query)
+
+        sequence = sorted(
+            [*fixed_tasks, *movable_tasks],
+            key=position,
+        )
+        previous_id: str | None = None
+        updates: dict[str, Task] = {}
+        for index, task in enumerate(sequence):
+            if task.flexibility == TaskFlexibility.MOVABLE:
+                next_fixed = next(
+                    (
+                        candidate
+                        for candidate in sequence[index + 1 :]
+                        if (
+                            candidate.flexibility
+                            in {
+                                TaskFlexibility.FIXED,
+                                TaskFlexibility.LOCKED,
+                            }
+                            and candidate.fixed_start is not None
+                        )
+                    ),
+                    None,
+                )
+                latest_end = task.latest_end
+                if next_fixed is not None:
+                    latest_end = min(
+                        value
+                        for value in (latest_end, next_fixed.fixed_start)
+                        if value is not None
+                    )
+                updates[task.id] = task.model_copy(
+                    update={
+                        "depends_on": [previous_id] if previous_id else [],
+                        "latest_end": latest_end,
+                    }
+                )
+            previous_id = task.id
+        return [updates.get(task.id, task) for task in movable_tasks]
+
+    def _fixed_arrangement_tasks(
+        self,
+        query: str,
+        target_date: date,
+    ) -> list[Task]:
+        """Extract explicit clock-time blocks as immutable user facts.
+
+        Examples include “15:00到16:30开会” and “下午3点到4点做实验”。
+        A concrete interval is stronger than a soft preference, so the
+        scheduler must plan around it instead of moving it.
+        """
+        clock = (
+            r"(?P<{period}>上午|中午|下午|晚上)?\s*"
+            r"(?P<{hour}>\d{{1,2}})"
+            r"(?:(?:\s*[:：]\s*(?P<{minute}>\d{{1,2}}))|"
+            r"(?:\s*点(?:\s*(?P<{minute_point}>\d{{1,2}})\s*分)?))"
+        )
+        pattern = re.compile(
+            clock.format(
+                period="period1",
+                hour="hour1",
+                minute="minute1",
+                minute_point="minute_point1",
+            )
+            + r"\s*(?:到|至|[-—~～])\s*"
+            + clock.format(
+                period="period2",
+                hour="hour2",
+                minute="minute2",
+                minute_point="minute_point2",
+            )
+        )
+        marker_words = (
+            "有",
+            "固定",
+            "安排",
+            "开会",
+            "会议",
+            "实验",
+            "活动",
+            "考试",
+            "值班",
+            "面试",
+            "训练",
+            "课程",
+            "上课",
+            "自习",
+            "学习",
+            "跑步",
+            "运动",
+            "吃饭",
+            "取快递",
+        )
+        tasks: list[Task] = []
+        for index, match in enumerate(pattern.finditer(query), start=1):
+            clause_start = max(
+                query.rfind(separator, 0, match.start())
+                for separator in ("，", "。", "；", ",", ";")
+            )
+            following_boundaries = [
+                position
+                for separator in ("，", "。", "；", ",", ";")
+                if (position := query.find(separator, match.end())) >= 0
+            ]
+            clause_end = min(following_boundaries, default=len(query))
+            clause = query[clause_start + 1 : clause_end].strip()
+            if not any(word in clause for word in marker_words):
+                continue
+            start_time = self._clock_from_groups(match, "1")
+            end_time = self._clock_from_groups(
+                match,
+                "2",
+                inherited_period=match.group("period1"),
+            )
+            if start_time is None or end_time is None:
+                continue
+            start_at = datetime.combine(target_date, start_time, self.timezone)
+            end_at = datetime.combine(target_date, end_time, self.timezone)
+            if end_at <= start_at:
+                continue
+            title = pattern.sub("", clause, count=1)
+            title = re.sub(
+                r"^(?:今天|明天|后天)?\s*(?:我)?\s*"
+                r"(?:固定|已经安排|安排|有|要|需要|去|在)*\s*",
+                "",
+                title,
+            ).strip(" ，。；、")
+            title = title or "固定安排"
+            location = next(
+                (
+                    name
+                    for name in (
+                        "第六教学楼",
+                        "图书馆",
+                        "菜鸟驿站",
+                        "快递站",
+                        "东操场",
+                        "体育馆",
+                        "实验室",
+                        "食堂",
+                    )
+                    if name in clause
+                ),
+                None,
+            )
+            if location:
+                title = re.sub(
+                    rf"^(?:在|去)?{re.escape(location)}",
+                    "",
+                    title,
+                ).strip()
+            title = re.sub(r"^固定", "", title).strip() or "固定安排"
+            tasks.append(
+                Task(
+                    id=(
+                        f"fixed_{start_time:%H%M}_{end_time:%H%M}_{index}"
+                    ),
+                    title=title[:120],
+                    date=target_date,
+                    duration_min=int(
+                        (end_at - start_at).total_seconds() // 60
+                    ),
+                    location_raw=location,
+                    fixed_start=start_at,
+                    fixed_end=end_at,
+                    flexibility=TaskFlexibility.FIXED,
+                    importance=5,
+                    tags=["user_fixed", "hard_constraint"],
+                    notes="用户明确给出的固定时间安排，不可被规划器移动",
+                )
+            )
+        return tasks
+
+    @staticmethod
+    def _clock_from_groups(
+        match: re.Match[str],
+        suffix: str,
+        inherited_period: str | None = None,
+    ) -> time | None:
+        period = match.group(f"period{suffix}") or inherited_period
+        hour = int(match.group(f"hour{suffix}"))
+        minute = int(
+            match.group(f"minute{suffix}")
+            or match.group(f"minute_point{suffix}")
+            or 0
+        )
+        if period in {"下午", "晚上"} and 1 <= hour <= 11:
+            hour += 12
+        elif period == "中午" and 1 <= hour <= 10:
+            hour += 12
+        elif period == "上午" and hour == 12:
+            hour = 0
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            return None
+        return time(hour, minute)
 
     @staticmethod
     def _load_class_periods(

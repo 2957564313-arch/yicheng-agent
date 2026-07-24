@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from app.container import AppContainer
 from app.nodes.common import append_trace
 from app.schemas.common import DataSource, Issue, IssueSeverity
-from app.schemas.context import WeatherContext
+from app.schemas.context import RetrievedFact, WeatherContext
 from app.schemas.task import Task, UserPreferences
 from app.state import CampusAgentState
 
@@ -175,6 +175,17 @@ def make_enrich_node(container: AppContainer):
         structured_facts = container.rules.facts_for_locations(
             set(location_ids)
         )
+        if is_knowledge_query and state.get("timetable_summary"):
+            structured_facts = [
+                RetrievedFact(
+                    id="personal_timetable",
+                    content=state["timetable_summary"],
+                    priority=100,
+                    source=DataSource.USER,
+                    source_ref="个人课表",
+                ),
+                *structured_facts,
+            ]
         rag_facts = await container.rag.retrieve(
             [
                 state["query"],

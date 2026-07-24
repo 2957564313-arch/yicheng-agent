@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
+import re
 
 from app.container import AppContainer
 from app.nodes.common import append_trace
@@ -92,6 +93,31 @@ def make_understand_node(container: AppContainer):
             result = rule_result
             parser_name = "offline_rules"
 
+        timetable_tasks = container.timetables.tasks_for_date(
+            user_id=state["user_id"],
+            target_date=result.requested_date,
+            class_periods=container.parser.class_periods,
+            timezone_name=container.settings.app_timezone,
+        )
+        timetable_summary = (
+            _timetable_summary(result.requested_date, timetable_tasks)
+            if _is_timetable_query(state["query"])
+            else None
+        )
+        if (
+            old_plan is None
+            and result.intent.value != "query"
+            and not _explicit_no_class_exception(state["query"])
+        ):
+            result = result.model_copy(
+                update={
+                    "tasks": _merge_timetable_tasks(
+                        result.tasks,
+                        timetable_tasks,
+                    )
+                }
+            )
+
         preferences = _apply_memory_preferences(
             result.preferences,
             memories,
@@ -125,6 +151,7 @@ def make_understand_node(container: AppContainer):
             "user_memories": [
                 memory.model_dump(mode="json") for memory in memories
             ],
+            "timetable_summary": timetable_summary,
             "clarifications": result.clarifications,
             "parse_confidence": result.confidence,
             "provider_warnings": warnings,
@@ -141,12 +168,88 @@ def make_understand_node(container: AppContainer):
                     "intent": result.intent.value,
                     "task_count": len(result.tasks),
                     "memory_count": len(memories),
+                    "timetable_task_count": len(timetable_tasks),
                     "clarification_count": len(result.clarifications),
                 },
             ),
         }
 
     return understand
+
+
+def _explicit_no_class_exception(query: str) -> bool:
+    """Treat a direct no-class statement as a one-day timetable exception."""
+    if any(marker in query for marker in ("吗", "是否", "有没有", "哪几节")):
+        return False
+    return bool(
+        re.search(
+            r"(?:今天|明天|后天|当天)?\s*(?:全天)?\s*(?:没课|没有课|无课)",
+            query,
+        )
+    )
+
+
+def _is_timetable_query(query: str) -> bool:
+    return any(
+        re.search(pattern, query)
+        for pattern in (
+            r"课表",
+            r"哪几节.*课",
+            r"(?:有|没|没有)课吗",
+            r"有没有课",
+            r"是否有课",
+        )
+    )
+
+
+def _merge_timetable_tasks(
+    parsed_tasks,
+    timetable_tasks,
+):
+    """Merge personal courses without duplicating explicitly stated classes."""
+    merged = list(parsed_tasks)
+    existing_fixed = [
+        task
+        for task in parsed_tasks
+        if task.fixed_start is not None and task.fixed_end is not None
+    ]
+    for task in timetable_tasks:
+        overlaps = any(
+            existing.fixed_start < task.fixed_end
+            and task.fixed_start < existing.fixed_end
+            and (
+                "course" in existing.tags
+                or existing.title == task.title
+            )
+            for existing in existing_fixed
+        )
+        if not overlaps:
+            merged.append(task)
+    return merged
+
+
+def _timetable_summary(
+    target_date: date,
+    tasks,
+) -> str:
+    weekday = "一二三四五六日"[target_date.isoweekday() - 1]
+    if not tasks:
+        return (
+            f"你的个人课表在{target_date:%Y年%m月%d日}（星期{weekday}）"
+            "没有已启用的课程记录。"
+        )
+    details = "；".join(
+        (
+            f"{task.fixed_start:%H:%M}—{task.fixed_end:%H:%M} "
+            f"{task.title}"
+            + (f"（{task.location_raw}）" if task.location_raw else "")
+        )
+        for task in sorted(tasks, key=lambda item: item.fixed_start)
+    )
+    return (
+        f"你的个人课表在{target_date:%Y年%m月%d日}（星期{weekday}）为："
+        f"{details}。这些课程属于固定时间约束。"
+    )
 
 
 def _apply_memory_preferences(

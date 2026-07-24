@@ -8,7 +8,7 @@
       content="面向校园学习与生活任务的时空规划智能体"
     />
     <title>易程智策 · 规划控制台</title>
-    <link rel="stylesheet" href="/styles.css?v=20260724-3" />
+    <link rel="stylesheet" href="/styles.css?v=20260724-4" />
   </head>
   <body>
     <header class="masthead">
@@ -69,6 +69,56 @@
             <div id="execution" class="execution-list empty">
               运行后显示五个处理步骤。
             </div>
+          </article>
+
+          <article class="panel timetable-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="step">个人课表</p>
+                <h2>导入后自动避开上课时间</h2>
+              </div>
+            </div>
+            <p class="panel-note">
+              支持 Excel、CSV 和 JSON。课程会成为不可移动的时间约束，
+              之后可以直接问“明天哪几节有课”。
+            </p>
+            <div class="timetable-form">
+              <input
+                id="timetable-name"
+                type="text"
+                value="我的课表"
+                aria-label="课表名称"
+                maxlength="80"
+              />
+              <div class="term-fields">
+                <label>
+                  学期开始
+                  <input id="term-start" type="date" />
+                </label>
+                <label>
+                  学期结束
+                  <input id="term-end" type="date" />
+                </label>
+              </div>
+              <label class="file-picker">
+                <span>选择课表文件</span>
+                <input
+                  id="timetable-file"
+                  type="file"
+                  accept=".xlsx,.csv,.json"
+                />
+              </label>
+              <button id="timetable-import" class="ghost">导入并启用课表</button>
+            </div>
+            <div id="timetable-summary" class="timetable-summary muted">
+              当前还没有导入个人课表。
+            </div>
+            <button id="timetable-clear" class="text-button danger-link" hidden>
+              清空我的课表
+            </button>
+            <p class="storage-note">
+              当前为公开测试版；系统更新时，体验数据可能重置。
+            </p>
           </article>
 
           <article class="panel memory-panel">
@@ -203,6 +253,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260724-3" defer></script>
+    <script src="/app.js?v=20260724-4" defer></script>
   </body>
 </html>

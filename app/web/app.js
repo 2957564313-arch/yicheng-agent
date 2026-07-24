@@ -24,13 +24,37 @@ const memoryType = $("#memory-type");
 const memoryValue = $("#memory-value");
 const memorySave = $("#memory-save");
 const memoryList = $("#memory-list");
+const timetableName = $("#timetable-name");
+const termStart = $("#term-start");
+const termEnd = $("#term-end");
+const timetableFile = $("#timetable-file");
+const timetableImport = $("#timetable-import");
+const timetableSummary = $("#timetable-summary");
+const timetableClear = $("#timetable-clear");
 const adjustmentPanel = $(".adjustment-panel");
-const consoleThreadId = "demo_competition";
-const consoleUserId = "demo_user";
+const consoleUserId = getOrCreateLocalIdentity(
+  "yicheng_user_id",
+  "visitor",
+);
+const consoleThreadId = getOrCreateLocalIdentity(
+  "yicheng_thread_id",
+  "thread",
+);
 let lastSuggestedActions = [];
 let lastDebugPayload = null;
 let serverClockBaseMs = null;
 let serverClockFetchedAtMs = null;
+
+function getOrCreateLocalIdentity(storageKey, prefix) {
+  const stored = localStorage.getItem(storageKey);
+  if (stored) return stored;
+  const randomPart = globalThis.crypto?.randomUUID
+    ? globalThis.crypto.randomUUID().replaceAll("-", "")
+    : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const value = `${prefix}_${randomPart}`.slice(0, 64);
+  localStorage.setItem(storageKey, value);
+  return value;
+}
 
 const sourceLabels = {
   user: "用户提供",
@@ -274,6 +298,7 @@ function renderEvidence(data) {
     "API_DEGRADED",
     "UNVERIFIED_CAMPUS_DATA",
     "PARTIAL_LIVE_ROUTE_COVERAGE",
+    "ROUTE_FALLBACK",
     "LLM_DEGRADED",
   ]);
   const warningItems = (data.warnings || []).filter(
@@ -401,7 +426,7 @@ async function submitQuery(rawQuery) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      user_id: "demo_user",
+      user_id: consoleUserId,
       thread_id: consoleThreadId,
       query,
       mode: modeSelect.value,
@@ -619,6 +644,120 @@ memorySave.addEventListener("click", async () => {
   }
 });
 
+function timetableWeekdayLabel(value) {
+  return `周${"一二三四五六日"[Number(value) - 1] || value}`;
+}
+
+async function fileToImportPayload(file) {
+  const extension = file.name.split(".").pop().toLowerCase();
+  if (extension === "xlsx") {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+    }
+    return { format: "xlsx_base64", content: btoa(binary) };
+  }
+  if (extension === "csv" || extension === "json") {
+    return { format: extension, content: await file.text() };
+  }
+  throw new Error("请选择 .xlsx、.csv 或 .json 课表文件。");
+}
+
+function renderTimetable(data) {
+  const entries = data.entries || [];
+  timetableSummary.classList.toggle("muted", entries.length === 0);
+  timetableClear.hidden = entries.length === 0;
+  if (!entries.length) {
+    timetableSummary.textContent = "当前还没有导入个人课表。";
+    return;
+  }
+  const grouped = new Map();
+  entries.forEach((entry) => {
+    if (!grouped.has(entry.weekday)) grouped.set(entry.weekday, []);
+    grouped.get(entry.weekday).push(entry);
+  });
+  timetableSummary.innerHTML = `
+    <div class="timetable-status">
+      <strong>${escapeHtml(data.timetable?.name || "我的课表")}</strong>
+      <span>${entries.length}门次课程 · 已启用</span>
+    </div>
+    ${[...grouped.entries()].map(([weekday, values]) => `
+      <div class="timetable-day">
+        <strong>${timetableWeekdayLabel(weekday)}</strong>
+        <div>
+          ${values.map((entry) => `
+            <span>${escapeHtml(entry.course_name)} · 第${entry.start_period}${
+              entry.end_period === entry.start_period
+                ? ""
+                : `—${entry.end_period}`
+            }节${entry.location ? ` · ${escapeHtml(entry.location)}` : ""}</span>
+          `).join("")}
+        </div>
+      </div>
+    `).join("")}
+  `;
+}
+
+async function loadTimetable() {
+  const response = await fetch(`/api/v1/users/${consoleUserId}/timetable`);
+  const data = await response.json();
+  if (!response.ok) throw data;
+  renderTimetable(data);
+}
+
+timetableImport.addEventListener("click", async () => {
+  const file = timetableFile.files?.[0];
+  if (!file) {
+    timetableSummary.textContent = "请先选择一份课表文件。";
+    timetableSummary.classList.remove("muted");
+    return;
+  }
+  timetableImport.disabled = true;
+  timetableImport.textContent = "正在识别课表…";
+  try {
+    const filePayload = await fileToImportPayload(file);
+    const response = await fetch(
+      `/api/v1/users/${consoleUserId}/timetable/import`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: timetableName.value.trim() || "我的课表",
+          term_start: termStart.value || null,
+          term_end: termEnd.value || null,
+          ...filePayload,
+        }),
+      },
+    );
+    const data = await response.json();
+    if (!response.ok) throw data;
+    renderTimetable(data);
+    timetableFile.value = "";
+    answer.textContent = `课表已经导入，共识别 ${data.imported_count} 门次课程。之后你只要告诉我想做什么，我会自动避开上课时间。`;
+    answer.classList.remove("muted");
+  } catch (error) {
+    timetableSummary.textContent = error instanceof Error
+      ? error.message
+      : error?.error?.message || "课表暂时没有导入成功。";
+    timetableSummary.classList.remove("muted");
+    renderDebug(error);
+  } finally {
+    timetableImport.disabled = false;
+    timetableImport.textContent = "导入并启用课表";
+  }
+});
+
+timetableClear.addEventListener("click", async () => {
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/timetable`,
+    { method: "DELETE" },
+  );
+  if (response.ok) {
+    renderTimetable({ timetable: null, entries: [] });
+  }
+});
+
 async function checkHealth() {
   try {
     const response = await fetch("/api/v1/health");
@@ -640,6 +779,7 @@ checkHealth();
 setInterval(renderClock, 30000);
 updateMemoryPlaceholder();
 loadMemories().catch((error) => renderDebug(error));
+loadTimetable().catch((error) => renderDebug(error));
 loadDemos().catch(() => {
   demoButtons.textContent = "案例加载失败";
 });

@@ -35,15 +35,26 @@ _CURRENT_PLAN_KEYWORDS = (
     "重新",
     "保持",
     "不要动",
-    "天气",
-    "下雨",
-    "降雨",
     "当前计划",
 )
 
 
 def _requires_current_plan(query: str) -> bool:
-    return any(keyword in query for keyword in _CURRENT_PLAN_KEYWORDS)
+    if any(keyword in query for keyword in _CURRENT_PLAN_KEYWORDS):
+        return True
+    weather_words = ("天气", "下雨", "降雨", "有雨")
+    weather_adjustment_words = (
+        "检查",
+        "当前",
+        "原计划",
+        "重排",
+        "改一下",
+        "怎么办",
+    )
+    return (
+        any(word in query for word in weather_words)
+        and any(word in query for word in weather_adjustment_words)
+    )
 
 
 def _execution_steps(
@@ -539,6 +550,7 @@ async def execute_chat(
         "tasks": [],
         "preferences": {},
         "user_memories": [],
+        "timetable_summary": None,
         "clarifications": [],
         "parse_confidence": 0,
         "normalized_locations": {},

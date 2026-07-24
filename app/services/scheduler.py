@@ -141,6 +141,10 @@ class Scheduler:
         old_starts = self._old_task_starts(context.old_plan)
 
         for task in movable:
+            has_dependents = any(
+                task.id in candidate.depends_on
+                for candidate in movable
+            )
             candidates = list(
                 self._candidate_intervals(
                     task=task,
@@ -168,6 +172,27 @@ class Scheduler:
                             travel_minutes=travel_minutes,
                             preference_penalty=preference_penalty,
                             shift_minutes=shift_minutes,
+                            scheduling_delay_minutes=(
+                                max(
+                                    0,
+                                    int(
+                                        (
+                                            start_at
+                                            - (
+                                                task.earliest_start
+                                                or datetime.combine(
+                                                    context.target_date,
+                                                    context.day_start,
+                                                    context.timezone,
+                                                )
+                                            )
+                                        ).total_seconds()
+                                        // 60
+                                    ),
+                                )
+                                if has_dependents
+                                else 0
+                            ),
                         ),
                         start_at,
                         end_at,

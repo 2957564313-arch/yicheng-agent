@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 from app.container import AppContainer
 from app.nodes.common import append_trace
@@ -253,11 +253,14 @@ def _success_answer(
                 f"安排思路：把{task_names}按时间和地点顺序连起来，"
                 "尽量减少来回折返。"
             )
-    day_label = (
-        "后天"
-        if "后天" in query
-        else ("明天" if "明天" in query else "今天")
-    )
+    if "后天" in query:
+        day_label = "后天"
+    elif "明天" in query:
+        day_label = "明天"
+    elif "今天" in query:
+        day_label = "今天"
+    else:
+        day_label = f"{plan.date.month}月{plan.date.day}日"
     lines.append(f"{day_label}可以这样安排：")
     for item in ordered_items:
         label = item.title
@@ -277,6 +280,8 @@ def _success_answer(
             not in {
                 "API_DEGRADED",
                 "UNVERIFIED_CAMPUS_DATA",
+                "PARTIAL_LIVE_ROUTE_COVERAGE",
+                "ROUTE_FALLBACK",
                 "PEAK_CONGESTION",
             }
         )
@@ -489,7 +494,15 @@ def _infeasible_answer(
         for task in tasks
         if task.earliest_start is not None
     ]
-    planning_start = max([now, *starts]) if starts else now
+    target_start = (
+        now
+        if now.date() == plan.date
+        else datetime.combine(plan.date, time(8, 0), now.tzinfo)
+    )
+    planning_start = max(
+        target_start,
+        min(starts) if starts else target_start,
+    )
     planning_start = _ceil_five_minutes(planning_start)
     active_tasks = [
         task

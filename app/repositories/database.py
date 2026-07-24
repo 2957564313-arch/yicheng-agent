@@ -41,6 +41,33 @@ CREATE TABLE IF NOT EXISTS user_memories (
 CREATE INDEX IF NOT EXISTS idx_user_memories_user_enabled
 ON user_memories(user_id, enabled);
 
+CREATE TABLE IF NOT EXISTS timetables (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    term_start TEXT,
+    term_end TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS course_sessions (
+    id TEXT PRIMARY KEY,
+    timetable_id TEXT NOT NULL REFERENCES timetables(id) ON DELETE CASCADE,
+    course_name TEXT NOT NULL,
+    weekday INTEGER NOT NULL CHECK (weekday BETWEEN 1 AND 7),
+    start_period INTEGER NOT NULL CHECK (start_period BETWEEN 1 AND 13),
+    end_period INTEGER NOT NULL CHECK (end_period BETWEEN 1 AND 13),
+    location_raw TEXT,
+    weeks_json TEXT NOT NULL DEFAULT '[]',
+    source TEXT NOT NULL DEFAULT 'import',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_course_sessions_timetable_day
+ON course_sessions(timetable_id, weekday, start_period);
+
 CREATE TABLE IF NOT EXISTS threads (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

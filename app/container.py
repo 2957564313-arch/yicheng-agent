@@ -16,6 +16,7 @@ from app.repositories.database import Database
 from app.repositories.memories import MemoryRepository
 from app.repositories.plans import PlanRepository
 from app.repositories.runs import RunRepository
+from app.repositories.timetables import TimetableRepository
 from app.services.llm import OpenAICompatibleLLM
 from app.services.replanner import Replanner
 from app.services.requirement_parser import RuleBasedRequirementParser
@@ -29,6 +30,7 @@ class AppContainer:
     database: Database
     plans: PlanRepository
     memories: MemoryRepository
+    timetables: TimetableRepository
     runs: RunRepository
     locations: LocationRepository
     routes: RouteFallbackService
@@ -107,6 +109,7 @@ def build_container(settings: Settings) -> AppContainer:
         database=database,
         plans=PlanRepository(database),
         memories=MemoryRepository(database),
+        timetables=TimetableRepository(database),
         runs=RunRepository(database),
         locations=locations,
         routes=RouteFallbackService(

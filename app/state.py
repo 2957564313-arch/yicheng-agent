@@ -20,6 +20,7 @@ class CampusAgentState(TypedDict, total=False):
     tasks: list[dict[str, Any]]
     preferences: dict[str, Any]
     user_memories: list[dict[str, Any]]
+    timetable_summary: str | None
     clarifications: list[str]
     parse_confidence: float
 
