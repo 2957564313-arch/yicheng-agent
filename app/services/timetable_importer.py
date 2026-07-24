@@ -8,6 +8,7 @@ import re
 from typing import Any
 
 from openpyxl import load_workbook
+from pypdf import PdfReader
 
 from app.schemas.timetable import CourseSessionCreate
 
@@ -46,6 +47,19 @@ WEEKDAY_VALUES = {
     "星期日": 7,
     "星期天": 7,
 }
+
+# 杭电教务系统导出的课表 PDF 使用固定七列。这里仅把列坐标用于识别
+# “星期几”，课程名称、节次、周次和地点仍从 PDF 文本中读取。
+HDU_WEEKDAY_COLUMN_X = {
+    1: 104.1,
+    2: 207.9,
+    3: 311.8,
+    4: 415.6,
+    5: 519.5,
+    6: 623.3,
+    7: 727.1,
+}
+HDU_COLUMN_TOLERANCE = 18.0
 
 
 def parse_timetable(
@@ -98,7 +112,160 @@ def _load_rows(*, content: str, format_name: str) -> list[dict[str, Any]]:
             }
             for row in values[1:]
         ]
+    if format_name == "pdf_base64":
+        binary = base64.b64decode(content, validate=True)
+        if len(binary) > 5_000_000:
+            raise ValueError("课表PDF不能超过5MB")
+        return _load_hdu_pdf_rows(binary)
     raise ValueError("暂不支持这种课表格式")
+
+
+def _load_hdu_pdf_rows(binary: bytes) -> list[dict[str, Any]]:
+    try:
+        reader = PdfReader(io.BytesIO(binary))
+    except Exception as exc:
+        raise ValueError("PDF文件无法读取或已经损坏") from exc
+    if len(reader.pages) > 20:
+        raise ValueError("课表PDF页数过多，请只上传当前学期的课表")
+    positioned_pages: list[list[tuple[float, float, float, str]]] = []
+    for page in reader.pages:
+        positioned: list[tuple[float, float, float, str]] = []
+
+        def visitor_text(
+            text,
+            cm,
+            tm,
+            font_dict,
+            font_size,
+        ) -> None:
+            compact = " ".join(str(text or "").split())
+            if not compact:
+                return
+            positioned.append(
+                (
+                    float(tm[4]),
+                    float(tm[5]),
+                    float(font_size),
+                    compact,
+                )
+            )
+
+        page.extract_text(visitor_text=visitor_text)
+        positioned_pages.append(positioned)
+    rows = _rows_from_hdu_positioned_pages(positioned_pages)
+    if not rows:
+        raise ValueError(
+            "没有识别到杭电教务系统课表网格；其他学校请先使用"
+            "Excel/CSV/JSON通用模板"
+        )
+    return rows
+
+
+def _rows_from_hdu_positioned_pages(
+    pages: list[list[tuple[float, float, float, str]]],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for positioned in pages:
+        current: dict[str, Any] | None = None
+        for x, _y, font_size, text in positioned:
+            weekday = _weekday_from_column_x(x)
+            is_course_title = (
+                weekday is not None
+                and 8.5 <= font_size <= 9.5
+                and not text.startswith(("(", "（"))
+                and "节)" not in text
+            )
+            if is_course_title:
+                _append_hdu_pdf_row(rows, current)
+                current = {
+                    "course_name": text,
+                    "weekday": weekday,
+                    "column_x": x,
+                    "details": [],
+                }
+                continue
+            if (
+                current is not None
+                and abs(x - float(current["column_x"])) <= 3.0
+                and font_size < 8.5
+            ):
+                current["details"].append(text)
+        _append_hdu_pdf_row(rows, current)
+    return _merge_duplicate_pdf_rows(rows)
+
+
+def _weekday_from_column_x(value: float) -> int | None:
+    weekday, column_x = min(
+        HDU_WEEKDAY_COLUMN_X.items(),
+        key=lambda item: abs(item[1] - value),
+    )
+    return (
+        weekday
+        if abs(column_x - value) <= HDU_COLUMN_TOLERANCE
+        else None
+    )
+
+
+def _append_hdu_pdf_row(
+    rows: list[dict[str, Any]],
+    current: dict[str, Any] | None,
+) -> None:
+    if current is None:
+        return
+    details = "".join(current["details"])
+    period_match = re.search(
+        r"[（(]\s*(\d{1,2})\s*[-—~至]\s*(\d{1,2})\s*节\s*[）)]"
+        r"(.*?)(?=/校区:|/场地:|/教师:|$)",
+        details,
+    )
+    if not period_match:
+        return
+    location_match = re.search(
+        r"(?:^|/)场地:(.*?)(?=/教师:|/教学班:|$)",
+        details,
+    )
+    location = (
+        location_match.group(1).strip()
+        if location_match
+        else None
+    )
+    if location and "不在教室" in location:
+        location = None
+    rows.append(
+        {
+            "course_name": current["course_name"],
+            "weekday": current["weekday"],
+            "start_period": int(period_match.group(1)),
+            "end_period": int(period_match.group(2)),
+            "location": location,
+            "weeks": period_match.group(3),
+        }
+    )
+
+
+def _merge_duplicate_pdf_rows(
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    merged: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for row in rows:
+        key = (
+            row["course_name"],
+            row["weekday"],
+            row["start_period"],
+            row["end_period"],
+            row.get("location"),
+        )
+        if key not in merged:
+            merged[key] = {
+                **row,
+                "weeks": _weeks_value(row.get("weeks")),
+            }
+            continue
+        merged[key]["weeks"] = sorted(
+            set(merged[key]["weeks"])
+            | set(_weeks_value(row.get("weeks")))
+        )
+    return list(merged.values())
 
 
 def _normalize_row(raw: dict[str, Any]) -> dict[str, Any]:
@@ -136,21 +303,30 @@ def _period_value(value: Any) -> int | None:
 
 
 def _weeks_value(value: Any) -> list[int]:
+    if isinstance(value, (list, tuple, set)):
+        return sorted(
+            {
+                int(week)
+                for week in value
+                if str(week).strip().isdigit()
+            }
+        )
     text = str(value or "").strip()
     if not text:
         return []
-    odd_only = "单" in text
-    even_only = "双" in text
     weeks: set[int] = set()
-    for start_raw, end_raw in re.findall(
-        r"(\d{1,2})(?:\s*[-—~至]\s*(\d{1,2}))?",
-        text,
-    ):
-        start = int(start_raw)
-        end = int(end_raw or start_raw)
-        weeks.update(range(min(start, end), max(start, end) + 1))
-    if odd_only:
-        weeks = {week for week in weeks if week % 2 == 1}
-    if even_only:
-        weeks = {week for week in weeks if week % 2 == 0}
+    for segment in re.split(r"[,，、;；]", text):
+        for start_raw, end_raw, parity in re.findall(
+            r"(\d{1,2})(?:\s*[-—~至]\s*(\d{1,2}))?\s*周?"
+            r"(?:\s*[（(]\s*([单双])\s*[）)])?",
+            segment,
+        ):
+            start = int(start_raw)
+            end = int(end_raw or start_raw)
+            candidates = range(min(start, end), max(start, end) + 1)
+            if parity == "单":
+                candidates = (week for week in candidates if week % 2 == 1)
+            elif parity == "双":
+                candidates = (week for week in candidates if week % 2 == 0)
+            weeks.update(candidates)
     return sorted(weeks)
