@@ -142,3 +142,31 @@ def test_day_level_weather_adds_reminder_without_claiming_timed_adjustment():
     assert "先避开风险时段" not in answer
     assert "户外任务安排在已知风险时段之前" not in answer
     assert "当前预报约 37℃" in answer
+
+
+def test_missing_requested_weather_is_explained_without_provider_jargon():
+    answer = _success_answer(
+        _plan(),
+        [
+            {
+                "code": "LLM_DEGRADED",
+                "severity": "warning",
+                "message": "大模型暂时不可用，已切换为本地规则继续处理",
+                "details": {},
+            },
+            {
+                "code": "API_DEGRADED",
+                "severity": "warning",
+                "message": "未获取到可靠天气，户外安排请出发前复核",
+                "details": {"provider": "weather"},
+            },
+        ],
+        intent="plan",
+        query="请结合天气安排今天的事情。",
+        facts=[],
+        weather=[],
+        congestion_windows=[],
+    )
+
+    assert "大模型暂时不可用" not in answer
+    assert "目标日期暂时没有可靠的天气预报" in answer

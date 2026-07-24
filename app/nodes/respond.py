@@ -309,6 +309,7 @@ def _success_answer(
             raw.get("severity") == IssueSeverity.WARNING.value
             and raw.get("code")
             not in {
+                "LLM_DEGRADED",
                 "API_DEGRADED",
                 "UNVERIFIED_CAMPUS_DATA",
                 "PARTIAL_LIVE_ROUTE_COVERAGE",
@@ -332,6 +333,20 @@ def _success_answer(
     weather_reminder = _weather_reminder(weather)
     if weather_reminder:
         reminders.insert(0, weather_reminder)
+        reminders = reminders[:2]
+    elif (
+        any(word in query for word in ("天气", "下雨", "降雨", "有雨"))
+        and any(
+            raw.get("code") == "API_DEGRADED"
+            and raw.get("details", {}).get("provider") == "weather"
+            for raw in warnings
+        )
+    ):
+        reminders.insert(
+            0,
+            "目标日期暂时没有可靠的天气预报；临近当天再查一次会更"
+            "准确，如果遇到降雨或高温，我可以只调整跑步等户外安排。",
+        )
         reminders = reminders[:2]
     congestion_reminder = _congestion_reminder(
         ordered_items,
