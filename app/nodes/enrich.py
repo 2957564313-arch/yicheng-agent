@@ -42,12 +42,14 @@ def make_enrich_node(container: AppContainer):
                 warnings.append(
                     Issue(
                         code="UNKNOWN_LOCATION",
-                        severity=IssueSeverity.ERROR,
+                        severity=IssueSeverity.WARNING,
                         message=(
-                            f"无法识别地点："
-                            f"{task.location_raw or task.location_id}"
+                            f"“{task.location_raw or task.location_id}”"
+                            "暂未匹配到本校地点库；这项固定安排会保留，"
+                            "但相关通勤时间建议出发前再确认"
                         ),
                         task_ids=[task.id],
+                        recoverable=True,
                     )
                 )
 

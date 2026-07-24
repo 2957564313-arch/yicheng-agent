@@ -7,7 +7,7 @@ from tests.integration.test_api_demos import build_test_app, task_items
 
 CSV_CONTENT = """课程名称,星期,开始节次,结束节次,地点,周次
 高等数学,星期五,1,2,第六教学楼,1-16
-大学英语,星期五,3,4,第六教学楼,1-16
+大学英语,星期五,3,4,第七教学楼,1-16
 """
 
 
@@ -49,6 +49,12 @@ def test_imported_timetable_becomes_hard_planning_constraint(tmp_path):
         assert imported_courses[-1]["end_at"] == "2026-07-24T11:35:00+08:00"
         assert tasks["study"]["start_at"] >= "2026-07-24T11:35:00+08:00"
         assert all(check["passed"] for check in payload["constraint_checks"])
+        assert payload["status"] == "completed"
+        assert any(
+            warning["code"] == "UNKNOWN_LOCATION"
+            and warning["severity"] == "warning"
+            for warning in payload["warnings"]
+        )
 
 
 def test_explicit_no_class_statement_is_a_one_day_exception(tmp_path):
@@ -149,6 +155,7 @@ def test_imported_courses_fixed_event_and_deadline_are_jointly_feasible(
         assert "7月31日可以这样安排" in payload["answer"]
         assert "实时骑行路线不可用" not in payload["answer"]
         assert all(check["passed"] for check in payload["constraint_checks"])
+        assert payload["status"] == "completed"
 
 
 def test_complete_new_request_with_weather_does_not_reuse_old_plan(tmp_path):
