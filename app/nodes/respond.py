@@ -215,10 +215,7 @@ def _success_answer(
     ]
     task_titles = [item.title for item in task_items]
     task_names = "、".join(f"“{title}”" for title in task_titles)
-    weather_adjustment = (
-        intent == "weather_check"
-        or any(word in query for word in ("下雨", "降雨", "天气", "大风"))
-    )
+    weather_adjustment = _has_precise_weather_risk(weather)
     if weather_adjustment:
         lines = [
             "天气有变化时，安全比赶进度更重要。"
@@ -320,6 +317,20 @@ def _success_answer(
         "晚了多久或哪一项想保留，我会只调整受影响的部分。"
     )
     return "\n".join(lines)
+
+
+def _has_precise_weather_risk(weather: list[WeatherContext]) -> bool:
+    """Only claim a timed adjustment when a verified risk boundary exists."""
+    return any(
+        item.risk_start_at is not None
+        and (
+            "雨" in (item.condition or "")
+            or "雪" in (item.condition or "")
+            or "风" in (item.condition or "")
+            or (item.rain_probability or 0) >= 0.5
+        )
+        for item in weather
+    )
 
 
 def _weather_reminder(weather: list[WeatherContext]) -> str | None:
