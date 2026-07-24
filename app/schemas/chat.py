@@ -27,6 +27,7 @@ class ClientContext(BaseModel):
     now: datetime | None = None
     memories: list[MemoryCreate] = Field(default_factory=list, max_length=30)
     timetable: ClientTimetableSnapshot | None = None
+    previous_plan: Plan | None = None
 
     @model_validator(mode="after")
     def validate_now(self) -> "ClientContext":

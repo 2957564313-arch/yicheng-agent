@@ -16,6 +16,7 @@ class CampusAgentState(TypedDict, total=False):
     intent: str
     requested_date: str | None
     old_plan_id: str | None
+    old_plan: dict[str, Any] | None
 
     tasks: list[dict[str, Any]]
     preferences: dict[str, Any]

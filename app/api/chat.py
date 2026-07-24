@@ -503,15 +503,40 @@ async def execute_chat(
     request_id = f"req_{uuid4().hex}"
     trace_id = f"trace_{uuid4().hex}"
 
+    needs_current_plan = _requires_current_plan(payload.query)
     effective_old_plan_id = payload.old_plan_id
-    if effective_old_plan_id is None and _requires_current_plan(payload.query):
-        latest_plan = container.plans.latest_for_thread(thread_id)
-        effective_old_plan_id = latest_plan.id if latest_plan else None
     previous_plan = (
         container.plans.get(effective_old_plan_id)
         if effective_old_plan_id
         else None
     )
+    if (
+        previous_plan is None
+        and effective_old_plan_id is None
+        and needs_current_plan
+    ):
+        latest_plan = container.plans.latest_for_thread(thread_id)
+        if latest_plan:
+            previous_plan = latest_plan
+            effective_old_plan_id = latest_plan.id
+    client_previous_plan = (
+        payload.client_context.previous_plan
+        if payload.client_context
+        else None
+    )
+    if (
+        previous_plan is None
+        and needs_current_plan
+        and client_previous_plan is not None
+        and client_previous_plan.user_id == payload.user_id
+        and client_previous_plan.thread_id == thread_id
+        and (
+            effective_old_plan_id is None
+            or client_previous_plan.id == effective_old_plan_id
+        )
+    ):
+        previous_plan = client_previous_plan
+        effective_old_plan_id = client_previous_plan.id
 
     container.plans.ensure_user_and_thread(
         user_id=payload.user_id,
@@ -547,6 +572,11 @@ async def execute_chat(
         "intent": "",
         "requested_date": None,
         "old_plan_id": effective_old_plan_id,
+        "old_plan": (
+            previous_plan.model_dump(mode="json")
+            if previous_plan is not None
+            else None
+        ),
         "tasks": [],
         "preferences": {},
         "client_memories": [
@@ -606,9 +636,15 @@ async def execute_chat(
             plan and plan.status == PlanStatus.VALID
         )
         if current_plan_saved and plan:
+            persisted_parent_id = (
+                effective_old_plan_id
+                if effective_old_plan_id
+                and container.plans.get(effective_old_plan_id) is not None
+                else None
+            )
             container.plans.save(
                 plan,
-                parent_plan_id=effective_old_plan_id,
+                parent_plan_id=persisted_parent_id,
             )
         container.plans.add_message(
             thread_id=thread_id,

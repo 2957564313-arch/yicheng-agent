@@ -46,6 +46,7 @@ let serverClockBaseMs = null;
 let serverClockFetchedAtMs = null;
 const memorySnapshotKey = "yicheng_memory_snapshot";
 const timetableSnapshotKey = "yicheng_timetable_snapshot";
+const planSnapshotKey = "yicheng_current_plan_snapshot";
 
 function readLocalSnapshot(key, fallback) {
   try {
@@ -62,6 +63,7 @@ function writeLocalSnapshot(key, value) {
 function clientContextSnapshot() {
   const memories = readLocalSnapshot(memorySnapshotKey, []);
   const timetableData = readLocalSnapshot(timetableSnapshotKey, null);
+  const previousPlan = readLocalSnapshot(planSnapshotKey, null);
   return {
     memories: memories.map((item) => ({
       category: item.category,
@@ -79,6 +81,7 @@ function clientContextSnapshot() {
         entries: timetableData.entries,
       }
       : null,
+    previous_plan: previousPlan,
   };
 }
 
@@ -394,6 +397,9 @@ function renderSuggestedActions(actions = []) {
 }
 
 function renderResponse(data) {
+  if (data.current_plan_saved && data.plan?.status === "valid") {
+    writeLocalSnapshot(planSnapshotKey, data.plan);
+  }
   answer.textContent = data.answer;
   answer.classList.remove("muted");
   saveState.textContent = data.current_plan_saved
@@ -502,6 +508,7 @@ resetButton.addEventListener("click", async () => {
     renderSuggestedActions([]);
     renderInsights([]);
     renderDebug(null);
+    localStorage.removeItem(planSnapshotKey);
     saveState.textContent = "尚未生成当前计划";
     saveState.classList.remove("saved");
   } catch (error) {

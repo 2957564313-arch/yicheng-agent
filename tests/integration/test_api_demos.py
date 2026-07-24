@@ -214,6 +214,54 @@ def test_manual_adjustment_resolves_latest_plan_from_thread(tmp_path):
         assert response.json()["plan_diff"]
 
 
+def test_browser_plan_snapshot_supports_replan_after_cold_start(tmp_path):
+    first_app = build_test_app(tmp_path / "first_instance")
+    with TestClient(first_app) as client:
+        first = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "snapshot_user",
+                "thread_id": "snapshot_thread",
+                "query": (
+                    "今天14点后去图书馆自习1小时，再去取快递，"
+                    "18点前结束。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00"
+                },
+            },
+        )
+        assert first.status_code == 200, first.text
+        previous_plan = first.json()["plan"]
+
+    second_app = build_test_app(tmp_path / "second_instance")
+    with TestClient(second_app) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "snapshot_user",
+                "thread_id": "snapshot_thread",
+                "query": (
+                    "把图书馆自习延长30分钟，其他任务保持不变，"
+                    "还是18点前结束。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:05:00+08:00",
+                    "previous_plan": previous_plan,
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["previous_plan"]["id"] == previous_plan["id"]
+        assert payload["plan"]["version"] == previous_plan["version"] + 1
+        assert payload["plan_diff"]
+        assert payload["current_plan_saved"] is True
+
+
 def test_invalid_request_has_stable_error_shape(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         response = client.post(

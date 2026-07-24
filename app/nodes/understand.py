@@ -8,6 +8,7 @@ from app.nodes.common import append_trace
 from app.schemas.common import Issue, IssueSeverity
 from app.schemas.common import TaskFlexibility
 from app.schemas.memory import MemoryCreate, MemoryItem
+from app.schemas.plan import Plan
 from app.schemas.task import UserPreferences
 from app.schemas.task import Task
 from app.schemas.timetable import CourseSessionCreate
@@ -27,9 +28,13 @@ def make_understand_node(container: AppContainer):
             now=datetime.fromisoformat(state["now_iso"]),
         )
         old_plan = (
-            container.plans.get(state["old_plan_id"])
-            if state.get("old_plan_id")
-            else None
+            Plan.model_validate(state["old_plan"])
+            if state.get("old_plan")
+            else (
+                container.plans.get(state["old_plan_id"])
+                if state.get("old_plan_id")
+                else None
+            )
         )
         warnings = list(state.get("provider_warnings", []))
         rule_result = container.parser.parse(

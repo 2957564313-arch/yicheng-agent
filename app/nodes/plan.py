@@ -38,9 +38,13 @@ def make_plan_node(container: AppContainer):
             ).items()
         }
         old_plan = (
-            container.plans.get(state["old_plan_id"])
-            if state.get("old_plan_id")
-            else None
+            Plan.model_validate(state["old_plan"])
+            if state.get("old_plan")
+            else (
+                container.plans.get(state["old_plan_id"])
+                if state.get("old_plan_id")
+                else None
+            )
         )
         weather = [
             WeatherContext.model_validate(raw)

@@ -60,9 +60,13 @@ def make_validate_node(container: AppContainer):
                 )
             ),
             old_plan=(
-                container.plans.get(state["old_plan_id"])
-                if state.get("old_plan_id")
-                else None
+                Plan.model_validate(state["old_plan"])
+                if state.get("old_plan")
+                else (
+                    container.plans.get(state["old_plan_id"])
+                    if state.get("old_plan_id")
+                    else None
+                )
             ),
             initial_location_id=state.get("initial_location_id"),
             initial_departure_at=(
