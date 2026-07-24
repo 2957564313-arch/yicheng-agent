@@ -64,6 +64,12 @@ def make_validate_node(container: AppContainer):
                 if state.get("old_plan_id")
                 else None
             ),
+            initial_location_id=state.get("initial_location_id"),
+            initial_departure_at=(
+                datetime.fromisoformat(state["initial_departure_at"])
+                if state.get("initial_departure_at")
+                else None
+            ),
         )
         validated, issues = container.validator.validate(
             plan=plan,

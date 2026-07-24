@@ -637,3 +637,41 @@ def test_user_reported_rain_moves_run_before_risk_and_keeps_all_tasks(
             for warning in payload["warnings"]
         )
         assert "安全" in payload["answer"]
+
+
+def test_departure_time_and_origin_create_first_travel_leg(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "departure_user",
+                "thread_id": "departure_thread",
+                "query": (
+                    "今天下午4点从第六教学楼出发，"
+                    "去图书馆学习90分钟，之后去东操场跑步30分钟，"
+                    "校内骑电瓶车。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00"
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["status"] == "completed"
+        items = payload["plan"]["items"]
+        first_travel = next(
+            item
+            for item in items
+            if item["item_type"] == "travel"
+        )
+        study = task_items(payload)["study"]
+        assert first_travel["start_at"] == "2026-07-24T16:00:00+08:00"
+        assert first_travel["source"] in {
+            "structured",
+            "estimated",
+            "demo_fixture",
+        }
+        assert study["start_at"] >= first_travel["end_at"]

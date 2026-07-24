@@ -21,6 +21,9 @@ class CampusAgentState(TypedDict, total=False):
     preferences: dict[str, Any]
     user_memories: list[dict[str, Any]]
     timetable_summary: str | None
+    initial_location_raw: str | None
+    initial_location_id: str | None
+    initial_departure_at: str | None
     clarifications: list[str]
     parse_confidence: float
 

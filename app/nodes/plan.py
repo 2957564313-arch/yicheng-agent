@@ -79,6 +79,12 @@ def make_plan_node(container: AppContainer):
             },
             enforce_weather=enforce_weather,
             old_plan=old_plan,
+            initial_location_id=state.get("initial_location_id"),
+            initial_departure_at=(
+                datetime.fromisoformat(state["initial_departure_at"])
+                if state.get("initial_departure_at")
+                else None
+            ),
         )
 
         if state["intent"] in {"replan", "weather_check"} and old_plan:

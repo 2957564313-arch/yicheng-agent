@@ -36,6 +36,8 @@ class PlanningContext:
     day_start: time = time(8, 0)
     day_end: time = time(22, 0)
     old_plan: Plan | None = None
+    initial_location_id: str | None = None
+    initial_departure_at: datetime | None = None
 
     def travel_minutes(
         self,
@@ -344,12 +346,31 @@ class Scheduler:
                 cursor += timedelta(minutes=5)
                 continue
 
+            use_initial_origin = bool(
+                context.initial_location_id
+                and context.initial_departure_at
+                and cursor >= context.initial_departure_at
+                and (
+                    previous is None
+                    or previous.end_at <= context.initial_departure_at
+                )
+            )
+            before_origin_id = (
+                context.initial_location_id
+                if use_initial_origin
+                else (previous.location_id if previous else None)
+            )
+            before_departure_at = (
+                context.initial_departure_at
+                if use_initial_origin
+                else (previous.end_at if previous else None)
+            )
             before_travel, before_delay = self._required_travel(
-                previous.location_id if previous else None,
+                before_origin_id,
                 task.location_id,
                 context,
                 missing_route_pairs,
-                departure_at=previous.end_at if previous else None,
+                departure_at=before_departure_at,
             )
             after_travel, after_delay = self._required_travel(
                 task.location_id,
@@ -363,6 +384,15 @@ class Scheduler:
                 continue
 
             buffer_min = preferences.buffer_min
+            if (
+                use_initial_origin
+                and context.initial_departure_at
+                and context.initial_departure_at
+                + timedelta(minutes=before_travel + buffer_min)
+                > cursor
+            ):
+                cursor += timedelta(minutes=5)
+                continue
             if previous and (
                 previous.end_at
                 + timedelta(minutes=before_travel + buffer_min)
@@ -569,6 +599,79 @@ class Scheduler:
     ) -> list[PlanItem]:
         ordered = sorted(task_items, key=lambda item: item.start_at)
         result: list[PlanItem] = []
+        if context.initial_location_id and context.initial_departure_at:
+            first_after_departure = next(
+                (
+                    item
+                    for item in ordered
+                    if item.start_at >= context.initial_departure_at
+                ),
+                None,
+            )
+            if (
+                first_after_departure
+                and first_after_departure.location_id
+                and first_after_departure.location_id
+                != context.initial_location_id
+            ):
+                estimate = context.travel.get(
+                    (
+                        context.initial_location_id,
+                        first_after_departure.location_id,
+                    )
+                )
+                if estimate:
+                    duration, congestion_delay = context.travel_details(
+                        context.initial_location_id,
+                        first_after_departure.location_id,
+                        departure_at=context.initial_departure_at,
+                    )
+                    if duration is not None:
+                        base_duration = (
+                            estimate.base_duration_min
+                            if estimate.base_duration_min is not None
+                            else estimate.duration_min
+                        )
+                        mode_label = {
+                            "walk": "步行",
+                            "bicycle": "骑自行车",
+                            "electrobike": "骑电瓶车",
+                        }.get(estimate.mode, "通勤")
+                        result.append(
+                            PlanItem(
+                                id=f"travel_{uuid4().hex}",
+                                item_type="travel",
+                                title=(
+                                    f"{mode_label}前往"
+                                    f"{first_after_departure.title}地点"
+                                ),
+                                start_at=context.initial_departure_at,
+                                end_at=context.initial_departure_at
+                                + timedelta(minutes=duration),
+                                location_id=first_after_departure.location_id,
+                                source=estimate.source,
+                                reason=(
+                                    f"{mode_label}基础时间 "
+                                    f"{base_duration} 分钟"
+                                    + (
+                                        "，校园通行高峰额外预留 "
+                                        f"{congestion_delay} 分钟"
+                                        if congestion_delay
+                                        else ""
+                                    )
+                                ),
+                                travel_mode=estimate.mode,
+                                base_duration_min=base_duration,
+                                congestion_delay_min=congestion_delay,
+                            )
+                        )
+                else:
+                    missing_route_pairs.add(
+                        (
+                            context.initial_location_id,
+                            first_after_departure.location_id,
+                        )
+                    )
         for index, item in enumerate(ordered):
             result.append(item)
             if index == len(ordered) - 1:

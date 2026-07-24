@@ -6,6 +6,7 @@ import re
 from app.container import AppContainer
 from app.nodes.common import append_trace
 from app.schemas.common import Issue, IssueSeverity
+from app.schemas.common import TaskFlexibility
 from app.schemas.task import UserPreferences
 from app.schemas.understand import UnderstandResult
 from app.state import CampusAgentState
@@ -93,6 +94,43 @@ def make_understand_node(container: AppContainer):
             result = rule_result
             parser_name = "offline_rules"
 
+        initial_location_raw = (
+            container.parser.journey_origin_from_query(state["query"])
+            if result.intent.value == "plan"
+            else None
+        )
+        initial_departure_at = (
+            container.parser.journey_start_from_query(
+                state["query"],
+                result.requested_date,
+            )
+            if result.intent.value == "plan"
+            else None
+        )
+        if initial_departure_at is not None:
+            result = result.model_copy(
+                update={
+                    "tasks": [
+                        task.model_copy(
+                            update={
+                                "earliest_start": max(
+                                    filter(
+                                        None,
+                                        (
+                                            task.earliest_start,
+                                            initial_departure_at,
+                                        ),
+                                    )
+                                )
+                            }
+                        )
+                        if task.flexibility == TaskFlexibility.MOVABLE
+                        else task
+                        for task in result.tasks
+                    ]
+                }
+            )
+
         timetable_tasks = container.timetables.tasks_for_date(
             user_id=state["user_id"],
             target_date=result.requested_date,
@@ -152,6 +190,12 @@ def make_understand_node(container: AppContainer):
                 memory.model_dump(mode="json") for memory in memories
             ],
             "timetable_summary": timetable_summary,
+            "initial_location_raw": initial_location_raw,
+            "initial_departure_at": (
+                initial_departure_at.isoformat()
+                if initial_departure_at
+                else None
+            ),
             "clarifications": result.clarifications,
             "parse_confidence": result.confidence,
             "provider_warnings": warnings,

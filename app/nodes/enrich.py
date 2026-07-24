@@ -68,6 +68,45 @@ def make_enrich_node(container: AppContainer):
                     )
                 )
 
+        initial_location_id = None
+        initial_location_raw = state.get("initial_location_raw")
+        if initial_location_raw:
+            initial_location = container.locations.resolve(
+                initial_location_raw
+            )
+            if (
+                initial_location is None
+                and prefer_live
+                and container.geocoder is not None
+            ):
+                try:
+                    initial_location = await container.geocoder.resolve(
+                        initial_location_raw
+                    )
+                except Exception:
+                    initial_location = None
+            if initial_location:
+                initial_location_id = initial_location.id
+                normalized_locations[initial_location.id] = (
+                    initial_location.model_dump(mode="json")
+                )
+            elif not any(
+                warning.code == "UNKNOWN_LOCATION"
+                and initial_location_raw in warning.message
+                for warning in warnings
+            ):
+                warnings.append(
+                    Issue(
+                        code="UNKNOWN_LOCATION",
+                        severity=IssueSeverity.WARNING,
+                        message=(
+                            f"“{initial_location_raw}”暂未匹配到高德或"
+                            "本校地点库；首段通勤时间请出发前再确认"
+                        ),
+                        recoverable=True,
+                    )
+                )
+
         location_ids = sorted(
             {
                 task.location_id
@@ -75,6 +114,9 @@ def make_enrich_node(container: AppContainer):
                 if task.location_id
             }
         )
+        if initial_location_id:
+            location_ids.append(initial_location_id)
+            location_ids = sorted(set(location_ids))
         if is_knowledge_query:
             query_text = state["query"]
             for location in container.locations.all():
@@ -241,6 +283,7 @@ def make_enrich_node(container: AppContainer):
 
         return {
             "tasks": [task.model_dump(mode="json") for task in tasks],
+            "initial_location_id": initial_location_id,
             "normalized_locations": normalized_locations,
             "travel_estimates": [
                 route.model_dump(mode="json") for route in routes

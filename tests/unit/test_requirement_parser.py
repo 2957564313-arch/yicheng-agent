@@ -84,6 +84,33 @@ def test_short_after_expression_and_minutes_are_parsed():
     assert study.earliest_start.minute == 30
 
 
+def test_departure_time_and_origin_are_hard_start_context():
+    parser = RuleBasedRequirementParser("Asia/Shanghai")
+    result = parser.parse(
+        query=(
+            "今天下午4点从第七教学楼出发，"
+            "去图书馆学习90分钟，之后去东操场跑步30分钟。"
+        ),
+        now=datetime(
+            2026,
+            7,
+            24,
+            13,
+            0,
+            tzinfo=ZoneInfo("Asia/Shanghai"),
+        ),
+    )
+    study = next(task for task in result.tasks if task.id == "study")
+
+    assert study.earliest_start.isoformat() == "2026-07-24T16:00:00+08:00"
+    assert (
+        parser.journey_origin_from_query(
+            "今天下午4点从第七教学楼出发，去图书馆学习。"
+        )
+        == "第七教学楼"
+    )
+
+
 def test_adjustment_without_current_plan_requires_baseline():
     result = parse("把学习延长30分钟，其他任务保持不变。")
     assert result.tasks == []

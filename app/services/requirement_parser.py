@@ -962,7 +962,7 @@ class RuleBasedRequirementParser:
         match = re.search(
             r"(?:(上午|下午|晚上)\s*)?"
             r"(\d{1,2})(?:\s*[:：]\s*(\d{1,2}))?\s*点?\s*"
-            r"(?:后|以后|之后|开始)",
+            r"(?:后|以后|之后|开始|(?=[^，。；、]{0,24}出发))",
             query,
         )
         if not match:
@@ -977,6 +977,34 @@ class RuleBasedRequirementParser:
         if not (0 <= hour <= 23 and 0 <= minute <= 59):
             return None
         return time(hour, minute)
+
+    def journey_start_from_query(
+        self,
+        query: str,
+        target_date: date,
+    ) -> datetime | None:
+        start = self._overall_start(query)
+        if start is None:
+            return None
+        return datetime.combine(target_date, start, self.timezone)
+
+    @staticmethod
+    def journey_origin_from_query(query: str) -> str | None:
+        match = re.search(
+            r"从\s*([^，。；、]{1,40}?)\s*(?:出发|前往)",
+            query,
+        )
+        if not match:
+            return None
+        raw = match.group(1).strip()
+        raw = re.sub(
+            r"^(?:今天|明天|后天)?"
+            r"(?:(?:上午|下午|晚上)\s*)?"
+            r"\d{1,2}(?::\d{1,2})?\s*点?\s*",
+            "",
+            raw,
+        ).strip()
+        return raw or None
 
     def _overall_deadline(
         self,
