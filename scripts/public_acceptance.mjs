@@ -121,6 +121,172 @@ const cases = [
       ];
     },
   },
+  {
+    id: "live_weather_and_unknown_poi",
+    query:
+      "今天下午4点从第七教学楼出发，去图书馆学习90分钟，之后到东操场跑步30分钟，请结合今天的天气安排，校内骑电瓶车。",
+    check(data) {
+      const tasks = taskItems(data);
+      const firstTravel = (data.plan?.items || []).find(
+        (item) => item.item_type === "travel",
+      );
+      return [
+        expectEqual(data.status, "completed", "未知教学楼应能由高德补齐"),
+        expectEqual(tasks.length, 2, "学习和跑步都应安排"),
+        expectEqual(
+          firstTravel?.start_at,
+          "2026-07-24T16:00:00+08:00",
+          "首段通勤必须从用户给定时间开始",
+        ),
+        expectEqual(
+          data.data_freshness?.route,
+          "live_api",
+          "路线应来自高德实时接口",
+        ),
+        expectEqual(
+          data.data_freshness?.weather,
+          "live_api",
+          "天气应来自实时接口",
+        ),
+      ];
+    },
+  },
+  {
+    id: "bicycle_mode",
+    query:
+      "今天14点从第六教学楼出发，骑自行车去图书馆自习1小时，再去菜鸟驿站取快递，18点前结束。",
+    check(data) {
+      const travel = (data.plan?.items || []).filter(
+        (item) => item.item_type === "travel",
+      );
+      return [
+        expectEqual(data.status, "completed", "自行车场景应可完整规划"),
+        expectTrue(travel.length >= 2, "应包含两段自行车通勤"),
+        expectTrue(
+          travel.every((item) => item.travel_mode === "bicycle"),
+          "用户说自行车后不能改用步行或电瓶车",
+        ),
+      ];
+    },
+  },
+  {
+    id: "peak_congestion",
+    query:
+      "今天15:55从图书馆出发，步行去菜鸟驿站取快递，17点前完成。",
+    check(data) {
+      const travel = (data.plan?.items || []).find(
+        (item) => item.item_type === "travel",
+      );
+      return [
+        expectTruthy(travel, "应生成首段通勤"),
+        expectTrue(
+          (travel?.congestion_delay_min || 0) > 0,
+          "跨越集中通行时段必须增加通勤时间",
+        ),
+        expectTrue(
+          (data.warnings || []).some(
+            (warning) => warning.code === "PEAK_CONGESTION",
+          ),
+          "应主动提醒校园高峰影响",
+        ),
+      ];
+    },
+  },
+  {
+    id: "jd_before_closing",
+    query: "今天21点去京东快递取件，帮我安排一下。",
+    check(data) {
+      const parcel = taskItems(data).find((item) =>
+        item.title.includes("京东"),
+      );
+      return [
+        expectEqual(data.status, "completed", "京东22点前应能安排"),
+        expectTruthy(parcel, "京东取件任务不能丢失"),
+        expectTrue(
+          !parcel || parcel.end_at <= "2026-07-24T22:00:00+08:00",
+          "京东取件不能超过22:00",
+        ),
+      ];
+    },
+  },
+  {
+    id: "jd_after_closing",
+    query: "今天21:45去京东快递取件，帮我看看能不能安排。",
+    check(data) {
+      return [
+        expectEqual(data.status, "partial", "无法在22点前完成时应判为不可行"),
+        expectText(data.answer, "22:00", "应解释京东22点关闭"),
+      ];
+    },
+  },
+  {
+    id: "library_closing_boundary",
+    query: "今天22点去图书馆自习30分钟，可以吗？",
+    check(data) {
+      const study = taskItems(data).find((item) =>
+        item.title.includes("自习"),
+      );
+      return [
+        expectEqual(data.status, "completed", "22:00至22:30仍在整体开放时段"),
+        expectTruthy(study, "临近闭馆的自习任务不能丢失"),
+        expectEqual(
+          study?.end_at,
+          "2026-07-24T22:30:00+08:00",
+          "自习应在22:30闭馆前结束",
+        ),
+      ];
+    },
+  },
+  {
+    id: "track_closing_boundary",
+    query: "今天20:45去东操场跑步30分钟，可以吗？",
+    check(data) {
+      return [
+        expectEqual(data.status, "partial", "跑步超过21点应判为不可行"),
+        expectTrue(
+          /21:00|开放|时段|调整/.test(data.answer),
+          "回复应解释操场计入时段或给出调整",
+        ),
+      ];
+    },
+  },
+  {
+    id: "explicit_rain_boundary",
+    query:
+      "今天15点后先去东操场跑步30分钟，再去图书馆学习1小时，17点以后有雨，18点前结束。",
+    check(data) {
+      const run = taskItems(data).find((item) => item.title.includes("跑步"));
+      return [
+        expectEqual(data.status, "completed", "用户提供的降雨边界应参与规划"),
+        expectTruthy(run, "跑步任务不能丢失"),
+        expectTrue(
+          !run || run.end_at <= "2026-07-24T17:00:00+08:00",
+          "户外任务应在用户给定降雨时间前完成",
+        ),
+        expectText(data.answer, "17:00", "回复应复述用户提供的天气边界"),
+      ];
+    },
+  },
+  {
+    id: "clinic_weekend_hours",
+    query: "周末下午校医院几点可以就诊？",
+    check(data) {
+      return [
+        expectText(data.answer, "13:30", "周末下午门诊应从13:30开始"),
+        expectText(data.answer, "16:00", "周末下午门诊应在16:00结束"),
+      ];
+    },
+  },
+  {
+    id: "northwest_sun_run",
+    query: "西北田径场阳光长跑什么时候可以计入？",
+    check(data) {
+      return [
+        expectText(data.answer, "18:30", "西北田径场应从18:30计入"),
+        expectText(data.answer, "21:00", "西北田径场应到21:00结束"),
+      ];
+    },
+  },
 ];
 
 function taskItems(data) {
@@ -217,9 +383,17 @@ async function runCase(testCase, index) {
   }
 }
 
+const requestedCase = process.env.YICHENG_CASE;
+const selectedCases = requestedCase
+  ? cases.filter((item) => item.id === requestedCase)
+  : cases;
+if (!selectedCases.length) {
+  throw new Error(`Unknown YICHENG_CASE: ${requestedCase}`);
+}
+
 const results = [];
-for (let index = 0; index < cases.length; index += 1) {
-  const result = await runCase(cases[index], index);
+for (let index = 0; index < selectedCases.length; index += 1) {
+  const result = await runCase(selectedCases[index], index);
   results.push(result);
   console.log(
     `${result.passed ? "PASS" : "FAIL"} ${result.id}` +

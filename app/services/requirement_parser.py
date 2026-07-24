@@ -250,7 +250,7 @@ class RuleBasedRequirementParser:
                     latest=(
                         study_limit.time()
                         if study_limit
-                        else time(22, 0)
+                        else time(22, 30)
                     ),
                     deadline=(
                         study_limit.time()
