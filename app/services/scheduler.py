@@ -34,7 +34,10 @@ class PlanningContext:
     outdoor_location_ids: set[str] = field(default_factory=set)
     enforce_weather: bool = False
     day_start: time = time(8, 0)
-    day_end: time = time(22, 0)
+    # `00:00` represents the end of the target calendar day.  Venue
+    # opening windows and task deadlines remain the real hard constraints;
+    # the scheduler must not silently impose an older 22:00 product cutoff.
+    day_end: time = time(0, 0)
     old_plan: Plan | None = None
     initial_location_id: str | None = None
     initial_departure_at: datetime | None = None
@@ -304,6 +307,8 @@ class Scheduler:
             context.day_end,
             context.timezone,
         )
+        if context.day_end <= context.day_start:
+            day_end += timedelta(days=1)
         if context.target_date == context.now.date():
             day_start = max(
                 day_start,

@@ -163,6 +163,41 @@ async def test_scheduler_marks_impossible_task_unscheduled(tz):
 
 
 @pytest.mark.asyncio
+async def test_scheduler_uses_venue_closing_time_after_22_not_legacy_cutoff(tz):
+    target_date = date(2026, 7, 24)
+    now = datetime(2026, 7, 24, 13, 0, tzinfo=tz)
+    task = Task(
+        id="study",
+        title="图书馆自习",
+        date=target_date,
+        duration_min=30,
+        location_id="library",
+        earliest_start=datetime(2026, 7, 24, 22, 0, tzinfo=tz),
+        latest_end=datetime(2026, 7, 24, 22, 30, tzinfo=tz),
+    )
+    context = await build_context(target_date, now, [])
+
+    result = Scheduler().schedule(
+        user_id="demo_user",
+        thread_id="thread_library_boundary",
+        tasks=[task],
+        preferences=UserPreferences(),
+        context=context,
+    )
+    plan, issues = PlanValidator().validate(
+        plan=result.plan,
+        tasks=[task],
+        context=context,
+    )
+
+    study = next(item for item in plan.items if item.task_id == "study")
+    assert not result.unscheduled_task_ids
+    assert study.start_at == datetime(2026, 7, 24, 22, 0, tzinfo=tz)
+    assert study.end_at == datetime(2026, 7, 24, 22, 30, tzinfo=tz)
+    assert not [issue for issue in issues if issue.severity == "error"]
+
+
+@pytest.mark.asyncio
 async def test_peak_window_extends_travel_and_keeps_user_time_choice(tz):
     target_date = date(2026, 7, 24)
     now = datetime(2026, 7, 23, 20, 0, tzinfo=tz)
