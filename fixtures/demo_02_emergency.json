@@ -1,0 +1,18 @@
+{
+  "id": "demo_02_emergency",
+  "title": "案例二 · 需求变化",
+  "description": "把学习延长30分钟，仅顺延受影响任务，仍在18:00前完成。",
+  "now": "2026-07-24T13:05:00+08:00",
+  "query": "把图书馆学习延长30分钟，保持跑步30分钟，并且还是要在18点前结束。",
+  "mode": "offline",
+  "user_id": "demo_user",
+  "thread_id": "demo_competition",
+  "old_plan_fixture": "demo_01_saved_plan",
+  "prefer_latest_plan": true,
+  "initial_context": {},
+  "expected": {
+    "hard_violation_count": 0,
+    "study_end": "2026-07-24T16:30:00+08:00",
+    "final_end": "2026-07-24T18:00:00+08:00"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "demo_01_normal",
+  "title": "案例一 · 常规规划",
+  "description": "把学习、取快递和跑步安排进14:00—18:00，并自动加入两段通勤。",
+  "now": "2026-07-24T13:00:00+08:00",
+  "query": "今天下午没课，14点以后想去图书馆学习2小时，取快递，然后去东操场跑步30分钟，18点前结束。",
+  "mode": "offline",
+  "user_id": "demo_user",
+  "thread_id": "demo_competition",
+  "initial_context": {
+    "current_location_id": "library"
+  },
+  "expected": {
+    "task_count": 3,
+    "hard_violation_count": 0,
+    "final_end": "2026-07-24T17:30:00+08:00"
+  }
+}

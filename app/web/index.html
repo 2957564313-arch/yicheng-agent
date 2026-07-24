@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="面向校园学习与生活任务的时空规划智能体"
+    />
+    <title>易程智策 · 规划控制台</title>
+    <link rel="stylesheet" href="/styles.css?v=20260724-3" />
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">易</div>
+        <div>
+          <p class="eyebrow">校园时空规划智能体</p>
+          <h1>易程智策</h1>
+          <p class="subtitle">理解需求、计算通勤、校验约束、应对变化</p>
+        </div>
+      </div>
+      <div class="header-status">
+        <span id="clock" class="status subtle">正在获取北京时间…</span>
+        <span id="health" class="status">正在检查服务…</span>
+        <span id="save-state" class="status subtle">尚未生成当前计划</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="demo-strip" aria-label="比赛演示案例">
+        <div>
+          <p class="eyebrow">一键复现</p>
+          <strong>三个连续演示场景</strong>
+        </div>
+        <div id="demo-buttons" class="demo-buttons"></div>
+        <button id="reset" class="ghost danger">复位演示</button>
+      </section>
+
+      <section class="workspace">
+        <aside class="column controls-column">
+          <article class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="step">告诉我你的安排</p>
+                <h2>今天想完成什么？</h2>
+              </div>
+              <select id="mode" aria-label="运行模式">
+                <option value="auto">自动选择</option>
+                <option value="live">实时增强</option>
+                <option value="offline">稳定演示</option>
+              </select>
+            </div>
+            <textarea
+              id="query"
+              rows="7"
+              placeholder="例如：14点以后去图书馆学习2小时，取快递，再跑步30分钟，18点前结束。"
+            ></textarea>
+            <button id="submit" class="primary">交给易程智策</button>
+          </article>
+
+          <article class="panel execution-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="step">思考过程</p>
+                <h2>这次规划考虑了什么</h2>
+              </div>
+            </div>
+            <div id="execution" class="execution-list empty">
+              运行后显示五个处理步骤。
+            </div>
+          </article>
+
+          <article class="panel memory-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="step">长期记忆</p>
+                <h2>我的偏好与习惯</h2>
+              </div>
+            </div>
+            <p class="panel-note">
+              只保存你主动设置的内容，可随时停用、修改或删除。
+            </p>
+            <div class="memory-form">
+              <select id="memory-type" aria-label="记忆类型">
+                <option value="buffer_min">日程缓冲时间</option>
+                <option value="walking_speed">步行节奏</option>
+                <option value="transport_mode">常用出行方式</option>
+                <option value="avoid_congestion">偏好错峰通勤</option>
+                <option value="avoid_rain">避雨偏好</option>
+                <option value="avoid_tight_schedule">日程松紧</option>
+                <option value="preferred_locations">常用地点</option>
+                <option value="custom_note">其他习惯</option>
+              </select>
+              <input
+                id="memory-value"
+                type="text"
+                placeholder="例如：15分钟"
+                maxlength="120"
+              />
+              <button id="memory-save" class="ghost">保存记忆</button>
+            </div>
+            <div id="memory-list" class="memory-list muted">
+              还没有保存长期偏好。
+            </div>
+          </article>
+        </aside>
+
+        <section class="column response-column">
+          <article class="panel assistant-panel">
+            <div class="panel-heading">
+              <div class="assistant-identity">
+                <div class="assistant-avatar" aria-hidden="true">易</div>
+                <div>
+                  <p class="step">易程智策的回复</p>
+                  <h2>我帮你把时间和路程一起想清楚</h2>
+                </div>
+              </div>
+            </div>
+            <div id="answer" class="answer muted">
+              把课程、自习、取快递、吃饭或运动告诉我，我会先判断能否
+              全部完成；如果时间不够，也会说明原因并给你可选方案。
+            </div>
+            <div id="assistant-actions" class="assistant-actions"></div>
+            <div id="freshness" class="source-tags"></div>
+          </article>
+
+          <section class="visual-grid">
+            <article class="panel plan-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="step">可视化辅助</p>
+                  <h2 id="plan-title">日程时间轴</h2>
+                </div>
+              </div>
+              <div id="timeline" class="timeline empty">
+                生成后，这里会把任务和通勤转换成时间轴。
+              </div>
+              <div id="task-statuses" class="task-statuses"></div>
+            </article>
+
+            <div class="column evidence-column">
+              <article class="panel">
+                <div class="panel-heading compact">
+                  <div>
+                    <p class="step">依据与关照</p>
+                    <h2>这次参考了什么？</h2>
+                  </div>
+                </div>
+                <div id="insights" class="insight-list empty">
+                  生成后显示本次实际使用的校园规则、天气和个人偏好。
+                </div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-heading compact">
+                  <div>
+                    <p class="step">完整性检查</p>
+                    <h2>任务有没有被漏掉？</h2>
+                  </div>
+                </div>
+                <div id="constraints" class="check-list empty">
+                  生成后显示检查结果。
+                </div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-heading compact">
+                  <div>
+                    <p class="step">贴心提醒</p>
+                    <h2>需要注意</h2>
+                  </div>
+                </div>
+                <div id="warnings" class="warnings muted">暂时没有提醒。</div>
+              </article>
+            </div>
+          </section>
+
+          <article class="panel adjustment-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="step">计划变化</p>
+                <h2>为什么这样调整？</h2>
+              </div>
+            </div>
+            <div id="adjustment" class="adjustment muted">
+              当前没有计划变更。
+            </div>
+            <div id="diff" class="diff-list"></div>
+          </article>
+        </section>
+      </section>
+    </main>
+
+    <footer>
+      <span>易程智策 · 校园时空规划智能体</span>
+      <span>智能回复是主体，结构化时间轴提供可验证的规划依据</span>
+    </footer>
+    <details id="debug-panel" class="debug-panel">
+      <summary>初期调试信息</summary>
+      <p>
+        这里仅用于开发阶段排查问题；正式展示时保持折叠即可。
+      </p>
+      <pre id="debug-content">尚无运行数据。</pre>
+    </details>
+    <script src="/app.js?v=20260724-3" defer></script>
+  </body>
+</html>

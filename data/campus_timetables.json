@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "campus_id": "hdu_xiasha_reference",
+  "data_quality": "project_owner_verified",
+  "source": "用户提供校园时间表，2026-07-24",
+  "sunshine_run": [
+    {
+      "venue": "体育馆副馆南侧塑胶跑道",
+      "credit_windows": [["07:00", "21:00"]]
+    },
+    {
+      "venue": "东操场",
+      "credit_windows": [["07:00", "21:00"]]
+    },
+    {
+      "venue": "西北田径场",
+      "credit_windows": [["18:30", "21:00"]]
+    }
+  ],
+  "library": {
+    "overall": [["07:00", "22:30"]],
+    "floor_windows": [
+      {"floors": [6, 12], "windows": [["07:00", "22:30"]]},
+      {
+        "floors": [7, 8, 9, 10, 11],
+        "windows": [["08:00", "21:30"]]
+      }
+    ],
+    "weekly_days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+    "exception": "法定节假日除外"
+  },
+  "couriers": [
+    {"name": "顺丰快递", "windows": [["08:00", "18:00"]]},
+    {"name": "京东快递", "windows": [["08:00", "22:00"]]},
+    {"name": "菜鸟驿站", "windows": [["08:30", "22:30"]]}
+  ],
+  "dormitory": {
+    "sun_to_thu": {
+      "self_lights_out": "22:50",
+      "lights_out": "23:00",
+      "door_window": ["06:20", "23:00"]
+    },
+    "fri_sat_and_holidays": {
+      "self_lights_out": "23:50",
+      "lights_out": "24:00",
+      "door_window": ["06:20", "24:00"]
+    }
+  },
+  "summer_sports": {
+    "effective_month_day": ["07-01", "09-04"],
+    "effective_year": null,
+    "requires_year_verification": true,
+    "weekday_only_windows": [
+      {
+        "venue": "体育馆主馆二楼乒乓球房",
+        "windows": [["11:30", "20:30"]],
+        "weekends_open": false,
+        "reservation_note": "原始文本提到网上预约，具体预约规则待核验"
+      },
+      {
+        "venue": "综合馆羽毛球馆",
+        "windows": [["11:30", "20:30"]],
+        "weekends_open": false
+      }
+    ],
+    "all_day_venues": [
+      "东面田径场",
+      "西北田径场",
+      "西面室外篮球场",
+      "西面室外排球场",
+      "西面室外足球场",
+      "西面室外网球场",
+      "穹顶篮排球场"
+    ]
+  },
+  "dining_service_periods": [
+    {"venues": ["第一餐厅", "第三餐厅", "第五餐厅", "第六餐厅", "快餐点"], "periods": ["早餐", "午餐", "晚餐"]},
+    {"venues": ["教师餐厅", "清真餐厅"], "periods": ["午餐", "晚餐"]},
+    {"venues": ["梅花餐厅"], "periods": ["午餐", "晚餐", "夜宵"]}
+  ],
+  "hot_water_windows": [["06:00", "08:00"], ["16:30", "24:00"]],
+  "campus_clinic": {
+    "weekdays": [["08:00", "20:00"]],
+    "weekends_and_holidays": [["08:00", "11:30"], ["13:30", "16:00"]]
+  }
+}

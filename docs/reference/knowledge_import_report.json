@@ -1,0 +1,13 @@
+[
+  {
+    "source_path": "coze/AIGC知识库 - 知识库 - 扣子.html",
+    "output_path": "/Users/xuwenhang/.codex/.chatgpt-projects/g-p-6a5f88d9046c8191bf81b39e5975affe/data/knowledge/imported/AIGC知识库---知识库---扣子-2f17f546ed.md",
+    "status": "imported",
+    "characters": 1045
+  },
+  {
+    "source_path": "coze/制度 - 知识库 - 扣子.html",
+    "status": "skipped",
+    "reason": "no embedded knowledge document found"
+  }
+]

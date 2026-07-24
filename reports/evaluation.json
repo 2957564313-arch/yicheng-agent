@@ -1,0 +1,638 @@
+{
+  "summary": {
+    "generated_at": "2026-07-24T09:01:06.768092+00:00",
+    "suite": "offline_mvp",
+    "total": 60,
+    "passed": 60,
+    "pass_rate": 1.0,
+    "categories": {
+      "clarification": {
+        "total": 5,
+        "passed": 5,
+        "pass_rate": 1.0
+      },
+      "deadline": {
+        "total": 10,
+        "passed": 10,
+        "pass_rate": 1.0
+      },
+      "degraded": {
+        "total": 10,
+        "passed": 10,
+        "pass_rate": 1.0
+      },
+      "demo": {
+        "total": 5,
+        "passed": 5,
+        "pass_rate": 1.0
+      },
+      "normal": {
+        "total": 30,
+        "passed": 30,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "results": [
+    {
+      "case_id": "normal_1_01",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_1_02",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_1_03",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_1_04",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_1_05",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_1_06",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_1_07",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_1_08",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_1_09",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_1_10",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 4,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_2_01",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_2_02",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_2_03",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_2_04",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_2_05",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_2_06",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_2_07",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_2_08",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_2_09",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_2_10",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 4,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_3_01",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_3_02",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_3_03",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_3_04",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_3_05",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_3_06",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_3_07",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_3_08",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_3_09",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "normal_3_10",
+      "category": "normal",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 4,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "deadline_01",
+      "category": "deadline",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "deadline_02",
+      "category": "deadline",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "deadline_03",
+      "category": "deadline",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "deadline_04",
+      "category": "deadline",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "deadline_05",
+      "category": "deadline",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "deadline_06",
+      "category": "deadline",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "deadline_07",
+      "category": "deadline",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "deadline_08",
+      "category": "deadline",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "deadline_09",
+      "category": "deadline",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "deadline_10",
+      "category": "deadline",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "degraded_01",
+      "category": "degraded",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "degraded_02",
+      "category": "degraded",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "degraded_03",
+      "category": "degraded",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "degraded_04",
+      "category": "degraded",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "degraded_05",
+      "category": "degraded",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "degraded_06",
+      "category": "degraded",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "degraded_07",
+      "category": "degraded",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "degraded_08",
+      "category": "degraded",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "degraded_09",
+      "category": "degraded",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "degraded_10",
+      "category": "degraded",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "clarification_01",
+      "category": "clarification",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "clarification_02",
+      "category": "clarification",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "clarification_03",
+      "category": "clarification",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "clarification_04",
+      "category": "clarification",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "clarification_05",
+      "category": "clarification",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "demo_01",
+      "category": "demo",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 3,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "demo_02",
+      "category": "demo",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 3,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "demo_03",
+      "category": "demo",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 3,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "demo_04",
+      "category": "demo",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 3,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "demo_05",
+      "category": "demo",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 3,
+        "hard_violation_count": 0
+      }
+    }
+  ]
+}

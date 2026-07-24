@@ -1,0 +1,14 @@
+{
+  "fixture_date": "2026-07-24",
+  "location_id": "campus_main",
+  "periods": [
+    {
+      "period": "after_17",
+      "condition": "rain",
+      "rain_probability": 0.85,
+      "risk_start_at": "2026-07-24T17:00:00+08:00",
+      "temperature_c": 29
+    }
+  ],
+  "source": "demo_fixture"
+}

@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.0",
+  "mode": "walk",
+  "data_quality": "amap_route_snapshot_with_one_generic_location_fallback",
+  "updated_at": "2026-07-24T02:55:00+08:00",
+  "pairs": [
+    {
+      "origin_id": "teaching_building_6",
+      "destination_id": "library",
+      "duration_min": 4,
+      "distance_m": 297,
+      "bidirectional": true,
+      "source": "amap_route_snapshot_2026-07-24",
+      "confidence": 0.9
+    },
+    {
+      "origin_id": "library",
+      "destination_id": "parcel_station",
+      "duration_min": 13,
+      "distance_m": 903,
+      "bidirectional": true,
+      "source": "amap_route_snapshot_2026-07-24",
+      "confidence": 0.9
+    },
+    {
+      "origin_id": "library",
+      "destination_id": "canteen",
+      "duration_min": 5,
+      "distance_m": 336,
+      "bidirectional": true,
+      "source": "amap_route_snapshot_2026-07-24",
+      "confidence": 0.9
+    },
+    {
+      "origin_id": "parcel_station",
+      "destination_id": "canteen",
+      "duration_min": 8,
+      "distance_m": 562,
+      "bidirectional": true,
+      "source": "amap_route_snapshot_2026-07-24",
+      "confidence": 0.9
+    },
+    {
+      "origin_id": "canteen",
+      "destination_id": "track",
+      "duration_min": 7,
+      "distance_m": 479,
+      "bidirectional": true,
+      "source": "amap_route_snapshot_2026-07-24",
+      "confidence": 0.9
+    },
+    {
+      "origin_id": "laboratory",
+      "destination_id": "library",
+      "duration_min": 10,
+      "distance_m": null,
+      "bidirectional": true,
+      "source": "generic_location_estimate",
+      "confidence": 0.5
+    },
+    {
+      "origin_id": "library",
+      "destination_id": "track",
+      "duration_min": 10,
+      "distance_m": 699,
+      "bidirectional": true,
+      "source": "amap_route_snapshot_2026-07-24",
+      "confidence": 0.9
+    },
+    {
+      "origin_id": "parcel_station",
+      "destination_id": "track",
+      "duration_min": 15,
+      "distance_m": 1071,
+      "bidirectional": true,
+      "source": "amap_route_snapshot_2026-07-24",
+      "confidence": 0.9
+    }
+  ]
+}
