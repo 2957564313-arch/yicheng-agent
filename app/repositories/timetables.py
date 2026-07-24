@@ -136,6 +136,7 @@ class TimetableRepository:
         target_date: date,
         class_periods: dict[int, tuple[time, time]],
         timezone_name: str,
+        effective_weekday: int | None = None,
     ) -> list[Task]:
         response = self.get(user_id)
         timetable = response.timetable
@@ -145,6 +146,8 @@ class TimetableRepository:
             return []
         if timetable.term_end and target_date > timetable.term_end:
             return []
+        if effective_weekday is None:
+            return []
         academic_week = (
             ((target_date - timetable.term_start).days // 7) + 1
             if timetable.term_start
@@ -153,7 +156,7 @@ class TimetableRepository:
         timezone = ZoneInfo(timezone_name)
         tasks: list[Task] = []
         for entry in response.entries:
-            if entry.weekday != target_date.isoweekday():
+            if entry.weekday != effective_weekday:
                 continue
             if entry.weeks and (
                 academic_week is None or academic_week not in entry.weeks
