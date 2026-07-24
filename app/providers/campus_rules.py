@@ -45,9 +45,16 @@ class CampusRulesRepository:
         self,
         location_id: str,
         target_date: date,
+        *,
+        is_national_holiday: bool = False,
     ) -> list[tuple[datetime, datetime]]:
         rule = self._opening_rules.get(location_id)
         if not rule:
+            return []
+        if (
+            is_national_holiday
+            and rule.get("closed_on_national_holidays", False)
+        ):
             return []
         effective_from = date.fromisoformat(rule["effective_from"])
         effective_to = (
@@ -69,6 +76,17 @@ class CampusRulesRepository:
             )
             for start, end in raw_windows
         ]
+
+    def has_opening_rule(self, location_id: str) -> bool:
+        return location_id in self._opening_rules
+
+    def closes_on_national_holidays(self, location_id: str) -> bool:
+        return bool(
+            self._opening_rules.get(location_id, {}).get(
+                "closed_on_national_holidays",
+                False,
+            )
+        )
 
     def _clock_datetime(
         self,
