@@ -16,6 +16,7 @@
         "sun": [["07:00", "22:30"]]
       },
       "exceptions": [],
+      "closed_on_national_holidays": true,
       "source_url": "杭电时间知识库.docx",
       "verified_at": "2026-07-24"
     },
