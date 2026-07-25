@@ -179,12 +179,37 @@ def test_campus_rule_question_is_a_query_without_task_clarification():
     assert result.clarifications == []
 
 
+def test_service_hour_questions_are_not_misread_as_planning_tasks():
+    for query in (
+        "顺丰快递点每天几点关闭？",
+        "京东快递点每天几点关闭？",
+        "周末下午校医院几点可以就诊？",
+        "西北田径场阳光长跑什么时候可以计入？",
+    ):
+        result = parse(query)
+        assert result.intent == "query", query
+        assert result.tasks == [], query
+        assert result.clarifications == [], query
+
+
 def test_hot_water_hours_question_is_not_misread_as_a_planning_task():
     result = parse("晚上宿舍什么时候有热水？")
 
     assert result.intent == "query"
     assert result.tasks == []
     assert result.clarifications == []
+
+
+def test_deadline_after_task_clause_only_constrains_that_task():
+    result = parse(
+        "明天15:00到16:30固定参加社团会议，之后去取快递，"
+        "18点前完成，再去图书馆自习1小时。"
+    )
+
+    parcel = next(task for task in result.tasks if task.id == "parcel")
+    study = next(task for task in result.tasks if task.id == "study")
+    assert parcel.deadline.isoformat() == "2026-07-24T18:00:00+08:00"
+    assert study.deadline is None
 
 
 def test_verified_class_periods_become_fixed_hard_constraints():

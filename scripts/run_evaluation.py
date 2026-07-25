@@ -55,13 +55,13 @@ def run_case(client: TestClient, case: dict) -> dict:
             failures.append(
                 f"plan_status={actual}, expected={expected_plan_status}"
             )
-    task_count = len(
-        [
-            item
-            for item in (payload.get("plan") or {}).get("items", [])
-            if item["item_type"] == "task"
-        ]
-    )
+    plan_items = (payload.get("plan") or {}).get("items", [])
+    task_items = [
+        item
+        for item in plan_items
+        if item["item_type"] == "task"
+    ]
+    task_count = len(task_items)
     if task_count < expected["min_task_count"]:
         failures.append(
             f"task_count={task_count}, min={expected['min_task_count']}"
@@ -78,6 +78,82 @@ def run_case(client: TestClient, case: dict) -> dict:
     )
     if expected_plan_status == "valid" and hard_violations != 0:
         failures.append(f"hard_violation_count={hard_violations}")
+
+    answer = payload.get("answer", "")
+    for marker in expected.get("answer_contains", []):
+        if marker not in answer:
+            failures.append(f"answer missing={marker!r}")
+    for marker in expected.get("answer_not_contains", []):
+        if marker in answer:
+            failures.append(f"answer unexpectedly contains={marker!r}")
+    minimum_answer_length = expected.get("min_answer_length", 0)
+    if len(answer) < minimum_answer_length:
+        failures.append(
+            f"answer_length={len(answer)}, min={minimum_answer_length}"
+        )
+
+    task_titles = [item.get("title", "") for item in task_items]
+    for marker in expected.get("required_task_titles", []):
+        if not any(marker in title for title in task_titles):
+            failures.append(f"missing task title marker={marker!r}")
+    for marker in expected.get("forbidden_task_titles", []):
+        if any(marker in title for title in task_titles):
+            failures.append(f"forbidden task title marker={marker!r}")
+
+    required_travel_mode = expected.get("required_travel_mode")
+    if required_travel_mode:
+        travel_items = [
+            item
+            for item in plan_items
+            if item["item_type"] == "travel"
+        ]
+        if not travel_items:
+            failures.append("missing travel items")
+        elif any(
+            item.get("travel_mode") != required_travel_mode
+            for item in travel_items
+        ):
+            actual_modes = sorted(
+                {
+                    str(item.get("travel_mode"))
+                    for item in travel_items
+                }
+            )
+            failures.append(
+                f"travel_modes={actual_modes}, "
+                f"expected={required_travel_mode}"
+            )
+
+    minimum_congestion_delay = expected.get(
+        "min_congestion_delay_min",
+        0,
+    )
+    if minimum_congestion_delay:
+        actual_congestion_delay = max(
+            (
+                int(item.get("congestion_delay_min") or 0)
+                for item in plan_items
+                if item["item_type"] == "travel"
+            ),
+            default=0,
+        )
+        if actual_congestion_delay < minimum_congestion_delay:
+            failures.append(
+                f"congestion_delay_min={actual_congestion_delay}, "
+                f"min={minimum_congestion_delay}"
+            )
+
+    expected_target_date = expected.get("target_date")
+    if (
+        expected_target_date
+        and payload.get("time_context", {}).get("target_date")
+        != expected_target_date
+    ):
+        failures.append(
+            "target_date="
+            f"{payload.get('time_context', {}).get('target_date')}, "
+            f"expected={expected_target_date}"
+        )
 
     return {
         "case_id": case["case_id"],

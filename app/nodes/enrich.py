@@ -658,6 +658,14 @@ def _opening_conflict_issues(
             else task.location_raw or "该场所"
         )
         details = task.notes if task.notes else f"{name}有已核验开放时段"
+        raw_opening_windows = opening_windows.get(task.location_id or "")
+        if raw_opening_windows:
+            day_windows = "、".join(
+                f"{datetime.fromisoformat(start):%H:%M}—"
+                f"{datetime.fromisoformat(end):%H:%M}"
+                for start, end in raw_opening_windows
+            )
+            details += f"；{name}当天开放时段为{day_windows}"
         if bound_end <= bound_start:
             message = (
                 f"{task.title}希望从{bound_start:%H:%M}以后开始，"

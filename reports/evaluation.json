@@ -1,9 +1,9 @@
 {
   "summary": {
-    "generated_at": "2026-07-25T04:46:50.990486+00:00",
+    "generated_at": "2026-07-25T06:47:41.185329+00:00",
     "suite": "offline_mvp",
-    "total": 70,
-    "passed": 70,
+    "total": 100,
+    "passed": 100,
     "pass_rate": 1.0,
     "categories": {
       "clarification": {
@@ -31,9 +31,24 @@
         "passed": 10,
         "pass_rate": 1.0
       },
+      "knowledge_qa": {
+        "total": 10,
+        "passed": 10,
+        "pass_rate": 1.0
+      },
       "normal": {
         "total": 30,
         "passed": 30,
+        "pass_rate": 1.0
+      },
+      "resilience_care": {
+        "total": 10,
+        "passed": 10,
+        "pass_rate": 1.0
+      },
+      "temporal_constraints": {
+        "total": 10,
+        "passed": 10,
         "pass_rate": 1.0
       }
     }
@@ -736,6 +751,306 @@
       "failures": [],
       "metrics": {
         "task_count": 4,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "knowledge_library_floor_7",
+      "category": "knowledge_qa",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "knowledge_library_overall",
+      "category": "knowledge_qa",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "knowledge_hot_water_morning",
+      "category": "knowledge_qa",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "knowledge_hot_water_evening",
+      "category": "knowledge_qa",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "knowledge_dorm_gate_thursday",
+      "category": "knowledge_qa",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "knowledge_dorm_gate_saturday",
+      "category": "knowledge_qa",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "knowledge_sf_hours",
+      "category": "knowledge_qa",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "knowledge_jd_hours",
+      "category": "knowledge_qa",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "knowledge_cainiao_hours",
+      "category": "knowledge_qa",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "knowledge_clinic_weekend",
+      "category": "knowledge_qa",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "temporal_course_block",
+      "category": "temporal_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "temporal_non_contiguous_courses",
+      "category": "temporal_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 3,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "temporal_fixed_meeting",
+      "category": "temporal_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 3,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "temporal_sf_after_close",
+      "category": "temporal_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 1
+      }
+    },
+    {
+      "case_id": "temporal_jd_before_close",
+      "category": "temporal_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "temporal_jd_after_close",
+      "category": "temporal_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 1
+      }
+    },
+    {
+      "case_id": "temporal_library_boundary",
+      "category": "temporal_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "temporal_northwest_run",
+      "category": "temporal_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "temporal_sunday_curfew",
+      "category": "temporal_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 1
+      }
+    },
+    {
+      "case_id": "temporal_weekend_clinic",
+      "category": "temporal_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 1
+      }
+    },
+    {
+      "case_id": "care_infeasible",
+      "category": "resilience_care",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 3
+      }
+    },
+    {
+      "case_id": "care_bicycle_mode",
+      "category": "resilience_care",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "care_peak_congestion",
+      "category": "resilience_care",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "care_explicit_rain",
+      "category": "resilience_care",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "care_past_date",
+      "category": "resilience_care",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "care_national_holiday",
+      "category": "resilience_care",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "care_adjusted_workday",
+      "category": "resilience_care",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "care_holiday_venue",
+      "category": "resilience_care",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 1
+      }
+    },
+    {
+      "case_id": "care_ambiguous",
+      "category": "resilience_care",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "care_handbook_grounding",
+      "category": "resilience_care",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
         "hard_violation_count": 0
       }
     }

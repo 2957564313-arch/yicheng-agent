@@ -314,6 +314,28 @@ def test_offline_knowledge_query_uses_local_campus_facts(tmp_path):
         assert "阳光长跑" not in visible_knowledge[0]["content"]
 
 
+def test_open_ended_overload_request_gets_caring_structured_prompt(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "overloaded_user",
+                "query": "最近事情有点多，帮我安排一下。",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:05:00+08:00"
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["status"] == "needs_clarification"
+        assert "你不用一次把计划想得很完整" in payload["answer"]
+        assert "最晚完成时间" in payload["answer"]
+        assert not payload["answer"].startswith("你好")
+
+
 def test_late_library_plan_names_the_floor_specific_boundary(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         response = client.post(

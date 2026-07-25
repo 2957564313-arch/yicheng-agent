@@ -15,9 +15,9 @@ from app.state import CampusAgentState
 def make_respond_node(container: AppContainer):
     async def respond(state: CampusAgentState) -> dict:
         if state.get("clarifications"):
-            answer = (
-                "为了不替你做错决定，我还想确认一件事："
-                + "；".join(state["clarifications"])
+            answer = _clarification_answer(
+                query=state.get("query", ""),
+                clarifications=state["clarifications"],
             )
             return {
                 "final_answer": answer,
@@ -217,6 +217,33 @@ def make_respond_node(container: AppContainer):
         }
 
     return respond
+
+
+def _clarification_answer(
+    *,
+    query: str,
+    clarifications: list[str],
+) -> str:
+    details = "；".join(clarifications)
+    if (
+        any(marker in query for marker in ("事情有点多", "事情很多", "有点忙"))
+        and any("具体任务" in item for item in clarifications)
+    ):
+        return (
+            "事情一多，很容易既惦记着这个、又担心漏掉那个。"
+            "你不用一次把计划想得很完整，先把现在记得的事情告诉我就好。"
+            "我还需要确认："
+            f"{details}"
+            "可以直接按“任务、最晚完成时间、预计时长、地点”逐条发给我；"
+            "不确定的地方也可以留空，我会陪你一起补齐，再排成一份"
+            "不会太赶的计划。"
+        )
+    return (
+        "为了不替你做错决定，我还想确认一件事："
+        + details
+        + "你只要补充已确定的时间、地点或必须保留的安排，"
+        "其余部分我会继续帮你梳理。"
+    )
 
 
 def _timetable_answer(summary: str) -> str:

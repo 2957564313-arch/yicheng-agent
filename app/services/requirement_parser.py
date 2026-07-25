@@ -167,6 +167,24 @@ class RuleBasedRequirementParser:
             )
         ):
             return True
+        if (
+            any(marker in query for marker in ("几点", "什么时候", "何时"))
+            and any(
+                marker in query
+                for marker in (
+                    "开门",
+                    "关门",
+                    "关闭",
+                    "开放",
+                    "营业",
+                    "就诊",
+                    "计入",
+                )
+            )
+        ):
+            # “顺丰几点关闭”“校医院什么时候可以就诊”是在询问
+            # 已核验规则，不是要求系统现在创建一项取件或就诊任务。
+            return True
         if any(
             re.search(pattern, query)
             for pattern in (
@@ -1995,13 +2013,27 @@ class RuleBasedRequirementParser:
         query: str,
         target_date: date,
     ) -> datetime | None:
-        match = re.search(
-            r"(\d{1,2})(?:\s*[:：]\s*(\d{1,2}))?\s*点?\s*"
-            r"前(?:(?:结束|完成|回来|搞定)(?:全部|所有|这些)?"
-            r"(?:任务|事情|事项)?|(?=$|[，。；、]))",
+        time_pattern = (
+            r"(\d{1,2})(?:\s*[:：]\s*(\d{1,2}))?\s*点?\s*前"
+        )
+        collective = re.search(
+            time_pattern
+            + (
+                r"(?:(?:全部|所有|这些)(?:任务|事情|事项)?"
+                r"(?:结束|完成|回来|搞定)|"
+                r"(?:结束|完成|回来|搞定)(?:全部|所有|这些)"
+                r"(?:任务|事情|事项)?)"
+            ),
             query,
         )
-        return self._deadline_from_match(match, target_date)
+        if collective:
+            return self._deadline_from_match(collective, target_date)
+
+        ending = re.search(
+            time_pattern + r"(?:结束|完成|回来|搞定)?\s*[。！？!?]?\s*$",
+            query,
+        )
+        return self._deadline_from_match(ending, target_date)
 
     def _task_deadline(
         self,
@@ -2025,6 +2057,21 @@ class RuleBasedRequirementParser:
         )
         if before_task:
             return self._deadline_from_match(before_task, target_date)
+
+        task_then_deadline_clause = re.search(
+            rf"(?:{keyword_pattern})[^。；、]{{0,24}}?[，,]\s*"
+            rf"{time_pattern}(?:完成|结束|搞定)",
+            query,
+        )
+        if task_then_deadline_clause:
+            hour = int(task_then_deadline_clause.group(1))
+            minute = int(task_then_deadline_clause.group(2) or 0)
+            if 0 <= hour <= 23 and 0 <= minute <= 59:
+                return datetime.combine(
+                    target_date,
+                    time(hour, minute),
+                    self.timezone,
+                )
 
         task_before = re.search(
             rf"(?:{keyword_pattern})[^，。；、]{{0,16}}?{time_pattern}",

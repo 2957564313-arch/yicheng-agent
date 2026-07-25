@@ -14,7 +14,22 @@ def chat_case(
     min_task_count: int,
     expected_status: str = "completed",
     warning_codes: list[str] | None = None,
+    plan_status: str | None = "auto",
+    now: str = "2026-07-23T08:00:00+08:00",
+    answer_contains: list[str] | None = None,
+    answer_not_contains: list[str] | None = None,
+    min_answer_length: int = 0,
+    required_task_titles: list[str] | None = None,
+    forbidden_task_titles: list[str] | None = None,
+    required_travel_mode: str | None = None,
+    min_congestion_delay_min: int = 0,
+    target_date: str | None = None,
 ) -> dict:
+    resolved_plan_status = (
+        ("valid" if expected_status == "completed" else None)
+        if plan_status == "auto"
+        else plan_status
+    )
     return {
         "case_id": case_id,
         "category": category,
@@ -25,21 +40,27 @@ def chat_case(
             "query": query,
             "mode": "offline",
             "client_context": {
-                "now": "2026-07-23T08:00:00+08:00"
+                "now": now
             }
         },
         "expected": {
             "http_status": 200,
             "status": expected_status,
-            "plan_status": (
-                "valid" if expected_status == "completed" else None
-            ),
+            "plan_status": resolved_plan_status,
             "min_task_count": min_task_count,
             "warning_codes": (
                 ["API_DEGRADED"]
                 if warning_codes is None
                 else warning_codes
-            )
+            ),
+            "answer_contains": answer_contains or [],
+            "answer_not_contains": answer_not_contains or [],
+            "min_answer_length": min_answer_length,
+            "required_task_titles": required_task_titles or [],
+            "forbidden_task_titles": forbidden_task_titles or [],
+            "required_travel_mode": required_travel_mode,
+            "min_congestion_delay_min": min_congestion_delay_min,
+            "target_date": target_date,
         }
     }
 
@@ -241,7 +262,274 @@ def build_cases() -> list[dict]:
                 warning_codes=warning_codes,
             )
         )
-    assert len(cases) == 70
+
+    knowledge_cases = [
+        (
+            "library_floor_7",
+            "图书馆七楼晚上几点关闭？",
+            ["21:30"],
+        ),
+        (
+            "library_overall",
+            "图书馆每天最晚开放到几点？",
+            ["22:30"],
+        ),
+        (
+            "hot_water_morning",
+            "宿舍早上什么时候有热水？",
+            ["6:00", "8:00"],
+        ),
+        (
+            "hot_water_evening",
+            "晚上宿舍什么时候有热水？",
+            ["16:30", "24:00"],
+        ),
+        (
+            "dorm_gate_thursday",
+            "周四晚上宿舍楼几点关门？",
+            ["23:00"],
+        ),
+        (
+            "dorm_gate_saturday",
+            "周六晚上宿舍楼几点关门？",
+            ["24:00"],
+        ),
+        (
+            "sf_hours",
+            "顺丰快递点每天几点关闭？",
+            ["18:00"],
+        ),
+        (
+            "jd_hours",
+            "京东快递点每天几点关闭？",
+            ["22:00"],
+        ),
+        (
+            "cainiao_hours",
+            "菜鸟驿站每天几点开门、几点关门？",
+            ["8:30", "22:30"],
+        ),
+        (
+            "clinic_weekend",
+            "周末下午校医院几点可以就诊？",
+            ["13:30", "16:00"],
+        ),
+    ]
+    for suffix, query, markers in knowledge_cases:
+        cases.append(
+            chat_case(
+                f"knowledge_{suffix}",
+                "knowledge_qa",
+                query,
+                min_task_count=0,
+                plan_status=None,
+                warning_codes=[],
+                answer_contains=markers + ["依据来源"],
+                min_answer_length=30,
+            )
+        )
+
+    temporal_cases = [
+        chat_case(
+            "temporal_course_block",
+            "temporal_constraints",
+            "明天第1至2节有高等数学课，下课后去图书馆自习1小时。",
+            min_task_count=2,
+            required_task_titles=["高等数学", "自习"],
+        ),
+        chat_case(
+            "temporal_non_contiguous_courses",
+            "temporal_constraints",
+            "明天第1、3节有课，第4节以后去图书馆自习1小时。",
+            min_task_count=3,
+            required_task_titles=["课程", "自习"],
+        ),
+        chat_case(
+            "temporal_fixed_meeting",
+            "temporal_constraints",
+            (
+                "明天15:00到16:30固定参加社团会议，之后去取快递，"
+                "18点前完成，再去图书馆自习1小时。"
+            ),
+            min_task_count=3,
+            required_task_titles=["社团会议", "取快递", "自习"],
+        ),
+        chat_case(
+            "temporal_sf_after_close",
+            "temporal_constraints",
+            "明天19点去顺丰快递取件，帮我看看能不能安排。",
+            min_task_count=0,
+            expected_status="partial",
+            warning_codes=["OUTSIDE_OPENING_HOURS", "TASK_UNSCHEDULED"],
+            answer_contains=["18:00", "不会擅自"],
+        ),
+        chat_case(
+            "temporal_jd_before_close",
+            "temporal_constraints",
+            "明天21点去京东快递取件，帮我安排一下。",
+            min_task_count=1,
+            required_task_titles=["京东"],
+        ),
+        chat_case(
+            "temporal_jd_after_close",
+            "temporal_constraints",
+            "明天21:45去京东快递取件，帮我看看能不能安排。",
+            min_task_count=0,
+            expected_status="partial",
+            warning_codes=["OUTSIDE_OPENING_HOURS", "TASK_UNSCHEDULED"],
+            answer_contains=["22:00"],
+        ),
+        chat_case(
+            "temporal_library_boundary",
+            "temporal_constraints",
+            "明天22点去图书馆自习30分钟，可以吗？",
+            min_task_count=0,
+            plan_status=None,
+            warning_codes=[],
+            answer_contains=["22:30", "不同楼层"],
+        ),
+        chat_case(
+            "temporal_northwest_run",
+            "temporal_constraints",
+            "明天下午去西北田径场完成40分钟阳光长跑。",
+            min_task_count=1,
+            required_task_titles=["阳光长跑"],
+            answer_contains=["18:30"],
+        ),
+        chat_case(
+            "temporal_sunday_curfew",
+            "temporal_constraints",
+            "7月26日晚上23点30分回宿舍洗澡30分钟。",
+            min_task_count=0,
+            expected_status="partial",
+            warning_codes=["TASK_UNSCHEDULED"],
+            answer_contains=["23:00"],
+        ),
+        chat_case(
+            "temporal_weekend_clinic",
+            "temporal_constraints",
+            "7月25日15点45分去校医院就诊30分钟。",
+            min_task_count=0,
+            expected_status="partial",
+            warning_codes=["TASK_UNSCHEDULED"],
+            answer_contains=["16:00"],
+        ),
+    ]
+    cases.extend(temporal_cases)
+
+    resilience_cases = [
+        chat_case(
+            "care_infeasible",
+            "resilience_care",
+            (
+                "明天17:30从第六教学楼出发，要去图书馆学习2小时、"
+                "取快递、跑步30分钟，必须18点前全部结束。"
+            ),
+            min_task_count=0,
+            expected_status="partial",
+            warning_codes=["TASK_UNSCHEDULED"],
+            answer_contains=["调整"],
+            answer_not_contains=["你好"],
+            min_answer_length=160,
+        ),
+        chat_case(
+            "care_bicycle_mode",
+            "resilience_care",
+            (
+                "明天14点从第六教学楼出发，骑自行车去图书馆自习1小时，"
+                "再去菜鸟驿站取快递，18点前结束。"
+            ),
+            min_task_count=2,
+            required_task_titles=["自习", "取快递"],
+            required_travel_mode="bicycle",
+        ),
+        chat_case(
+            "care_peak_congestion",
+            "resilience_care",
+            "明天15:55从图书馆出发，步行去菜鸟驿站取快递，17点前完成。",
+            min_task_count=1,
+            warning_codes=["API_DEGRADED", "PEAK_CONGESTION"],
+            min_congestion_delay_min=1,
+            answer_contains=["集中通行"],
+        ),
+        chat_case(
+            "care_explicit_rain",
+            "resilience_care",
+            (
+                "明天15点后先去东操场跑步30分钟，再去图书馆学习1小时，"
+                "17点以后有雨，18点前结束。"
+            ),
+            min_task_count=2,
+            required_task_titles=["跑步", "自习"],
+            answer_contains=["17", "带把伞", "湿滑"],
+        ),
+        chat_case(
+            "care_past_date",
+            "resilience_care",
+            "本周三去图书馆自习1小时。",
+            min_task_count=0,
+            expected_status="needs_clarification",
+            plan_status=None,
+            warning_codes=[],
+            answer_contains=["已经过去"],
+            answer_not_contains=["你好"],
+        ),
+        chat_case(
+            "care_national_holiday",
+            "resilience_care",
+            "2026年国庆节什么时候放假？",
+            min_task_count=0,
+            plan_status=None,
+            warning_codes=[],
+            answer_contains=["10月1日", "10月7日", "10月10日", "学校"],
+        ),
+        chat_case(
+            "care_adjusted_workday",
+            "resilience_care",
+            "2026年10月10日要上课吗？",
+            min_task_count=0,
+            plan_status=None,
+            warning_codes=[],
+            answer_contains=["调休工作日"],
+            answer_not_contains=["确定要上课"],
+        ),
+        chat_case(
+            "care_holiday_venue",
+            "resilience_care",
+            "2026年10月2日去图书馆自习1小时，再去东操场跑步30分钟。",
+            min_task_count=1,
+            expected_status="partial",
+            warning_codes=["TASK_UNSCHEDULED"],
+            required_task_titles=["跑步"],
+            forbidden_task_titles=["图书馆自习"],
+            answer_contains=["待调整", "门口"],
+        ),
+        chat_case(
+            "care_ambiguous",
+            "resilience_care",
+            "最近事情有点多，帮我安排一下。",
+            min_task_count=0,
+            expected_status="needs_clarification",
+            plan_status=None,
+            warning_codes=[],
+            answer_not_contains=["你好"],
+            min_answer_length=40,
+        ),
+        chat_case(
+            "care_handbook_grounding",
+            "resilience_care",
+            "学生考试作弊会受到什么处分？请按学生手册回答。",
+            min_task_count=0,
+            plan_status=None,
+            warning_codes=[],
+            answer_contains=["依据来源"],
+            answer_not_contains=["当前知识库中没有检索到"],
+            min_answer_length=80,
+        ),
+    ]
+    cases.extend(resilience_cases)
+
+    assert len(cases) == 100
     return cases
 
 
@@ -252,7 +540,7 @@ def main() -> None:
         json.dumps(build_cases(), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    print(f"wrote 70 cases: {output}")
+    print(f"wrote 100 cases: {output}")
 
 
 if __name__ == "__main__":
