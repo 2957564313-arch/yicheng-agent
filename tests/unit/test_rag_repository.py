@@ -207,3 +207,87 @@ async def test_markdown_headings_keep_operational_rules_focused(
 
     assert "阳光长跑" in result[0].content
     assert "第1节" not in result[0].content
+
+
+@pytest.mark.asyncio
+async def test_section_title_and_pdf_page_are_kept_as_auditable_metadata(
+    tmp_path: Path,
+):
+    official = tmp_path / "official"
+    official.mkdir()
+    (official / "handbook.md").write_text(
+        "---\n"
+        'source_path: "2025年学生手册(终稿).pdf"\n'
+        "verified: true\nknowledge_type: policy\n---\n\n"
+        "# 学生申诉处理办法\n\n"
+        "- 87 -\n"
+        "学生应当在收到处分决定书之日起10日内提出书面申诉。",
+        encoding="utf-8",
+    )
+    repository = KnowledgeRepository(tmp_path)
+
+    result = await repository.retrieve(
+        ["处分后什么时候可以申诉？"],
+        purpose="qa",
+        top_k=1,
+    )
+
+    assert result[0].metadata["title"] == "学生申诉处理办法"
+    assert result[0].metadata["page"] == 87
+    assert "10日内" in result[0].content
+    assert "书面申诉" in result[0].metadata["matched_terms"]
+
+
+@pytest.mark.asyncio
+async def test_two_chapters_on_one_pdf_page_keep_the_matching_chapter_title(
+    tmp_path: Path,
+):
+    official = tmp_path / "official"
+    official.mkdir()
+    (official / "handbook.md").write_text(
+        "---\n"
+        'source_path: "学生手册.pdf"\n'
+        "verified: true\nknowledge_type: policy\n---\n\n"
+        "- 37 -\n"
+        "第三章 学制与修业年限\n"
+        "经学校批准创业休学的四年制本科生，最长修业年限为8年。\n"
+        "第四章 考勤与纪律\n"
+        "迟到或早退每次按旷课0.5学时计算。\n",
+        encoding="utf-8",
+    )
+    repository = KnowledgeRepository(tmp_path)
+
+    result = await repository.retrieve(
+        ["四年本科创业休学最长能读几年？"],
+        purpose="qa",
+        top_k=1,
+    )
+
+    assert result[0].metadata["page"] == 37
+    assert result[0].metadata["title"] == "第三章 学制与修业年限"
+    assert "最长修业年限为8年" in result[0].content
+
+
+@pytest.mark.asyncio
+async def test_query_normalization_ranks_closing_time_section_first(
+    tmp_path: Path,
+):
+    curated = tmp_path / "curated"
+    curated.mkdir()
+    (curated / "hours.md").write_text(
+        "---\nverified: true\nknowledge_type: operations\n---\n\n"
+        "# 校园服务\n\n"
+        "## 图书馆开放时间\n\n图书馆每天07:00—22:30开放。\n\n"
+        "## 图书馆志愿服务\n\n志愿者参与图书整理和读者咨询。",
+        encoding="utf-8",
+    )
+    repository = KnowledgeRepository(tmp_path)
+
+    result = await repository.retrieve(
+        ["图书馆几点关门？"],
+        purpose="qa",
+        top_k=1,
+    )
+
+    assert result[0].metadata["title"] == "图书馆开放时间"
+    assert "22:30" in result[0].content

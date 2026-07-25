@@ -352,15 +352,43 @@ class WeeklyAllocator:
                     start_at += timedelta(minutes=deduction)
                     reserved -= deduction
                 if end_at > start_at:
-                    segments.append(
-                        _FreeSegment(
-                            start_at=start_at,
-                            end_at=end_at,
-                            energy_level=window.energy_level,
-                            location_id=window.location_id,
+                    for slice_start, slice_end in (
+                        WeeklyAllocator._period_slices(start_at, end_at)
+                    ):
+                        segments.append(
+                            _FreeSegment(
+                                start_at=slice_start,
+                                end_at=slice_end,
+                                energy_level=window.energy_level,
+                                location_id=window.location_id,
+                            )
                         )
-                    )
         return segments
+
+    @staticmethod
+    def _period_slices(
+        start_at: datetime,
+        end_at: datetime,
+    ) -> list[tuple[datetime, datetime]]:
+        """Split broad windows where morning/afternoon/evening change.
+
+        Without these boundaries a 07:00—22:30 window is classified only by
+        its 07:00 start, so an explicit “尽量晚上” preference can never win.
+        """
+        boundaries = [
+            start_at.replace(hour=12, minute=0, second=0, microsecond=0),
+            start_at.replace(hour=18, minute=0, second=0, microsecond=0),
+        ]
+        points = [
+            start_at,
+            *[
+                boundary
+                for boundary in boundaries
+                if start_at < boundary < end_at
+            ],
+            end_at,
+        ]
+        return list(zip(points, points[1:]))
 
     def _allocate_stage(
         self,

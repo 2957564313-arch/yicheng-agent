@@ -436,11 +436,34 @@ class WeeklyPlanCreateRequest(BaseModel):
         return self
 
 
+class WeeklyTextInterpretation(BaseModel):
+    goals: list[WeeklyGoalCreate] = Field(default_factory=list, max_length=30)
+    clarifications: list[str] = Field(default_factory=list, max_length=5)
+    confidence: float = Field(default=0.0, ge=0, le=1)
+
+
+class WeeklyTextPlanRequest(BaseModel):
+    user_id: str = Field(min_length=1, max_length=64)
+    campus_id: str = Field(default="hdu_xiasha", min_length=1, max_length=100)
+    query: str = Field(min_length=2, max_length=5000)
+    week_start: date
+    timezone: str = Field(default="Asia/Shanghai", min_length=1, max_length=80)
+    availability: WeeklyAvailabilityProfile | None = None
+
+    @model_validator(mode="after")
+    def validate_week_start(self) -> "WeeklyTextPlanRequest":
+        if self.week_start.isoweekday() != 1:
+            raise ValueError("week_start 必须是周一")
+        return self
+
+
 class WeeklyPlanResponse(BaseModel):
     status: str
     answer: str
     weekly_plan: WeeklyPlan
     capacity_summary: WeeklyCapacitySummary | None = None
+    parser: str | None = None
+    interpretation: WeeklyTextInterpretation | None = None
 
 
 class CompletionEventResponse(BaseModel):

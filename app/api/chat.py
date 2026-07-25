@@ -528,7 +528,12 @@ def _planning_insights(
             importance = "required"
         elif "学生手册" in source_ref:
             title = "学生手册依据"
-            source_label = "2025年学生手册"
+            source_page = fact.get("metadata", {}).get("page")
+            source_label = (
+                f"2025年学生手册 · 第{source_page}页"
+                if isinstance(source_page, int)
+                else "2025年学生手册"
+            )
             importance = (
                 "reference"
                 if result.get("intent") == "query"

@@ -13,6 +13,7 @@ from app.errors import AppError
 from app.schemas.context import RetrievedFact
 from app.schemas.plan import Plan
 from app.schemas.understand import UnderstandResult
+from app.schemas.weekly import WeeklyTextInterpretation
 
 
 class OpenAICompatibleLLM:
@@ -168,6 +169,67 @@ class OpenAICompatibleLLM:
             temperature=0.2,
         )
 
+    async def parse_weekly_requirement(
+        self,
+        *,
+        query: str,
+        week_start: str,
+        now_iso: str,
+        memory_context: list[dict[str, Any]] | None = None,
+    ) -> WeeklyTextInterpretation:
+        if not self.configured:
+            raise AppError(
+                "LLM_NOT_CONFIGURED",
+                "大模型尚未配置",
+                status_code=503,
+                retryable=False,
+            )
+        prompt = (self.prompt_dir / "weekly_understand.md").read_text(
+            encoding="utf-8"
+        )
+        schema = WeeklyTextInterpretation.model_json_schema()
+        messages = [
+            {"role": "system", "content": prompt},
+            {
+                "role": "user",
+                "content": (
+                    f"now={now_iso}\nweek_start={week_start}\n"
+                    f"query={query}\n"
+                    "user_memory_context="
+                    f"{json.dumps(memory_context or [], ensure_ascii=False)}\n"
+                    f"JSON Schema={json.dumps(schema, ensure_ascii=False)}"
+                ),
+            },
+        ]
+        last_error: Exception | None = None
+        for attempt in range(2):
+            if attempt and last_error:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "上一次输出未通过校验。只返回修正后的 JSON。"
+                            f"错误：{last_error}"
+                        ),
+                    }
+                )
+            try:
+                payload = await self._chat(
+                    messages,
+                    response_format={"type": "json_object"},
+                    temperature=0,
+                )
+                return WeeklyTextInterpretation.model_validate_json(payload)
+            except (ValidationError, json.JSONDecodeError, KeyError) as exc:
+                last_error = exc
+        raise AppError(
+            "LLM_OUTPUT_INVALID",
+            "模型连续两次未返回合法周目标结构",
+            status_code=502,
+            retryable=True,
+            details=[{"reason": str(last_error)}],
+        )
+
     async def polish_answer(
         self,
         *,
@@ -215,6 +277,8 @@ class OpenAICompatibleLLM:
             {
                 "content": fact.content,
                 "source_ref": fact.source_ref,
+                "source_title": fact.metadata.get("title"),
+                "source_page": fact.metadata.get("page"),
                 "priority": fact.priority,
                 "verified_at": (
                     fact.verified_at.isoformat()

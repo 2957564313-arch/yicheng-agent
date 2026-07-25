@@ -1332,6 +1332,65 @@ textarea:focus {
     rgba(255, 253, 248, .96);
 }
 
+.weekly-compose {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid rgba(20, 82, 68, .2);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .76);
+}
+
+.weekly-compose > label {
+  display: grid;
+  gap: 4px;
+}
+
+.weekly-compose > label strong {
+  color: var(--green-deep);
+  font-size: 14px;
+}
+
+.weekly-compose > label span,
+.weekly-compose-actions label span,
+.weekly-compose-note,
+.weekly-demo-label {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.weekly-compose textarea {
+  min-height: 105px;
+}
+
+.weekly-compose-actions {
+  display: grid;
+  grid-template-columns: minmax(180px, .7fr) minmax(210px, 1fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.weekly-compose-actions label {
+  display: grid;
+  gap: 5px;
+}
+
+.weekly-compose-actions button {
+  width: 100%;
+}
+
+.weekly-compose-note,
+.weekly-demo-label {
+  margin: 0;
+}
+
+.weekly-demo-label {
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
 .weekly-demo-buttons {
   display: flex;
   flex-wrap: wrap;
@@ -1556,6 +1615,7 @@ footer {
   .care-suggestions { grid-template-columns: 1fr; }
   .agenda-reminder-list { grid-template-columns: 1fr; }
   .reminder-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .weekly-compose-actions { grid-template-columns: 1fr; }
   .agenda-item { grid-template-columns: 76px 12px 1fr; }
   .agenda-source { grid-column: 3; justify-self: start; }
   .evidence-column { grid-template-columns: 1fr; }

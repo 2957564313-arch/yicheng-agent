@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from hashlib import sha256
 import json
 from zoneinfo import ZoneInfo
@@ -18,8 +18,14 @@ from app.schemas.weekly import (
     WeeklyPlanResponse,
     WeeklyPlanStatus,
     WeeklyPlanVersionsResponse,
+    WeeklyAvailabilityProfile,
+    WeeklyClockWindow,
+    WeeklyTextInterpretation,
+    WeeklyTextPlanRequest,
     WeeklyTriggerType,
+    WeekdayAvailability,
 )
+from app.services.weekly_request_parser import RuleBasedWeeklyRequestParser
 
 
 router = APIRouter(prefix="/api/v1/weeks", tags=["weekly-planning"])
@@ -152,6 +158,105 @@ def create_weekly_plan(
         answer=_plan_answer(plan),
         weekly_plan=plan,
         capacity_summary=capacity_summary,
+    )
+
+
+@router.post(
+    "/plan/from-text",
+    response_model=WeeklyPlanResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_weekly_plan_from_text(
+    payload: WeeklyTextPlanRequest,
+    request: Request,
+) -> WeeklyPlanResponse:
+    container = request.app.state.container
+    now = datetime.now(ZoneInfo(payload.timezone))
+    rules = RuleBasedWeeklyRequestParser(payload.timezone).parse(
+        query=payload.query,
+        week_start=payload.week_start,
+    )
+    interpretation = rules
+    parser_name = "structured_rules"
+    if (rules.clarifications or not rules.goals) and container.llm.configured:
+        try:
+            container.llm.reset_usage()
+            memories = container.memories.list(
+                payload.user_id,
+                enabled_only=True,
+            )
+            model_result = await container.llm.parse_weekly_requirement(
+                query=payload.query,
+                week_start=payload.week_start.isoformat(),
+                now_iso=now.isoformat(),
+                memory_context=[
+                    {
+                        "category": item.category,
+                        "label": item.label,
+                        "key": item.key,
+                        "value": item.value,
+                    }
+                    for item in memories
+                ],
+            )
+            if model_result.goals and not model_result.clarifications:
+                interpretation = model_result
+                parser_name = "llm"
+        except Exception:
+            # A weekly plan must remain usable when a model's free quota,
+            # rate limit, or temporary availability changes.
+            parser_name = "structured_rules_fallback"
+    if interpretation.clarifications or not interpretation.goals:
+        questions = interpretation.clarifications or [
+            "请至少告诉我一个本周目标、预计投入时长和截止时间。"
+        ]
+        raise AppError(
+            "WEEKLY_CLARIFICATION_REQUIRED",
+            "我还差一项关键信息，先确认后才能稳妥安排这一周。",
+            status_code=422,
+            details=[
+                {"question": question}
+                for question in questions[:3]
+            ],
+        )
+
+    availability = payload.availability or _default_weekly_availability()
+    plan_request = WeeklyPlanCreateRequest(
+        user_id=payload.user_id,
+        campus_id=payload.campus_id,
+        week_start=payload.week_start,
+        timezone=payload.timezone,
+        goals=interpretation.goals,
+        availability=availability,
+    )
+    plan_request, capacity_summary = _resolve_capacities(
+        payload=plan_request,
+        container=container,
+    )
+    previous = container.weekly_plans.latest(
+        user_id=payload.user_id,
+        campus_id=payload.campus_id,
+        week_start=payload.week_start,
+    )
+    plan = container.weekly_allocator.allocate(
+        plan_request,
+        version=(previous.version + 1 if previous else 1),
+        baseline_plan_id=(previous.id if previous else None),
+        trigger_type=(
+            WeeklyTriggerType.MANUAL
+            if previous
+            else WeeklyTriggerType.INITIAL
+        ),
+        now=now,
+    )
+    container.weekly_plans.save(plan)
+    return WeeklyPlanResponse(
+        status="completed",
+        answer=_plan_answer(plan),
+        weekly_plan=plan,
+        capacity_summary=capacity_summary,
+        parser=parser_name,
+        interpretation=interpretation,
     )
 
 
@@ -311,6 +416,33 @@ def _resolve_capacities(
     return (
         payload.model_copy(update={"capacities": result.capacities}),
         result.summary,
+    )
+
+
+def _default_weekly_availability() -> WeeklyAvailabilityProfile:
+    """A broad candidate window; personal hard constraints are subtracted.
+
+    This is not an instruction to fill the whole day. Goal chunk limits,
+    imported courses, calendar overrides, and enabled memory settings still
+    control the actual weekly load.
+    """
+    return WeeklyAvailabilityProfile(
+        days=[
+            WeekdayAvailability(
+                weekday=weekday,
+                windows=[
+                    WeeklyClockWindow(
+                        start=time(7, 0),
+                        end=time(22, 30),
+                    )
+                ],
+                notes=["由系统结合个人课表与校历计算可用时间"],
+            )
+            for weekday in range(1, 8)
+        ],
+        use_timetable=True,
+        use_calendar=True,
+        use_memories=True,
     )
 
 

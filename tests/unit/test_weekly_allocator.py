@@ -298,6 +298,42 @@ def test_allocator_never_uses_time_before_now():
     assert plan.allocations[0].earliest_start == at(0, 18)
 
 
+def test_explicit_evening_preference_uses_evening_part_of_broad_window():
+    request = WeeklyPlanCreateRequest(
+        user_id="evening_user",
+        campus_id="campus_demo",
+        week_start=WEEK_START,
+        goals=[
+            WeeklyGoalCreate(
+                title="跑步",
+                deadline=at(2, 22),
+                total_duration_min=40,
+                min_chunk_min=40,
+                max_chunk_min=40,
+                max_chunks_per_day=1,
+                preferred_periods=["evening"],
+            )
+        ],
+        capacities=[
+            DailyCapacity(
+                date=WEEK_START,
+                windows=[
+                    DailyWindow(
+                        start_at=at(0, 7),
+                        end_at=at(0, 22, 30),
+                    )
+                ],
+            )
+        ],
+    )
+
+    plan = WeeklyAllocator().allocate(request, now=at(0, 6))
+
+    assert plan.status == WeeklyPlanStatus.VALID
+    assert plan.allocations[0].earliest_start == at(0, 18)
+    assert plan.allocations[0].preferred_period == "evening"
+
+
 def test_cycle_in_stage_dependencies_is_rejected():
     request = WeeklyPlanCreateRequest(
         user_id="cycle_user",

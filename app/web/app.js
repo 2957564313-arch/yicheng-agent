@@ -68,6 +68,9 @@ const weeklyState = $("#weekly-state");
 const weeklySummary = $("#weekly-summary");
 const weeklyGrid = $("#weekly-grid");
 const weeklyRisks = $("#weekly-risks");
+const weeklyQuery = $("#weekly-query");
+const weeklyStart = $("#weekly-start");
+const weeklyGenerate = $("#weekly-generate");
 const agendaState = $("#agenda-state");
 const agendaDate = $("#agenda-date");
 const agendaToday = $("#agenda-today");
@@ -1699,6 +1702,21 @@ function weeklyTimeLabel(rawValue) {
   }).format(new Date(rawValue));
 }
 
+function nextWeeklyMonday() {
+  const now = new Date(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Shanghai",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date()),
+  );
+  const weekday = now.getUTCDay() || 7;
+  const daysUntilMonday = weekday === 1 ? 0 : 8 - weekday;
+  now.setUTCDate(now.getUTCDate() + daysUntilMonday);
+  return now.toISOString().slice(0, 10);
+}
+
 const weeklyLocationLabels = {
   library: "图书馆",
   library_floor_6_12: "图书馆六层或十二层",
@@ -1859,6 +1877,60 @@ async function loadWeeklyDemos() {
     });
   });
 }
+
+weeklyGenerate.addEventListener("click", async () => {
+  const query = weeklyQuery.value.trim();
+  if (!query) {
+    weeklySummary.textContent = "先告诉我这一周最想完成的目标吧。";
+    weeklySummary.classList.remove("muted");
+    weeklyQuery.focus();
+    return;
+  }
+  if (!weeklyStart.value) weeklyStart.value = nextWeeklyMonday();
+  weeklyGenerate.disabled = true;
+  weeklyState.textContent = "正在理解目标…";
+  weeklySummary.textContent = (
+    "正在结合你的课表、校历和长期偏好，计算这一周真正可用的时间。"
+  );
+  weeklySummary.classList.remove("muted");
+  try {
+    const response = await fetch("/api/v1/weeks/plan/from-text", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: consoleUserId,
+        campus_id: currentCampusProfile?.id || "hdu_xiasha",
+        week_start: weeklyStart.value,
+        timezone: "Asia/Shanghai",
+        query,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw data;
+    renderWeeklyPlan(data);
+    weeklyGenerate.textContent = "按新要求重新规划本周";
+  } catch (error) {
+    const questions = (error?.error?.details || [])
+      .map((item) => item.question)
+      .filter(Boolean);
+    weeklyState.textContent = questions.length ? "需要确认" : "生成失败";
+    weeklySummary.innerHTML = questions.length
+      ? `
+        <strong>${escapeHtml(error?.error?.message || "还需要确认一项信息。")}</strong>
+        <ul>${questions.map((item) =>
+          `<li>${escapeHtml(item)}</li>`,
+        ).join("")}</ul>
+      `
+      : escapeHtml(
+        error?.error?.message
+          || "这一周暂时没有排成功，请稍后再试一次。",
+      );
+    weeklySummary.classList.remove("muted");
+    renderDebug(error);
+  } finally {
+    weeklyGenerate.disabled = false;
+  }
+});
 
 function parseMemoryValue(key, rawValue) {
   const value = rawValue.trim();
@@ -2439,6 +2511,7 @@ async function initializeApp() {
   const accessGranted = await initializeAccess();
   if (!accessGranted) return;
   agendaDate.value = shanghaiDateString();
+  weeklyStart.value = nextWeeklyMonday();
   serviceWorkerRegistration().catch(() => {});
   loadReminderSettings().catch((error) => {
     reminderState.textContent = "提醒设置暂时无法读取。";

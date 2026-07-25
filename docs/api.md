@@ -173,6 +173,36 @@ Demo 强制采用离线模式，保证比赛演示不依赖外部网络。
 测试版仍以 Vercel 临时运行环境为主，因此这个接口和网页导出功能用于
 跨设备迁移与主动备份；正式长期运营仍应接入持久化数据库。
 
+## 自然语言周规划
+
+`POST /api/v1/weeks/plan/from-text`
+
+请求示例：
+
+```json
+{
+  "user_id": "test_user",
+  "campus_id": "hdu_xiasha",
+  "week_start": "2026-07-27",
+  "query": "周五22:00前完成课程设计，共8小时，其中编码4小时、测试2小时、报告2小时；本周跑步2次，每次40分钟，尽量晚上去东操场。",
+  "timezone": "Asia/Shanghai",
+  "use_personal_context": true
+}
+```
+
+接口先将自然语言转换为结构化目标，再扣除已导入课表、校历覆盖和启用的
+长期偏好，最后生成跨日时间块。明确的“尽量晚上”等偏好只影响候选时段
+排序，不会错误软化用户的截止时间；用户没有提供必要时长时返回
+`WEEKLY_CLARIFICATION_REQUIRED`，不会擅自缩短或猜测复杂任务。
+
+结构化入口和滚动重排：
+
+- `POST /api/v1/weeks/plan`：提交完整结构化周目标；
+- `GET /api/v1/weeks/{week_start}?user_id=...`：读取当前周计划；
+- `POST /api/v1/weeks/{plan_id}/events`：记录完成、部分完成或延期；
+- `POST /api/v1/weeks/{plan_id}/replan`：按事件最小扰动重排；
+- `GET /api/v1/weeks/{plan_id}/versions`：查看历史版本。
+
 ## 错误格式
 
 ```json

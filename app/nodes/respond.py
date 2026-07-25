@@ -1385,8 +1385,9 @@ def _facts_answer(
     ]
     seen_sources: list[str] = []
     for fact in selected:
-        if fact.source_ref and fact.source_ref not in seen_sources:
-            seen_sources.append(fact.source_ref)
+        source_label = _fact_source_label(fact)
+        if source_label and source_label not in seen_sources:
+            seen_sources.append(source_label)
     if seen_sources:
         lines.extend(["", "依据来源：" + "；".join(seen_sources)])
     lines.extend(
@@ -1397,6 +1398,18 @@ def _facts_answer(
         ]
     )
     return "\n".join(lines)
+
+
+def _fact_source_label(fact: RetrievedFact) -> str:
+    source = fact.source_ref or ""
+    page = fact.metadata.get("page")
+    title = str(fact.metadata.get("title") or "").strip()
+    parts = [source] if source else []
+    if isinstance(page, int):
+        parts.append(f"第{page}页")
+    if title:
+        parts.append(title)
+    return " · ".join(parts)
 
 
 def _direct_operational_answer(

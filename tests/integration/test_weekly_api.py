@@ -207,3 +207,62 @@ def test_three_weekly_demos_cover_valid_shortage_and_personalization(tmp_path):
         )
         assert visitor_memories.status_code == 200
         assert visitor_memories.json()["items"] == []
+
+
+def test_user_can_create_a_real_weekly_plan_from_natural_language(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/weeks/plan/from-text",
+            json={
+                "user_id": "weekly_text_user",
+                "campus_id": "hdu_xiasha",
+                "week_start": "2026-07-27",
+                "timezone": "Asia/Shanghai",
+                "query": (
+                    "周五22:00前完成课程设计，共8小时，"
+                    "其中编码4小时、测试2小时、报告2小时；"
+                    "周三20:00前完成论文阅读，共2小时；"
+                    "本周跑步2次，每次40分钟，尽量晚上去东操场。"
+                ),
+            },
+        )
+
+        assert response.status_code == 201, response.text
+        data = response.json()
+        plan = data["weekly_plan"]
+        assert data["parser"] == "structured_rules"
+        assert plan["status"] == "valid"
+        assert len(plan["goals"]) == 3
+        assert plan["metrics"]["requested_duration_min"] == 680
+        assert plan["metrics"]["allocated_duration_min"] == 680
+        running = next(
+            goal for goal in plan["goals"] if goal["title"] == "跑步"
+        )
+        running_days = {
+            item["date"]
+            for item in plan["allocations"]
+            if item["goal_id"] == running["id"]
+        }
+        assert len(running_days) == 2
+        assert data["capacity_summary"]["source"] == "personal_context"
+        assert "尚未启用个人课表" in " ".join(
+            data["capacity_summary"]["notes"]
+        )
+
+
+def test_weekly_text_returns_a_clear_question_for_missing_duration(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/weeks/plan/from-text",
+            json={
+                "user_id": "weekly_clarify_user",
+                "campus_id": "hdu_xiasha",
+                "week_start": "2026-07-27",
+                "query": "周五前完善创新项目方案。",
+            },
+        )
+
+        assert response.status_code == 422
+        data = response.json()
+        assert data["error"]["code"] == "WEEKLY_CLARIFICATION_REQUIRED"
+        assert "投入多长时间" in data["error"]["details"][0]["question"]

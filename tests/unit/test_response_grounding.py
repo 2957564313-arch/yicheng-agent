@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from app.nodes.respond import (
     _claims_peak_was_avoided,
     _ensure_query_guardrails,
+    _facts_answer,
     _plain_text_answer,
     _polished_answer_is_grounded,
     _success_answer,
@@ -437,3 +438,25 @@ def test_holiday_query_keeps_school_calendar_caveat():
 
     assert "学校校历" in answer
     assert "教务通知" in answer
+
+
+def test_fallback_knowledge_answer_cites_handbook_page_and_section():
+    answer = _facts_answer(
+        [
+            RetrievedFact(
+                id="appeal_rule",
+                content="学生应当在收到处分决定书之日起10日内提出书面申诉。",
+                priority=100,
+                source=DataSource.RAG,
+                source_ref="2025年学生手册(终稿).pdf",
+                metadata={
+                    "page": 118,
+                    "title": "学生申诉处理办法",
+                },
+            )
+        ],
+        query="收到处分决定后多久可以申诉？",
+    )
+
+    assert "第118页" in answer
+    assert "学生申诉处理办法" in answer

@@ -1,0 +1,139 @@
+[
+  {
+    "category": "校园运行规则",
+    "query": "第1节几点开始？",
+    "expected_markers": ["08:05"],
+    "expected_type": "operations"
+  },
+  {
+    "category": "校园运行规则",
+    "query": "第10节什么时候上课？",
+    "expected_markers": ["18:30"],
+    "expected_type": "operations"
+  },
+  {
+    "category": "校园运行规则",
+    "query": "东操场阳光长跑几点可以计入？",
+    "expected_markers": ["7:00", "21:00"],
+    "expected_type": "operations"
+  },
+  {
+    "category": "校园运行规则",
+    "query": "图书馆七层晚上几点关门？",
+    "expected_markers": ["21:30"],
+    "expected_type": "operations"
+  },
+  {
+    "category": "校园运行规则",
+    "query": "菜鸟几点关门？",
+    "expected_markers": ["22:30"],
+    "expected_type": "operations"
+  },
+  {
+    "category": "校园运行规则",
+    "query": "周五宿舍楼最晚几点关门？",
+    "expected_markers": ["24:00"],
+    "expected_type": "operations"
+  },
+  {
+    "category": "校园运行规则",
+    "query": "晚上宿舍几点有热水？",
+    "expected_markers": ["16:30", "24:00"],
+    "expected_type": "operations"
+  },
+  {
+    "category": "校园运行规则",
+    "query": "校医院周末下午几点就诊？",
+    "expected_markers": ["13:30", "16:00"],
+    "expected_type": "operations"
+  },
+  {
+    "category": "校园运行规则",
+    "query": "下午一点二十五是不是拥堵？",
+    "expected_markers": ["13:20", "13:30"],
+    "expected_type": "operations"
+  },
+  {
+    "category": "校园运行规则",
+    "query": "清真餐厅提供早餐吗？",
+    "expected_markers": ["中晚"],
+    "expected_type": "operations"
+  },
+  {
+    "category": "学生手册制度",
+    "query": "迟到早退按旷课多少学时？",
+    "expected_markers": ["0.5学时"],
+    "expected_type": "policy",
+    "expected_page": 37
+  },
+  {
+    "category": "学生手册制度",
+    "query": "旷课多少不能参加课程考核？",
+    "expected_markers": ["三分之一"],
+    "expected_type": "policy",
+    "expected_page": 40
+  },
+  {
+    "category": "学生手册制度",
+    "query": "处分不服几天内申诉？",
+    "expected_markers": ["10日"],
+    "expected_type": "policy",
+    "expected_pages": [13, 120]
+  },
+  {
+    "category": "学生手册制度",
+    "query": "最长能请假多久？",
+    "expected_markers": ["四周"],
+    "expected_type": "policy",
+    "expected_page": 37
+  },
+  {
+    "category": "学生手册制度",
+    "query": "休学累计最多几年？",
+    "expected_markers": ["两年"],
+    "expected_type": "policy",
+    "expected_page": 42
+  },
+  {
+    "category": "学生手册制度",
+    "query": "复学什么时候申请？",
+    "expected_markers": ["开学两周内"],
+    "expected_type": "policy",
+    "expected_page": 43
+  },
+  {
+    "category": "学生手册制度",
+    "query": "四年本科创业休学最长修业几年？",
+    "expected_markers": ["最长修业年限为8年"],
+    "expected_type": "policy",
+    "expected_page": 37
+  },
+  {
+    "category": "学生手册制度",
+    "query": "四年本科生创业休学，最长可以读几年？请说明依据。",
+    "expected_markers": ["最长修业年限为8年"],
+    "expected_type": "policy",
+    "expected_page": 37
+  },
+  {
+    "category": "学生手册制度",
+    "query": "在校几个学期不能普通转专业？",
+    "expected_markers": ["超过四学期", "不得申请普通类转专业"],
+    "expected_type": "policy",
+    "expected_page": 54
+  },
+  {
+    "category": "学生手册制度",
+    "query": "考试携带相关材料算作弊吗？",
+    "expected_markers": ["考试作弊"],
+    "expected_type": "policy",
+    "expected_page": 115
+  },
+  {
+    "category": "学生手册制度",
+    "query": "没注册没请假每天按几节旷课？",
+    "expected_markers": ["每天按6节课计"],
+    "expected_type": "policy",
+    "expected_page": 36
+  }
+]
