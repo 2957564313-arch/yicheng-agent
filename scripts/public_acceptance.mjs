@@ -221,8 +221,22 @@ const cases = [
       const firstTravel = (data.plan?.items || []).find(
         (item) => item.item_type === "travel",
       );
+      const weatherBlocked = (data.warnings || []).some(
+        (item) => item.code === "WEATHER_RISK",
+      );
+      const unknownPoiResolved = Object.values(
+        data.location_names || {},
+      ).some((name) => String(name).includes("第七教学楼"));
       return [
-        expectEqual(data.status, "completed", "未知教学楼应能由高德补齐"),
+        expectTrue(
+          data.status === "completed" ||
+            (data.status === "partial" && weatherBlocked),
+          "未知教学楼补齐后应完成规划；若实时降雨冲突，只允许因天气风险返回调整方案",
+        ),
+        expectTrue(
+          unknownPoiResolved,
+          "第七教学楼必须由高德地点结果补齐，不能静默忽略首段起点",
+        ),
         expectEqual(tasks.length, 2, "学习和跑步都应安排"),
         expectEqual(
           firstTravel?.start_at?.slice(11, 16),
