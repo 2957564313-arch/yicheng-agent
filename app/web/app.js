@@ -1,3 +1,15 @@
+const accessTokenKey = "yicheng_access_token";
+const originalFetch = globalThis.fetch.bind(globalThis);
+globalThis.fetch = (resource, options = {}) => {
+  const token = localStorage.getItem(accessTokenKey);
+  const headers = new Headers(options.headers || {});
+  const url = typeof resource === "string" ? resource : resource.url;
+  if (token && new URL(url, globalThis.location.href).origin === location.origin) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return originalFetch(resource, { ...options, headers });
+};
+
 const $ = (selector) => document.querySelector(selector);
 const queryInput = $("#query");
 const submitButton = $("#submit");
@@ -24,6 +36,9 @@ const memoryType = $("#memory-type");
 const memoryValue = $("#memory-value");
 const memorySave = $("#memory-save");
 const memoryList = $("#memory-list");
+const personalizationToggle = $("#personalization-toggle");
+const personalizationReset = $("#personalization-reset");
+const personalizationState = $("#personalization-state");
 const timetableName = $("#timetable-name");
 const termStart = $("#term-start");
 const termEnd = $("#term-end");
@@ -44,6 +59,12 @@ const campusDiscover = $("#campus-discover");
 const campusReset = $("#campus-reset");
 const campusState = $("#campus-state");
 const campusSummary = $("#campus-summary");
+const accessGate = $("#access-gate");
+const loginForm = $("#login-form");
+const loginUsername = $("#login-username");
+const loginPassword = $("#login-password");
+const loginMessage = $("#login-message");
+const logoutButton = $("#logout");
 const adjustmentPanel = $(".adjustment-panel");
 const consoleUserId = getOrCreateLocalIdentity(
   "yicheng_user_id",
@@ -58,11 +79,15 @@ let lastDebugPayload = null;
 let serverClockBaseMs = null;
 let serverClockFetchedAtMs = null;
 let pendingTimetableImport = null;
+let currentCampusProfile = null;
 const memorySnapshotKey = "yicheng_memory_snapshot";
 const timetableSnapshotKey = "yicheng_timetable_snapshot";
 const calendarSnapshotKey = "yicheng_calendar_snapshot";
 const planSnapshotKey = "yicheng_current_plan_snapshot";
 const campusSnapshotKey = "yicheng_campus_snapshot";
+const behaviorHistoryKey = "yicheng_behavior_history";
+const suggestionFeedbackKey = "yicheng_suggestion_feedback";
+const personalizationEnabledKey = "yicheng_personalization_enabled";
 
 function readLocalSnapshot(key, fallback) {
   try {
@@ -108,10 +133,13 @@ function clientContextSnapshot() {
     })),
     previous_plan: previousPlan,
     campus,
+    personalization: personalizationSnapshot(),
   };
 }
 
 function renderCampus(campus, { isDefault = false } = {}) {
+  currentCampusProfile = campus;
+  renderPersonalizationState();
   if (!campus) {
     campusState.textContent = "尚未选择";
     campusSummary.textContent = "请先输入学校和校区。";
@@ -209,6 +237,61 @@ function getOrCreateLocalIdentity(storageKey, prefix) {
   return value;
 }
 
+async function initializeAccess() {
+  try {
+    const response = await fetch("/api/v1/auth/status");
+    const status = await response.json();
+    if (!status.enabled) {
+      accessGate.hidden = true;
+      logoutButton.hidden = true;
+      return true;
+    }
+    if (status.authenticated) {
+      accessGate.hidden = true;
+      logoutButton.hidden = false;
+      return true;
+    }
+    localStorage.removeItem(accessTokenKey);
+    loginUsername.value = status.test_username || "";
+    loginPassword.value = "";
+    loginMessage.textContent = status.configured
+      ? "请输入参赛材料中提供的测试账号和密码。"
+      : "测试入口尚未完成安全配置，请联系项目负责人。";
+    accessGate.hidden = false;
+    logoutButton.hidden = true;
+    return false;
+  } catch {
+    accessGate.hidden = false;
+    loginMessage.textContent = "暂时无法检查登录状态，请稍后刷新页面。";
+    return false;
+  }
+}
+
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  loginMessage.textContent = "正在验证测试账号…";
+  const response = await fetch("/api/v1/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: loginUsername.value.trim(),
+      password: loginPassword.value,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    loginMessage.textContent = data?.error?.message || "登录没有成功。";
+    return;
+  }
+  localStorage.setItem(accessTokenKey, data.access_token);
+  globalThis.location.reload();
+});
+
+logoutButton.addEventListener("click", () => {
+  localStorage.removeItem(accessTokenKey);
+  globalThis.location.reload();
+});
+
 const sourceLabels = {
   user: "用户提供",
   live_api: "实时数据",
@@ -257,6 +340,147 @@ const memoryDefinitions = {
     category: "preference",
   },
 };
+
+function behaviorTopic(title) {
+  const definitions = [
+    ["study", "自习", ["自习", "学习", "复习", "阅读"]],
+    ["exercise", "运动", ["跑步", "运动", "健身", "锻炼"]],
+    ["meal", "用餐", ["吃饭", "用餐", "早餐", "午餐", "晚餐"]],
+    ["parcel", "取快递", ["快递", "取件", "驿站"]],
+  ];
+  return definitions.find(([, , markers]) =>
+    markers.some((marker) => title.includes(marker))
+  ) || null;
+}
+
+function roundedHalfHour(value) {
+  const [hour, minute] = value.split(":").map(Number);
+  const total = Math.round((hour * 60 + minute) / 30) * 30;
+  const normalized = Math.min(total, 23 * 60 + 30);
+  return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${
+    String(normalized % 60).padStart(2, "0")
+  }`;
+}
+
+function median(values) {
+  const ordered = [...values].sort((left, right) => left - right);
+  return ordered[Math.floor(ordered.length / 2)];
+}
+
+function recordBehaviorHistory(data) {
+  if (!data.current_plan_saved || data.plan?.status !== "valid") return;
+  const existing = readLocalSnapshot(behaviorHistoryKey, [])
+    .filter((item) => item.plan_id !== data.plan.id);
+  const campusId = currentCampusProfile?.campus_id || null;
+  const additions = (data.plan.items || [])
+    .filter((item) => item.item_type === "task")
+    .flatMap((item) => {
+      const topic = behaviorTopic(item.title || "");
+      if (!topic || item.reason === "固定或用户锁定任务") return [];
+      const [, taskTitle] = topic;
+      const start = timePart(item.start_at);
+      return [{
+        plan_id: data.plan.id,
+        date: data.plan.date,
+        campus_id: campusId,
+        topic: topic[0],
+        task_title: taskTitle,
+        start_time: start,
+        duration_min: Math.max(
+          5,
+          Math.round(
+            (new Date(item.end_at) - new Date(item.start_at)) / 60000,
+          ),
+        ),
+        location_name: item.location_id
+          ? data.location_names?.[item.location_id] || null
+          : null,
+      }];
+    });
+  writeLocalSnapshot(
+    behaviorHistoryKey,
+    [...additions, ...existing].slice(0, 80),
+  );
+  renderPersonalizationState();
+}
+
+function buildBehaviorPatterns() {
+  const history = readLocalSnapshot(behaviorHistoryKey, []);
+  const feedback = readLocalSnapshot(suggestionFeedbackKey, {});
+  const groups = new Map();
+  history.forEach((item) => {
+    if (
+      currentCampusProfile?.campus_id
+      && item.campus_id
+      && item.campus_id !== currentCampusProfile.campus_id
+    ) return;
+    const timeBucket = roundedHalfHour(item.start_time);
+    const key = [
+      item.campus_id || "current",
+      item.topic,
+      timeBucket,
+      item.location_name || "",
+    ].join("|");
+    if (!groups.has(key)) groups.set(key, new Map());
+    groups.get(key).set(item.date, { ...item, time_bucket: timeBucket });
+  });
+  return [...groups.entries()]
+    .map(([key, byDate]) => {
+      const values = [...byDate.values()];
+      const response = feedback[`habit:${key}`] || {};
+      return {
+        key,
+        task_title: values[0]?.task_title,
+        typical_start: values[0]?.time_bucket,
+        duration_min: median(values.map((item) => item.duration_min)),
+        location_name: values[0]?.location_name || null,
+        campus_id: values[0]?.campus_id || null,
+        occurrences: values.length,
+        dismissed_count: response.dismissed_count || 0,
+        last_dismissed_at: response.last_dismissed_at || null,
+        last_suggested_at: response.last_suggested_at || null,
+      };
+    })
+    .filter((item) => item.occurrences >= 3)
+    .sort((left, right) => right.occurrences - left.occurrences)
+    .slice(0, 20);
+}
+
+function personalizationSnapshot() {
+  const enabled = localStorage.getItem(personalizationEnabledKey) === "true";
+  return {
+    enabled,
+    behavior_patterns: enabled ? buildBehaviorPatterns() : [],
+  };
+}
+
+function renderPersonalizationState() {
+  const enabled = localStorage.getItem(personalizationEnabledKey) === "true";
+  const patterns = buildBehaviorPatterns();
+  personalizationToggle.checked = enabled;
+  personalizationReset.hidden = patterns.length === 0;
+  personalizationState.textContent = enabled
+    ? patterns.length
+      ? `已开启，发现 ${patterns.length} 个稳定习惯；只询问，不会自动加入。`
+      : "已开启；同类行为在不同日期出现至少3次后，才会形成建议。"
+    : "当前关闭。历史仍保存在本机，开启后才会用于生成建议。";
+}
+
+personalizationToggle.addEventListener("change", () => {
+  localStorage.setItem(
+    personalizationEnabledKey,
+    String(personalizationToggle.checked),
+  );
+  renderPersonalizationState();
+});
+
+personalizationReset.addEventListener("click", () => {
+  localStorage.removeItem(suggestionFeedbackKey);
+  renderPersonalizationState();
+  personalizationState.textContent = (
+    "建议降频记录已重置；已识别的行为历史仍保留在本机。"
+  );
+});
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -486,13 +710,32 @@ function renderDebug(payload) {
 
 function renderSuggestedActions(actions = []) {
   lastSuggestedActions = actions;
+  const feedback = readLocalSnapshot(suggestionFeedbackKey, {});
+  actions
+    .filter((action) => action.kind === "habit_suggestion")
+    .forEach((action) => {
+      feedback[action.id] = {
+        ...(feedback[action.id] || {}),
+        last_suggested_at: new Date().toISOString(),
+      };
+    });
+  writeLocalSnapshot(suggestionFeedbackKey, feedback);
   assistantActions.innerHTML = actions.map((action, index) => `
-    <button class="suggestion-button" data-action-index="${index}">
-      <strong>${escapeHtml(action.label)}</strong>
-      <span>${escapeHtml(action.description)}</span>
-    </button>
+    <div class="suggestion-card ${
+      action.kind === "habit_suggestion" ? "habit" : ""
+    }">
+      <button class="suggestion-button" data-action-index="${index}">
+        <strong>${escapeHtml(action.label)}</strong>
+        <span>${escapeHtml(action.description)}</span>
+      </button>
+      ${action.dismissible ? `
+        <button class="suggestion-dismiss" data-dismiss-index="${index}">
+          这次不用
+        </button>
+      ` : ""}
+    </div>
   `).join("");
-  assistantActions.querySelectorAll("button").forEach((button) => {
+  assistantActions.querySelectorAll("[data-action-index]").forEach((button) => {
     button.addEventListener("click", async () => {
       const action = lastSuggestedActions[
         Number(button.dataset.actionIndex)
@@ -502,12 +745,31 @@ function renderSuggestedActions(actions = []) {
       await submitQuery(action.query);
     });
   });
+  assistantActions.querySelectorAll("[data-dismiss-index]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = lastSuggestedActions[
+        Number(button.dataset.dismissIndex)
+      ];
+      if (!action) return;
+      const current = readLocalSnapshot(suggestionFeedbackKey, {});
+      const item = current[action.id] || {};
+      current[action.id] = {
+        ...item,
+        dismissed_count: (item.dismissed_count || 0) + 1,
+        last_dismissed_at: new Date().toISOString(),
+      };
+      writeLocalSnapshot(suggestionFeedbackKey, current);
+      button.closest(".suggestion-card")?.remove();
+      renderPersonalizationState();
+    });
+  });
 }
 
 function renderResponse(data) {
   if (data.current_plan_saved && data.plan?.status === "valid") {
     writeLocalSnapshot(planSnapshotKey, data.plan);
   }
+  recordBehaviorHistory(data);
   answer.textContent = data.answer;
   answer.classList.remove("muted");
   saveState.textContent = data.current_plan_saved
@@ -1160,17 +1422,24 @@ async function checkHealth() {
   }
 }
 
-checkHealth();
-setInterval(renderClock, 30000);
-updateMemoryPlaceholder();
-loadMemories().catch((error) => renderDebug(error));
-loadTimetable().catch((error) => renderDebug(error));
-loadCalendarOverrides().catch((error) => renderDebug(error));
-loadCampus().catch((error) => {
-  campusState.textContent = "读取失败";
-  campusSummary.textContent = "暂时无法读取校园设置。";
-  renderDebug(error);
-});
-loadDemos().catch(() => {
-  demoButtons.textContent = "案例加载失败";
-});
+async function initializeApp() {
+  checkHealth();
+  setInterval(renderClock, 30000);
+  updateMemoryPlaceholder();
+  renderPersonalizationState();
+  loadCampus().catch((error) => {
+    campusState.textContent = "读取失败";
+    campusSummary.textContent = "暂时无法读取校园设置。";
+    renderDebug(error);
+  });
+  loadDemos().catch(() => {
+    demoButtons.textContent = "案例加载失败";
+  });
+  const accessGranted = await initializeAccess();
+  if (!accessGranted) return;
+  loadMemories().catch((error) => renderDebug(error));
+  loadTimetable().catch((error) => renderDebug(error));
+  loadCalendarOverrides().catch((error) => renderDebug(error));
+}
+
+initializeApp();

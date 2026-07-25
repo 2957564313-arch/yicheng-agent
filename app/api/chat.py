@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from time import perf_counter
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -55,6 +55,112 @@ def _requires_current_plan(query: str) -> bool:
         any(word in query for word in weather_words)
         and any(word in query for word in weather_adjustment_words)
     )
+
+
+def _habit_topic(value: str) -> str:
+    for topic, markers in (
+        ("study", ("自习", "学习", "复习", "阅读")),
+        ("exercise", ("跑步", "运动", "健身", "锻炼")),
+        ("meal", ("吃饭", "用餐", "早餐", "午餐", "晚餐")),
+        ("parcel", ("快递", "取件", "驿站")),
+    ):
+        if any(marker in value for marker in markers):
+            return topic
+    return re.sub(r"\s+", "", value)[:24]
+
+
+def _personalized_habit_actions(
+    *,
+    payload: ChatRequest,
+    result: dict,
+    target_date,
+    now: datetime,
+) -> list[dict]:
+    context = payload.client_context
+    personalization = context.personalization if context else None
+    if (
+        personalization is None
+        or not personalization.enabled
+        or result.get("intent") == "query"
+        or result.get("status") != "completed"
+        or not result.get("final_plan")
+    ):
+        return []
+    active_campus_id = (
+        context.campus.campus_id
+        if context and context.campus
+        else None
+    )
+    current_topics = {
+        _habit_topic(str(task.get("title", "")))
+        for task in result.get("tasks", [])
+    }
+    query_topic = _habit_topic(payload.query)
+    if query_topic:
+        current_topics.add(query_topic)
+    candidates = sorted(
+        personalization.behavior_patterns,
+        key=lambda item: (-item.occurrences, item.key),
+    )
+    for pattern in candidates:
+        if pattern.dismissed_count >= 2:
+            continue
+        if (
+            pattern.campus_id
+            and active_campus_id
+            and pattern.campus_id != active_campus_id
+        ):
+            continue
+        if _habit_topic(pattern.task_title) in current_topics:
+            continue
+        if (
+            pattern.last_dismissed_at is not None
+            and now - pattern.last_dismissed_at < timedelta(days=7)
+        ):
+            continue
+        if (
+            pattern.last_suggested_at is not None
+            and now - pattern.last_suggested_at < timedelta(days=3)
+        ):
+            continue
+        suggested_at = datetime.combine(
+            target_date,
+            pattern.typical_start,
+            tzinfo=now.tzinfo,
+        )
+        if target_date == now.date() and suggested_at <= now + timedelta(
+            minutes=30
+        ):
+            continue
+        time_label = pattern.typical_start.strftime("%H:%M")
+        location_text = (
+            f"去{pattern.location_name}"
+            if pattern.location_name
+            else ""
+        )
+        task_text = (
+            f"{location_text}{pattern.task_title}"
+            f"{pattern.duration_min}分钟"
+        )
+        return [
+            {
+                "id": f"habit:{pattern.key}",
+                "label": f"这次也安排{pattern.task_title}吗？",
+                "description": (
+                    f"你近 {pattern.occurrences} 次常在 {time_label}"
+                    f"{location_text}{pattern.task_title}。这次没有自动加入，"
+                    "只有你确认后我才会调整。"
+                ),
+                "query": (
+                    "保持当前计划和所有固定约束不变，尝试在"
+                    f"{target_date:%Y年%m月%d日} {time_label}"
+                    f"加入{task_text}；如果有冲突，请先说明，不要强行安排。"
+                ),
+                "kind": "habit_suggestion",
+                "dismissible": True,
+            }
+        ]
+    return []
 
 
 def _execution_steps(
@@ -323,7 +429,22 @@ def _planning_insights(
         ),
         "",
     )
+    has_structured_query_fact = (
+        result.get("intent") == "query"
+        and any(
+            fact.get("source") == DataSource.STRUCTURED.value
+            for fact in facts
+        )
+    )
     for fact in facts:
+        if (
+            has_structured_query_fact
+            and fact.get("source") == DataSource.RAG.value
+        ):
+            # The structured rule is already the narrowest verified answer.
+            # Broad RAG chunks can contain unrelated schedules or venue
+            # rules, which are not useful in the visible evidence panel.
+            continue
         if (
             fact.get("source") == DataSource.RAG.value
             and int(fact.get("priority", 0)) < top_rag_priority - 8
@@ -705,6 +826,29 @@ async def execute_chat(
             if result.get("final_plan")
             else None
         )
+        target_date = (
+            plan.date
+            if plan
+            else (
+                datetime.fromisoformat(result["requested_date"]).date()
+                if result.get("requested_date")
+                else now.date()
+            )
+        )
+        habit_actions = _personalized_habit_actions(
+            payload=payload,
+            result=result,
+            target_date=target_date,
+            now=now,
+        )
+        if habit_actions:
+            habit_note = habit_actions[0]["description"]
+            result["final_answer"] = (
+                result["final_answer"].rstrip()
+                + "\n\n"
+                + habit_note
+                + "需要的话可以点下面的建议；这次不用也可以忽略。"
+            )
         current_plan_saved = bool(
             plan and plan.status == PlanStatus.VALID
         )
@@ -742,15 +886,6 @@ async def execute_chat(
             or any(
                 raw.get("source") == DataSource.USER.value
                 for raw in result.get("weather_context", [])
-            )
-        )
-        target_date = (
-            plan.date
-            if plan
-            else (
-                datetime.fromisoformat(result["requested_date"]).date()
-                if result.get("requested_date")
-                else now.date()
             )
         )
         weekdays = (
@@ -804,7 +939,10 @@ async def execute_chat(
             ),
             suggested_actions=[
                 SuggestedAction.model_validate(raw)
-                for raw in result.get("suggested_actions", [])
+                for raw in [
+                    *result.get("suggested_actions", []),
+                    *habit_actions,
+                ]
             ],
             insights=_planning_insights(
                 result=result,

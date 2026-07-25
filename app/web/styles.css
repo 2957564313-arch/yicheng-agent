@@ -17,6 +17,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -29,6 +30,48 @@ body {
 }
 
 button, select, textarea, input { font: inherit; }
+
+.access-gate {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(20, 32, 27, .58);
+  backdrop-filter: blur(12px);
+}
+
+.access-card {
+  display: grid;
+  gap: 14px;
+  width: min(430px, 100%);
+  padding: 28px;
+  border: 1px solid rgba(255, 255, 255, .72);
+  border-radius: 24px;
+  background: var(--panel);
+  box-shadow: 0 28px 80px rgba(10, 28, 21, .28);
+}
+
+.access-card .brand-mark {
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
+  font-size: 27px;
+}
+
+.access-card h1 { font-size: 30px; }
+.access-card p { margin: 0; color: var(--muted); line-height: 1.65; }
+
+.access-card label {
+  display: grid;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.access-card small { color: var(--muted); line-height: 1.5; }
 
 header, main, footer {
   width: min(1440px, calc(100% - 40px));
@@ -241,6 +284,45 @@ textarea:focus {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
+}
+
+.personalization-control {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 13px;
+  padding: 11px 12px;
+  border: 1px solid #b9d4c7;
+  border-radius: 12px;
+  background: #f0f8f4;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.toggle-row span {
+  display: grid;
+  gap: 3px;
+}
+
+.toggle-row strong { color: var(--ink); font-size: 12px; }
+.toggle-row small { color: var(--muted); font-size: 10px; line-height: 1.4; }
+
+.toggle-row input {
+  width: 38px;
+  min-width: 38px;
+  height: 22px;
+  accent-color: var(--green);
+}
+
+.personalization-control .panel-note { margin: 0; font-size: 10px; }
+.personalization-control .text-button {
+  justify-self: start;
+  padding: 2px 0;
+  font-size: 10px;
 }
 
 .timetable-form {
@@ -475,6 +557,18 @@ textarea:focus {
   margin-top: 16px;
 }
 
+.suggestion-card {
+  display: grid;
+  gap: 5px;
+}
+
+.suggestion-card.habit {
+  padding: 7px;
+  border: 1px solid rgba(38, 113, 91, .22);
+  border-radius: 16px;
+  background: rgba(222, 240, 231, .58);
+}
+
 .suggestion-button {
   display: grid;
   gap: 4px;
@@ -484,6 +578,15 @@ textarea:focus {
   border-radius: 14px;
   text-align: left;
   background: rgba(255, 255, 255, .82);
+}
+
+.suggestion-dismiss {
+  justify-self: end;
+  padding: 3px 7px;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: 10px;
 }
 
 .suggestion-button strong {

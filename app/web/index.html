@@ -8,9 +8,42 @@
       content="面向校园学习与生活任务的时空规划智能体"
     />
     <title>易程智策 · 规划控制台</title>
-    <link rel="stylesheet" href="/styles.css?v=20260724-5" />
+    <link rel="stylesheet" href="/styles.css?v=20260724-6" />
   </head>
   <body>
+    <section id="access-gate" class="access-gate" hidden>
+      <form id="login-form" class="access-card">
+        <div class="brand-mark" aria-hidden="true">易</div>
+        <p class="eyebrow">比赛测试入口</p>
+        <h1>登录后体验易程智策</h1>
+        <p>
+          为防止公开接口被恶意调用，规划、地图和天气能力仅向持有
+          测试账号的评审与体验者开放。
+        </p>
+        <label>
+          测试账号
+          <input
+            id="login-username"
+            type="text"
+            autocomplete="username"
+            required
+          />
+        </label>
+        <label>
+          测试密码
+          <input
+            id="login-password"
+            type="password"
+            autocomplete="current-password"
+            required
+          />
+        </label>
+        <button class="primary" type="submit">进入测试</button>
+        <small id="login-message">
+          请输入参赛材料中提供的测试账号和密码。
+        </small>
+      </form>
+    </section>
     <header class="masthead">
       <div class="brand">
         <div class="brand-mark" aria-hidden="true">易</div>
@@ -24,6 +57,7 @@
         <span id="clock" class="status subtle">正在获取北京时间…</span>
         <span id="health" class="status">正在检查服务…</span>
         <span id="save-state" class="status subtle">尚未生成当前计划</span>
+        <button id="logout" class="status subtle" hidden>退出测试</button>
       </div>
     </header>
 
@@ -215,6 +249,30 @@
             <p class="panel-note">
               只保存你主动设置的内容，可随时停用、修改或删除。
             </p>
+            <div class="personalization-control">
+              <label class="toggle-row">
+                <span>
+                  <strong>个性化习惯建议</strong>
+                  <small>发现重复行为后先询问，绝不自动加入日程</small>
+                </span>
+                <input
+                  id="personalization-toggle"
+                  type="checkbox"
+                  role="switch"
+                  aria-label="启用个性化习惯建议"
+                />
+              </label>
+              <p id="personalization-state" class="panel-note">
+                当前关闭。
+              </p>
+              <button
+                id="personalization-reset"
+                class="text-button"
+                hidden
+              >
+                重置建议降频记录
+              </button>
+            </div>
             <div class="memory-form">
               <select id="memory-type" aria-label="记忆类型">
                 <option value="buffer_min">日程缓冲时间</option>
@@ -336,6 +394,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260724-5" defer></script>
+    <script src="/app.js?v=20260724-6" defer></script>
   </body>
 </html>

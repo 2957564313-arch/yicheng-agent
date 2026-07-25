@@ -1,6 +1,31 @@
 const baseUrl = (process.env.YICHENG_BASE_URL || "http://127.0.0.1:8000")
   .replace(/\/$/, "");
 
+async function requestHeaders() {
+  const headers = { "content-type": "application/json" };
+  const status = await fetch(`${baseUrl}/api/v1/auth/status`).then(
+    (response) => response.json(),
+  );
+  if (!status.enabled) return headers;
+  const username = process.env.YICHENG_USERNAME;
+  const password = process.env.YICHENG_PASSWORD;
+  if (!username || !password) {
+    throw new Error(
+      "公网已启用测试登录，请设置 YICHENG_USERNAME 和 YICHENG_PASSWORD",
+    );
+  }
+  const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ username, password }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(`测试账号登录失败：HTTP ${response.status}`);
+  return { ...headers, authorization: `Bearer ${data.access_token}` };
+}
+
+const acceptanceHeaders = await requestHeaders();
+
 const cases = [
   {
     id: "course_constraints",
@@ -457,7 +482,7 @@ async function runCase(testCase, index) {
   try {
     const response = await fetch(`${baseUrl}/api/v1/chat`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: acceptanceHeaders,
       body: JSON.stringify({
         user_id: `acceptance_${testCase.id}`,
         thread_id: `acceptance_${testCase.id}_${Date.now()}_${index}`,

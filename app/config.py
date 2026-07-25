@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     )
     app_data_dir: Path = BASE_DIR / "data"
     app_demo_dir: Path = BASE_DIR / "fixtures"
+    app_access_enabled: bool = False
+    app_test_username: str = ""
+    app_test_password: str = Field(default="", repr=False)
+    app_auth_secret: str = Field(default="", repr=False)
+    app_access_hours: int = Field(default=8, ge=1, le=72)
 
     llm_enabled: bool = False
     llm_model: str = "qwen3.7-plus"

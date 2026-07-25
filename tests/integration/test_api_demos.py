@@ -297,6 +297,99 @@ def test_offline_knowledge_query_uses_local_campus_facts(tmp_path):
             "structured",
             "rag",
         }
+        visible_knowledge = [
+            item
+            for item in payload["insights"]
+            if item["title"] != "规划时间基准"
+        ]
+        assert len(visible_knowledge) == 1
+        assert "图书馆" in visible_knowledge[0]["content"]
+        assert "上课时间" not in visible_knowledge[0]["content"]
+        assert "阳光长跑" not in visible_knowledge[0]["content"]
+
+
+def test_opt_in_habit_suggestion_never_auto_inserts_task(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "habit_user",
+                "thread_id": "habit_thread",
+                "query": "今天14点去菜鸟驿站取快递，18点前结束。",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "personalization": {
+                        "enabled": True,
+                        "behavior_patterns": [
+                            {
+                                "key": "hdu|study|20:00|图书馆",
+                                "task_title": "自习",
+                                "typical_start": "20:00",
+                                "duration_min": 60,
+                                "location_name": "图书馆",
+                                "campus_id": "hdu_xiasha",
+                                "occurrences": 4,
+                            }
+                        ],
+                    },
+                },
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    habit = next(
+        item
+        for item in payload["suggested_actions"]
+        if item["kind"] == "habit_suggestion"
+    )
+    assert habit["dismissible"] is True
+    assert "近 4 次" in habit["description"]
+    assert "只有你确认后" in habit["description"]
+    assert "自习" in payload["answer"]
+    assert all(
+        "自习" not in item["title"]
+        for item in payload["plan"]["items"]
+        if item["item_type"] == "task"
+    )
+
+
+def test_repeatedly_dismissed_habit_is_suppressed(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "habit_suppressed_user",
+                "thread_id": "habit_suppressed_thread",
+                "query": "今天14点去菜鸟驿站取快递，18点前结束。",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "personalization": {
+                        "enabled": True,
+                        "behavior_patterns": [
+                            {
+                                "key": "hdu|study|20:00|图书馆",
+                                "task_title": "自习",
+                                "typical_start": "20:00",
+                                "duration_min": 60,
+                                "location_name": "图书馆",
+                                "campus_id": "hdu_xiasha",
+                                "occurrences": 8,
+                                "dismissed_count": 2,
+                            }
+                        ],
+                    },
+                },
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    assert all(
+        item["kind"] != "habit_suggestion"
+        for item in response.json()["suggested_actions"]
+    )
 
 
 def test_class_periods_are_scheduled_as_immutable_time_blocks(tmp_path):
