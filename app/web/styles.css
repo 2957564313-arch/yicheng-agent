@@ -518,6 +518,49 @@ textarea:focus {
 
 .memory-actions .danger-link { color: var(--red); }
 
+.backup-panel {
+  border-color: #c7d8cf;
+  background:
+    linear-gradient(145deg, rgba(220, 238, 229, .46), transparent 58%),
+    rgba(255, 253, 248, .96);
+}
+
+.backup-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.backup-actions > button {
+  width: 100%;
+  color: var(--green);
+  border-color: rgba(38, 113, 91, .3);
+}
+
+.backup-actions > button.primary {
+  color: #fff;
+}
+
+.backup-picker {
+  cursor: pointer;
+}
+
+.backup-picker span {
+  font-weight: 700;
+}
+
+.backup-panel .storage-note {
+  min-height: 2.8em;
+}
+
+.backup-panel .storage-note.ready {
+  color: var(--green);
+  font-weight: 650;
+}
+
+.backup-panel .storage-note.error {
+  color: var(--red);
+}
+
 .muted,
 .empty { color: var(--muted); }
 

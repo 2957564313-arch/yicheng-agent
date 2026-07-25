@@ -8,7 +8,7 @@
       content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
     <title>易程智策 · 我的校园日程</title>
-    <link rel="stylesheet" href="/styles.css?v=20260724-10" />
+    <link rel="stylesheet" href="/styles.css?v=20260725-11" />
   </head>
   <body>
     <section id="access-gate" class="access-gate" hidden>
@@ -303,6 +303,44 @@
               还没有保存长期偏好。
             </div>
           </article>
+
+          <article class="panel backup-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="step">个人数据</p>
+                <h2>把课表和习惯带到新设备</h2>
+              </div>
+            </div>
+            <p class="panel-note">
+              数据包包含个人课表、长期记忆、校历调整、提醒设置、
+              当前计划和习惯记录，不包含测试密码、登录凭证或任何
+              API 密钥。
+            </p>
+            <p class="panel-note backup-warning">
+              恢复时会合并长期记忆与校历调整，并用备份中的课表覆盖
+              当前课表。操作前建议先导出这台设备上的现有数据。
+            </p>
+            <div class="backup-actions">
+              <button id="profile-export" class="ghost">
+                导出我的数据备份
+              </button>
+              <label class="file-picker backup-picker">
+                <span>选择易程智策备份文件</span>
+                <input
+                  id="profile-import-file"
+                  type="file"
+                  accept=".json,application/json"
+                />
+              </label>
+              <button id="profile-restore" class="primary" hidden>
+                确认恢复到这台设备
+              </button>
+            </div>
+            <p id="profile-backup-state" class="storage-note">
+              当前公开测试版的云端数据可能随服务更新而重置；建议在
+              导入课表或积累个性化设置后保存一份备份。
+            </p>
+          </article>
         </aside>
 
         <section class="column response-column">
@@ -505,6 +543,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260724-10" defer></script>
+    <script src="/app.js?v=20260725-11" defer></script>
   </body>
 </html>

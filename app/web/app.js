@@ -36,6 +36,10 @@ const memoryType = $("#memory-type");
 const memoryValue = $("#memory-value");
 const memorySave = $("#memory-save");
 const memoryList = $("#memory-list");
+const profileExport = $("#profile-export");
+const profileImportFile = $("#profile-import-file");
+const profileRestore = $("#profile-restore");
+const profileBackupState = $("#profile-backup-state");
 const personalizationToggle = $("#personalization-toggle");
 const personalizationReset = $("#personalization-reset");
 const personalizationState = $("#personalization-state");
@@ -102,6 +106,7 @@ let lastDebugPayload = null;
 let serverClockBaseMs = null;
 let serverClockFetchedAtMs = null;
 let pendingTimetableImport = null;
+let pendingProfileBackup = null;
 let currentCampusProfile = null;
 const memorySnapshotKey = "yicheng_memory_snapshot";
 const timetableSnapshotKey = "yicheng_timetable_snapshot";
@@ -127,6 +132,306 @@ function readLocalSnapshot(key, fallback) {
 function writeLocalSnapshot(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
+
+function memoryBackupItems(items) {
+  return (items || []).slice(0, 100).map((item) => ({
+    category: item.category,
+    key: item.key,
+    label: item.label,
+    value: item.value,
+    enabled: item.enabled !== false,
+  }));
+}
+
+function timetableBackupValue(value) {
+  if (!value?.entries?.length) return null;
+  return {
+    name: value.timetable?.name || "我的课表",
+    term_start: value.timetable?.term_start || null,
+    term_end: value.timetable?.term_end || null,
+    enabled: value.timetable?.enabled !== false,
+    entries: value.entries.slice(0, 500).map((item) => ({
+      course_name: item.course_name,
+      weekday: item.weekday,
+      start_period: item.start_period,
+      end_period: item.end_period,
+      location: item.location || null,
+      weeks: item.weeks || [],
+    })),
+  };
+}
+
+function calendarBackupItems(items) {
+  return (items || []).slice(0, 366).map((item) => ({
+    date: item.date,
+    action: item.action,
+    replacement_weekday: item.replacement_weekday || null,
+    label: item.label || "学校校历调整",
+    source_ref: item.source_ref || null,
+  }));
+}
+
+async function buildPersonalDataBackup() {
+  const localMemories = readLocalSnapshot(memorySnapshotKey, []);
+  const localTimetable = readLocalSnapshot(timetableSnapshotKey, null);
+  const localCalendar = readLocalSnapshot(calendarSnapshotKey, []);
+  const localPlan = readLocalSnapshot(planSnapshotKey, null);
+  const query = new URLSearchParams({ thread_id: consoleThreadId });
+  let server = null;
+  try {
+    const response = await fetch(
+      `/api/v1/users/${consoleUserId}/profile?${query}`,
+    );
+    if (response.ok) server = await response.json();
+  } catch {
+    // A local backup must still be available during a temporary server outage.
+  }
+  return {
+    product: "yicheng-agent",
+    schema_version: "1.0",
+    exported_at: new Date().toISOString(),
+    user_id: consoleUserId,
+    thread_id: consoleThreadId,
+    memories: localMemories.length
+      ? memoryBackupItems(localMemories)
+      : server?.memories || [],
+    timetable: timetableBackupValue(localTimetable)
+      || server?.timetable
+      || null,
+    calendar_overrides: localCalendar.length
+      ? calendarBackupItems(localCalendar)
+      : server?.calendar_overrides || [],
+    reminder_settings: currentReminderSettings
+      || readLocalSnapshot(reminderSettingsSnapshotKey, null)
+      || server?.reminder_settings
+      || null,
+    current_plan: localPlan || server?.current_plan || null,
+    client_state: {
+      memory_snapshot: localMemories,
+      timetable_snapshot: localTimetable,
+      calendar_snapshot: localCalendar,
+      plan_snapshot: localPlan,
+      campus_snapshot: readLocalSnapshot(campusSnapshotKey, null),
+      behavior_history: readLocalSnapshot(behaviorHistoryKey, []),
+      suggestion_feedback: readLocalSnapshot(suggestionFeedbackKey, {}),
+      personalization_enabled:
+        localStorage.getItem(personalizationEnabledKey) === "true",
+      shown_reminders: readLocalSnapshot(shownReminderKey, {}),
+      reminder_settings_snapshot: readLocalSnapshot(
+        reminderSettingsSnapshotKey,
+        null,
+      ),
+    },
+  };
+}
+
+function validatePersonalDataBackup(value) {
+  if (!value || typeof value !== "object") {
+    throw new Error("这不是有效的易程智策数据包。");
+  }
+  if (value.product !== "yicheng-agent" || value.schema_version !== "1.0") {
+    throw new Error("备份文件版本不受支持，请选择由易程智策导出的文件。");
+  }
+  const identityPattern = /^[A-Za-z0-9_-]+$/;
+  if (
+    typeof value.user_id !== "string"
+    || !identityPattern.test(value.user_id)
+    || value.user_id.length > 64
+    || typeof value.thread_id !== "string"
+    || !identityPattern.test(value.thread_id)
+    || value.thread_id.length > 128
+  ) {
+    throw new Error("备份文件中的用户标识不合法。");
+  }
+  if (!Array.isArray(value.memories) || value.memories.length > 100) {
+    throw new Error("备份文件中的长期记忆数量不合法。");
+  }
+  if (
+    value.timetable
+    && (
+      !Array.isArray(value.timetable.entries)
+      || value.timetable.entries.length > 500
+    )
+  ) {
+    throw new Error("备份文件中的课表数量不合法。");
+  }
+  if (
+    !Array.isArray(value.calendar_overrides)
+    || value.calendar_overrides.length > 366
+  ) {
+    throw new Error("备份文件中的校历调整数量不合法。");
+  }
+  return value;
+}
+
+function personalDataSummary(value) {
+  const courseCount = value.timetable?.entries?.length || 0;
+  const calendarCount = value.calendar_overrides?.length || 0;
+  const planLabel = value.current_plan ? "、1份当前计划" : "";
+  return (
+    `已识别 ${value.memories.length} 条长期记忆、${courseCount} 个课程时段、`
+    + `${calendarCount} 条校历调整${planLabel}。请确认后再恢复。`
+  );
+}
+
+profileExport.addEventListener("click", async () => {
+  profileExport.disabled = true;
+  profileExport.textContent = "正在整理个人数据…";
+  profileBackupState.className = "storage-note";
+  try {
+    const backup = await buildPersonalDataBackup();
+    const blob = new Blob(
+      [JSON.stringify(backup, null, 2)],
+      { type: "application/json;charset=utf-8" },
+    );
+    const link = document.createElement("a");
+    const date = shanghaiDateString();
+    link.href = URL.createObjectURL(blob);
+    link.download = `易程智策个人数据_${date}.json`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(link.href);
+    profileBackupState.textContent = (
+      "备份已经生成。文件不含密码、登录凭证或 API 密钥，请妥善保存。"
+    );
+    profileBackupState.classList.add("ready");
+  } catch (error) {
+    profileBackupState.textContent = (
+      error instanceof Error ? error.message : "个人数据暂时无法导出。"
+    );
+    profileBackupState.classList.add("error");
+    renderDebug(error);
+  } finally {
+    profileExport.disabled = false;
+    profileExport.textContent = "导出我的数据备份";
+  }
+});
+
+profileImportFile.addEventListener("change", async () => {
+  pendingProfileBackup = null;
+  profileRestore.hidden = true;
+  profileBackupState.className = "storage-note";
+  const file = profileImportFile.files?.[0];
+  if (!file) return;
+  if (file.size > 2_000_000) {
+    profileBackupState.textContent = "备份文件不能超过 2 MB。";
+    profileBackupState.classList.add("error");
+    return;
+  }
+  try {
+    const backup = validatePersonalDataBackup(
+      JSON.parse(await file.text()),
+    );
+    pendingProfileBackup = backup;
+    profileBackupState.textContent = personalDataSummary(backup);
+    profileBackupState.classList.add("ready");
+    profileRestore.hidden = false;
+  } catch (error) {
+    profileBackupState.textContent = (
+      error instanceof Error ? error.message : "备份文件无法读取。"
+    );
+    profileBackupState.classList.add("error");
+  }
+});
+
+profileRestore.addEventListener("click", async () => {
+  if (!pendingProfileBackup) return;
+  profileRestore.disabled = true;
+  profileRestore.textContent = "正在恢复个人数据…";
+  profileBackupState.className = "storage-note";
+  try {
+    const backup = pendingProfileBackup;
+    const response = await fetch(
+      `/api/v1/users/${backup.user_id}/profile/restore`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(backup),
+      },
+    );
+    const result = await response.json();
+    if (!response.ok) throw result;
+
+    localStorage.setItem("yicheng_user_id", backup.user_id);
+    localStorage.setItem("yicheng_thread_id", backup.thread_id);
+    const client = backup.client_state || {};
+    writeLocalSnapshot(
+      memorySnapshotKey,
+      client.memory_snapshot?.length
+        ? client.memory_snapshot
+        : backup.memories,
+    );
+    writeLocalSnapshot(
+      timetableSnapshotKey,
+      client.timetable_snapshot
+        || (
+          backup.timetable
+            ? {
+                timetable: {
+                  name: backup.timetable.name,
+                  term_start: backup.timetable.term_start,
+                  term_end: backup.timetable.term_end,
+                  enabled: backup.timetable.enabled,
+                },
+                entries: backup.timetable.entries,
+              }
+            : null
+        ),
+    );
+    writeLocalSnapshot(
+      calendarSnapshotKey,
+      client.calendar_snapshot?.length
+        ? client.calendar_snapshot
+        : backup.calendar_overrides,
+    );
+    writeLocalSnapshot(
+      planSnapshotKey,
+      client.plan_snapshot || backup.current_plan || null,
+    );
+    writeLocalSnapshot(
+      campusSnapshotKey,
+      client.campus_snapshot || null,
+    );
+    writeLocalSnapshot(
+      behaviorHistoryKey,
+      client.behavior_history || [],
+    );
+    writeLocalSnapshot(
+      suggestionFeedbackKey,
+      client.suggestion_feedback || {},
+    );
+    localStorage.setItem(
+      personalizationEnabledKey,
+      String(client.personalization_enabled === true),
+    );
+    writeLocalSnapshot(
+      shownReminderKey,
+      client.shown_reminders || {},
+    );
+    writeLocalSnapshot(
+      reminderSettingsSnapshotKey,
+      client.reminder_settings_snapshot
+        || backup.reminder_settings
+        || null,
+    );
+    profileBackupState.textContent = (
+      `恢复完成：${result.memories_restored} 条记忆、`
+      + `${result.timetable_entries_restored} 个课程时段。`
+      + "页面即将刷新并重新汇总日程。"
+    );
+    profileBackupState.classList.add("ready");
+    setTimeout(() => globalThis.location.reload(), 900);
+  } catch (error) {
+    profileBackupState.textContent = error?.error?.message
+      || "个人数据暂时没有恢复成功，原有数据未被清除。";
+    profileBackupState.classList.add("error");
+    renderDebug(error);
+  } finally {
+    profileRestore.disabled = false;
+    profileRestore.textContent = "确认恢复到这台设备";
+  }
+});
 
 function clientContextSnapshot() {
   const memories = readLocalSnapshot(memorySnapshotKey, []);

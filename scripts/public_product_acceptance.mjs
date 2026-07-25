@@ -101,6 +101,10 @@ results.push(await runCase("public_entry_and_health", async () => {
     assert(html.includes("易程智策"), "公网首页缺少作品名称");
     assert(html.includes("我的长期日程"), "公网首页缺少长期日程模块");
     assert(html.includes("一周目标如何真正落到每天"), "公网首页缺少周规划模块");
+    assert(
+      html.includes("把课表和习惯带到新设备"),
+      "公网首页缺少个人数据备份与恢复模块",
+    );
   } finally {
     clearTimeout(timer);
   }
@@ -376,6 +380,132 @@ results.push(await runCase("agenda_reminders_and_calendar_export", async () => {
   assert(exported.data.includes("SUMMARY:准备休息"), "日历漏掉就寝事件");
   assert(exported.data.includes("TRIGGER:-PT90M"), "日历漏掉早八起床闹钟");
   assert(exported.data.includes("TRIGGER:-PT30M"), "日历漏掉提前提醒");
+}));
+
+results.push(await runCase("personal_data_backup_and_restore", async () => {
+  const sourceUser = `product_backup_source_${stamp}`;
+  const sourceThread = `product_backup_source_thread_${stamp}`;
+  const targetUser = `product_backup_target_${stamp}`;
+  const targetThread = `product_backup_target_thread_${stamp}`;
+  const csv = [
+    "课程名称,星期,开始节次,结束节次,地点,周次",
+    "高等数学,星期五,1,2,第六教学楼,1-16",
+    "大学英语,星期五,3,4,第七教学楼,1-16",
+  ].join("\n");
+
+  await api(`/api/v1/users/${sourceUser}/memories`, {
+    method: "POST",
+    expectedStatus: 201,
+    body: {
+      category: "habit",
+      key: "usual_bedtime",
+      label: "常用就寝时间",
+      value: "23:00",
+      enabled: true,
+    },
+  });
+  await api(`/api/v1/users/${sourceUser}/timetable/import`, {
+    method: "POST",
+    expectedStatus: 201,
+    body: {
+      name: "跨设备验收课表",
+      format: "csv",
+      content: csv,
+      term_start: "2026-07-20",
+      term_end: "2026-11-30",
+    },
+  });
+  await api(`/api/v1/users/${sourceUser}/calendar-overrides`, {
+    method: "POST",
+    expectedStatus: 201,
+    body: {
+      date: "2026-07-31",
+      action: "no_class",
+      label: "学校临时停课",
+      source_ref: "公网验收",
+    },
+  });
+  await api(`/api/v1/users/${sourceUser}/reminders/settings`, {
+    method: "PUT",
+    body: {
+      enabled: true,
+      browser_notifications: false,
+      bedtime_enabled: true,
+      course_lead_min: 35,
+      early_course_wakeup_min: 95,
+      meeting_lead_min: 20,
+      study_lead_min: 15,
+      exercise_lead_min: 15,
+      task_lead_min: 10,
+      bedtime_lead_min: 30,
+      quiet_start: "23:00:00",
+      quiet_end: "06:30:00",
+    },
+  });
+  const generated = (
+    await api("/api/v1/chat", {
+      method: "POST",
+      body: {
+        user_id: sourceUser,
+        thread_id: sourceThread,
+        query: "2026年7月25日14点去图书馆自习2小时。",
+        mode: "offline",
+        client_context: { now: "2026-07-24T20:00:00+08:00" },
+      },
+    })
+  ).data;
+  assert(generated.current_plan_saved === true, "待备份计划没有保存");
+
+  const query = new URLSearchParams({ thread_id: sourceThread });
+  const backup = (
+    await api(`/api/v1/users/${sourceUser}/profile?${query}`)
+  ).data;
+  assert(backup.memories.length === 1, "备份漏掉长期记忆");
+  assert(backup.timetable.entries.length === 2, "备份漏掉课表");
+  assert(backup.calendar_overrides.length === 1, "备份漏掉校历调整");
+  assert(backup.current_plan, "备份漏掉当前计划");
+  backup.thread_id = targetThread;
+
+  const restored = (
+    await api(`/api/v1/users/${targetUser}/profile/restore`, {
+      method: "POST",
+      body: backup,
+    })
+  ).data;
+  assert(restored.memories_restored === 1, "长期记忆恢复数量错误");
+  assert(restored.timetable_entries_restored === 2, "课表恢复数量错误");
+  assert(restored.calendar_overrides_restored === 1, "校历恢复数量错误");
+  assert(restored.reminder_settings_restored === true, "提醒设置未恢复");
+  assert(restored.current_plan_restored === true, "当前计划未恢复");
+
+  const targetQuery = new URLSearchParams({ thread_id: targetThread });
+  const target = (
+    await api(`/api/v1/users/${targetUser}/profile?${targetQuery}`)
+  ).data;
+  assert(target.user_id === targetUser, "恢复后的用户归属错误");
+  assert(target.timetable.entries.length === 2, "恢复后课表缺失");
+  assert(
+    target.reminder_settings.early_course_wakeup_min === 95,
+    "恢复后提醒设置错误",
+  );
+  assert(target.current_plan.user_id === targetUser, "恢复后计划归属错误");
+
+  const range = new URLSearchParams({
+    start_date: "2026-07-24",
+    end_date: "2026-07-25",
+  });
+  const agenda = (
+    await api(`/api/v1/users/${targetUser}/agenda?${range}`)
+  ).data;
+  assert(agenda.summary.course_count === 2, "恢复后的长期日程漏掉课程");
+  assert(
+    agenda.items.some((item) => item.title === "图书馆自习"),
+    "恢复后的长期日程漏掉当前计划",
+  );
+  assert(
+    agenda.reminders.some((item) => item.kind === "bedtime"),
+    "恢复后的长期日程漏掉就寝提醒",
+  );
 }));
 
 results.push(await runCase("heavy_study_care", async () => {
