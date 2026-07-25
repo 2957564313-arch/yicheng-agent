@@ -7,6 +7,7 @@ from pathlib import Path
 from app.config import BASE_DIR, Settings
 from app.providers.campus_rules import CampusRulesRepository
 from app.providers.amap import (
+    AmapCampusDiscoveryProvider,
     AmapGeocodingProvider,
     AmapRouteProvider,
     AmapWeatherProvider,
@@ -32,6 +33,7 @@ from app.services.validator import PlanValidator
 @dataclass(slots=True)
 class AppContainer:
     settings: Settings
+    campus_profile: dict
     database: Database
     plans: PlanRepository
     memories: MemoryRepository
@@ -40,6 +42,7 @@ class AppContainer:
     runs: RunRepository
     locations: LocationRepository
     geocoder: AmapGeocodingProvider | None
+    campus_discovery: AmapCampusDiscoveryProvider | None
     routes: RouteFallbackService
     weather: WeatherFallbackService
     rules: CampusRulesRepository
@@ -51,13 +54,16 @@ class AppContainer:
     llm: OpenAICompatibleLLM
 
 
-def _profile_amap_settings(data_dir: Path) -> dict[str, str]:
-    """Read non-secret AMap settings from the active campus profile."""
+def _load_campus_profile(data_dir: Path) -> dict:
     profile_path = data_dir / "campus_profile.json"
     try:
-        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+        return json.loads(profile_path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         return {}
+
+
+def _profile_amap_settings(profile: dict) -> dict[str, str]:
+    """Read non-secret AMap settings from the active campus profile."""
     raw = (
         profile.get("external_services", {})
         .get("amap", {})
@@ -72,7 +78,8 @@ def build_container(settings: Settings) -> AppContainer:
     database = Database(settings.app_database_path)
     database.initialize()
     locations = LocationRepository(settings.app_data_dir / "locations.json")
-    amap_profile = _profile_amap_settings(settings.app_data_dir)
+    campus_profile = _load_campus_profile(settings.app_data_dir)
+    amap_profile = _profile_amap_settings(campus_profile)
     scheduler = Scheduler()
     static_routes = StaticRouteProvider(
         settings.app_data_dir / "travel_times.json",
@@ -128,6 +135,7 @@ def build_container(settings: Settings) -> AppContainer:
     )
     return AppContainer(
         settings=settings,
+        campus_profile=campus_profile,
         database=database,
         plans=PlanRepository(database),
         memories=MemoryRepository(database),
@@ -139,6 +147,18 @@ def build_container(settings: Settings) -> AppContainer:
         runs=RunRepository(database),
         locations=locations,
         geocoder=geocoder,
+        campus_discovery=(
+            AmapCampusDiscoveryProvider(
+                locations=locations,
+                api_key=settings.route_api_key,
+                timeout_seconds=max(
+                    settings.route_timeout_seconds,
+                    6,
+                ),
+            )
+            if settings.live_route_enabled and settings.route_api_key
+            else None
+        ),
         routes=RouteFallbackService(
             static=static_routes,
             live=live_routes,

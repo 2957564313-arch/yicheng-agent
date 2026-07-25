@@ -105,6 +105,58 @@ async def test_enhanced_retrieval_expands_query_and_records_rerank_metadata(
     result = await repository.retrieve(["宿舍门禁"], top_k=1)
 
     assert "公寓楼开关门时间" in result[0].content
-    assert result[0].metadata["retrieval"] == "enhanced_lexical_rerank"
+    assert result[0].metadata["retrieval"] == "scoped_lexical_rerank"
     assert result[0].metadata["source_tier"] == 3
     assert result[0].metadata["query_expansion"] is True
+
+
+@pytest.mark.asyncio
+async def test_planning_scope_excludes_unrelated_policy_documents(
+    tmp_path: Path,
+):
+    curated = tmp_path / "curated"
+    official = tmp_path / "official"
+    curated.mkdir()
+    official.mkdir()
+    (curated / "campus_time.md").write_text(
+        "---\nverified: true\nknowledge_type: operations\n---\n\n"
+        "东操场场地全天开放，阳光长跑计入时段到21:00。",
+        encoding="utf-8",
+    )
+    (official / "student_handbook.md").write_text(
+        "---\nverified: true\nknowledge_type: policy\n---\n\n"
+        "体育活动奖用于奖励坚持体育锻炼的学生。",
+        encoding="utf-8",
+    )
+    repository = KnowledgeRepository(tmp_path)
+
+    result = await repository.retrieve(
+        ["东操场跑步"],
+        purpose="planning",
+        top_k=3,
+    )
+
+    assert result
+    assert all(item.metadata["knowledge_type"] != "policy" for item in result)
+    assert "阳光长跑计入时段" in result[0].content
+
+
+@pytest.mark.asyncio
+async def test_markdown_headings_keep_operational_rules_focused(
+    tmp_path: Path,
+):
+    curated = tmp_path / "curated"
+    curated.mkdir()
+    (curated / "rules.md").write_text(
+        "---\nverified: true\nknowledge_type: operations\n---\n\n"
+        "# 校园规则\n\n"
+        "## 上课时间\n\n第1节08:05开始。\n\n"
+        "## 阳光长跑\n\n东操场07:00—21:00可计入阳光长跑。",
+        encoding="utf-8",
+    )
+    repository = KnowledgeRepository(tmp_path)
+
+    result = await repository.retrieve(["东操场跑步"], top_k=1)
+
+    assert "阳光长跑" in result[0].content
+    assert "第1节" not in result[0].content

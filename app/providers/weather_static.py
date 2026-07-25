@@ -18,6 +18,8 @@ class StaticWeatherProvider:
         self,
         target_date: date,
         location_id: str,
+        *,
+        city_adcode: str | None = None,
     ) -> list[WeatherContext]:
         if not self._payload:
             return [
@@ -45,4 +47,3 @@ class StaticWeatherProvider:
             )
             for period in self._payload.get("periods", [])
         ]
-

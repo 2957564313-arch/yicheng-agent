@@ -757,6 +757,54 @@ textarea:focus {
   font-size: 12px;
 }
 
+.campus-state {
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: #f5f5ef;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.campus-state.ready {
+  border-color: #a8c8ba;
+  color: var(--green-2);
+  background: #eff8f3;
+}
+
+.campus-form {
+  display: grid;
+  grid-template-columns: 1fr .62fr;
+  gap: 8px;
+}
+
+.campus-form button {
+  grid-column: 1 / -1;
+}
+
+.campus-summary {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 11px 12px;
+  border: 1px solid #b9d4c7;
+  border-radius: 12px;
+  background: #f0f8f4;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.campus-summary strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.campus-summary span,
+.campus-summary small {
+  color: var(--muted);
+}
+
 .insight-item {
   padding: 11px 12px;
   border: 1px solid var(--line);

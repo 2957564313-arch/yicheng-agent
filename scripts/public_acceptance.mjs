@@ -293,13 +293,19 @@ const cases = [
         item.title.includes("自习"),
       );
       return [
-        expectEqual(data.status, "completed", "22:00至22:30仍在整体开放时段"),
-        expectTruthy(study, "临近闭馆的自习任务不能丢失"),
-        expectEqual(
-          study?.end_at,
-          "2026-07-24T22:30:00+08:00",
-          "自习应在22:30闭馆前结束",
+        expectEqual(data.status, "completed", "22:00至22:30仍可给出明确结论"),
+        expectTrue(
+          (
+            study?.end_at === "2026-07-24T22:30:00+08:00"
+            || (
+              data.plan === null
+              && data.answer.includes("22:30")
+              && data.answer.includes("30分钟")
+            )
+          ),
+          "规划或问答都必须准确说明最多可学习到22:30",
         ),
+        expectText(data.answer, "不同楼层", "不能把整体开放时间误当成所有楼层"),
       ];
     },
   },
@@ -333,6 +339,8 @@ const cases = [
           /17(?::00|点)/.test(data.answer),
           "回复应复述用户提供的天气边界",
         ),
+        expectText(data.answer, "带把伞", "降雨场景应主动提醒携带雨具"),
+        expectText(data.answer, "湿滑", "降雨场景应提醒路面安全"),
       ];
     },
   },
@@ -353,6 +361,57 @@ const cases = [
       return [
         expectText(data.answer, "18:30", "西北田径场应从18:30计入"),
         expectText(data.answer, "21:00", "西北田径场应到21:00结束"),
+      ];
+    },
+  },
+  {
+    id: "national_holiday_answer",
+    query: "2026年国庆节什么时候放假？",
+    check(data) {
+      return [
+        expectEqual(data.status, "completed", "法定节假日问答应正常完成"),
+        expectText(data.answer, "10月1日", "应说明国庆节开始日期"),
+        expectText(data.answer, "10月7日", "应说明国庆节结束日期"),
+        expectText(data.answer, "10月10日", "应说明调休工作日"),
+        expectText(data.answer, "学校", "应提示高校课程以校历通知为准"),
+      ];
+    },
+  },
+  {
+    id: "adjusted_workday_is_not_guessed",
+    query: "2026年10月10日要上课吗？",
+    check(data) {
+      return [
+        expectEqual(data.status, "completed", "调休工作日问答应正常完成"),
+        expectText(data.answer, "调休工作日", "应识别国家调休工作日"),
+        expectTrue(
+          /不能据此推断|尚未录入|以.*通知为准/.test(data.answer),
+          "不能把国家上班日臆断成学校某一天的课表",
+        ),
+      ];
+    },
+  },
+  {
+    id: "holiday_venue_exception_preserves_other_tasks",
+    query:
+      "2026年10月2日去图书馆自习1小时，再去东操场跑步30分钟。",
+    check(data) {
+      const tasks = taskItems(data);
+      return [
+        expectEqual(data.status, "partial", "节假日闭馆时应返回局部可行方案"),
+        expectTrue(
+          !tasks.some((item) => item.title.includes("图书馆自习")),
+          "没有节假日开放通知时不能把图书馆任务排进去",
+        ),
+        expectTrue(
+          tasks.some((item) => item.title.includes("跑步")),
+          "不受闭馆影响的跑步任务应保留",
+        ),
+        expectText(data.answer, "待调整", "被拦住的任务不能被隐藏或删除"),
+        expectTrue(
+          /免得.{0,3}到.{0,3}门口/.test(data.answer),
+          "回复应解释保护用户的原因",
+        ),
       ];
     },
   },

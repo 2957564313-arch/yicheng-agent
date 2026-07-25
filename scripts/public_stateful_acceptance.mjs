@@ -209,6 +209,129 @@ results.push(await runCase("explicit_transport_overrides_memory", async () => {
   assert(travel.travel_mode === "walk", "本轮明确步行没有覆盖长期偏好");
 }));
 
+results.push(await runCase("walking_pace_memory_changes_duration", async () => {
+  async function travelFor(label, memories) {
+    const data = await chat({
+      user_id: `stateful_walk_${label}_${stamp}`,
+      thread_id: `stateful_walk_${label}_thread_${stamp}`,
+      query: "今天14点从第六教学楼出发，步行去图书馆自习1小时。",
+      mode: "offline",
+      client_context: {
+        now: "2026-07-24T13:00:00+08:00",
+        memories,
+      },
+    });
+    return travelItems(data)[0];
+  }
+  const normal = await travelFor("normal", []);
+  const slow = await travelFor("slow", [{
+    category: "preference",
+    key: "walking_speed",
+    label: "步行节奏",
+    value: "slow",
+    enabled: true,
+  }]);
+  assert(normal && slow, "没有生成用于比较的步行通勤");
+  assert(
+    slow.base_duration_min > normal.base_duration_min,
+    "慢速步行偏好没有增加预留时间",
+  );
+}));
+
+results.push(await runCase("preferred_place_memory_applied", async () => {
+  const data = await chat({
+    user_id: `stateful_place_${stamp}`,
+    thread_id: `stateful_place_thread_${stamp}`,
+    query: "今天14点后自习1小时。",
+    mode: "offline",
+    client_context: {
+      now: "2026-07-24T13:00:00+08:00",
+      memories: [{
+        category: "preference",
+        key: "preferred_locations",
+        label: "常用地点",
+        value: ["第六教学楼"],
+        enabled: true,
+      }],
+    },
+  });
+  const study = taskItems(data).find((item) => item.title.includes("自习"));
+  assert(study, "自习任务丢失");
+  assert(
+    study.location_id === "teaching_building_6",
+    "未采用用户保存的常用自习地点",
+  );
+}));
+
+results.push(await runCase("makeup_calendar_uses_replacement_weekday", async () => {
+  const data = await chat({
+    user_id: `stateful_makeup_${stamp}`,
+    thread_id: `stateful_makeup_thread_${stamp}`,
+    query: "2026年10月10日哪几节有课？",
+    mode: "offline",
+    client_context: {
+      now: "2026-07-24T13:00:00+08:00",
+      timetable: {
+        name: "验收补课课表",
+        term_start: "2026-09-28",
+        term_end: "2027-01-31",
+        enabled: true,
+        entries: [{
+          course_name: "数据结构",
+          weekday: 5,
+          start_period: 6,
+          end_period: 7,
+          location: "第六教学楼",
+          weeks: [],
+        }],
+      },
+      calendar_overrides: [{
+        date: "2026-10-10",
+        action: "makeup",
+        replacement_weekday: 5,
+        label: "学校通知：补星期五课程",
+      }],
+    },
+  });
+  assert(data.answer.includes("数据结构"), "补课日没有载入替代星期的课程");
+  assert(data.answer.includes("第6—7节"), "补课课程节次错误");
+}));
+
+results.push(await runCase("holiday_suppresses_regular_timetable", async () => {
+  const data = await chat({
+    user_id: `stateful_holiday_${stamp}`,
+    thread_id: `stateful_holiday_thread_${stamp}`,
+    query: "2026年10月2日要上课吗？",
+    mode: "offline",
+    client_context: {
+      now: "2026-07-24T13:00:00+08:00",
+      timetable: {
+        name: "验收节假日课表",
+        term_start: "2026-09-28",
+        term_end: "2027-01-31",
+        enabled: true,
+        entries: [{
+          course_name: "本不应出现的星期五课程",
+          weekday: 5,
+          start_period: 1,
+          end_period: 2,
+          location: "第六教学楼",
+          weeks: [],
+        }],
+      },
+    },
+  });
+  assert(data.answer.includes("国庆节"), "未识别法定节假日");
+  assert(
+    !data.answer.includes("本不应出现的星期五课程"),
+    "法定节假日错误加载了常规个人课表",
+  );
+  assert(
+    /不执行常规课程|常规课程不占用/.test(data.answer),
+    "没有明确说明常规课表被节假日暂停",
+  );
+}));
+
 const passed = results.filter(Boolean).length;
 console.log(`\n${passed}/${results.length} stateful scenarios passed against ${baseUrl}`);
 if (passed !== results.length) process.exitCode = 1;

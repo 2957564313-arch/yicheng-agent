@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from app.providers.amap import (
+    AmapCampusDiscoveryProvider,
     AmapGeocodingProvider,
     AmapRouteProvider,
     AmapWeatherProvider,
@@ -257,6 +258,109 @@ async def test_amap_route_requires_verified_coordinates(tmp_path: Path):
     )
     with pytest.raises(LookupError, match="verified coordinates"):
         await provider.get_route("a", "b")
+
+
+@pytest.mark.asyncio
+async def test_amap_route_rejects_different_campuses(tmp_path: Path):
+    locations = build_locations(tmp_path)
+    original = locations.get("b")
+    locations._locations["b"] = original.model_copy(  # noqa: SLF001
+        update={"campus_id": "another_campus"}
+    )
+    provider = AmapRouteProvider(
+        locations=locations,
+        api_key="test-key",
+    )
+
+    with pytest.raises(LookupError, match="different campuses"):
+        await provider.get_route("a", "b")
+
+
+@pytest.mark.asyncio
+async def test_campus_discovery_builds_campus_scoped_directory(
+    monkeypatch,
+    tmp_path: Path,
+):
+    fake = type(
+        "CampusDiscoveryClient",
+        (SequencedFakeAsyncClient,),
+        {},
+    )
+    fake.payloads = [
+        {
+            "status": "1",
+            "pois": [
+                {
+                    "id": "school-1",
+                    "name": "测试大学中心校区",
+                    "location": "120.000000,30.000000",
+                    "adcode": "330100",
+                }
+            ],
+        },
+        {
+            "status": "1",
+            "pois": [
+                {
+                    "id": "teach-1",
+                    "name": "第一教学楼",
+                    "location": "120.001000,30.001000",
+                }
+            ],
+        },
+        {
+            "status": "1",
+            "pois": [
+                {
+                    "id": "library-1",
+                    "name": "测试大学图书馆",
+                    "location": "120.002000,30.001000",
+                }
+            ],
+        },
+        {"status": "1", "pois": []},
+        {"status": "1", "pois": []},
+        {"status": "1", "pois": []},
+        {
+            "status": "1",
+            "pois": [
+                {
+                    "id": "hospital-1",
+                    "name": "测试大学校医院",
+                    "location": "120.001000,30.002000",
+                }
+            ],
+        },
+    ]
+    fake.calls = []
+    monkeypatch.setattr("app.providers.amap.httpx.AsyncClient", fake)
+    locations = build_locations(tmp_path)
+    provider = AmapCampusDiscoveryProvider(
+        locations=locations,
+        api_key="test-key",
+    )
+
+    result = await provider.discover(
+        school_name="测试大学中心校区",
+        city="杭州",
+    )
+
+    assert result.campus.display_name == "测试大学中心校区"
+    assert result.campus.weather_adcode == "330100"
+    assert len(result.campus.locations) == 4
+    assert all(
+        location.campus_id == result.campus.campus_id
+        for location in result.campus.locations
+    )
+    assert (
+        locations.resolve(
+            "测试大学图书馆",
+            campus_id=result.campus.campus_id,
+        )
+        is not None
+    )
+    assert locations.resolve("测试大学图书馆") is None
+    assert len(fake.calls) == 7
 
 
 @pytest.mark.asyncio

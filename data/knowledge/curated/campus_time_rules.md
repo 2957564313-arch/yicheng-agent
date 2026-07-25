@@ -3,6 +3,7 @@ source_path: "杭电时间知识库.docx"
 verified: true
 project_owner_confirmed: true
 official_verification_required: false
+knowledge_type: operations
 ---
 
 # 杭州电子科技大学校园时间规则

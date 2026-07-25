@@ -5,7 +5,7 @@ from datetime import datetime, time, timedelta
 
 from app.container import AppContainer
 from app.nodes.common import append_trace
-from app.schemas.common import Issue, IssueSeverity
+from app.schemas.common import DataSource, Issue, IssueSeverity
 from app.schemas.context import RetrievedFact, TravelEstimate, WeatherContext
 from app.schemas.plan import Plan
 from app.schemas.task import Task
@@ -266,6 +266,13 @@ def _success_answer(
     ]
     task_titles = [item.title for item in task_items]
     task_names = "、".join(f"“{title}”" for title in task_titles)
+    travel_items = [
+        item for item in ordered_items if item.item_type == "travel"
+    ]
+    opening_rules_available = not any(
+        raw.get("code") == "CAMPUS_KNOWLEDGE_NOT_CONFIGURED"
+        for raw in warnings
+    )
     weather_adjustment = _has_precise_weather_risk(weather)
     if weather_adjustment:
         lines = [
@@ -287,18 +294,28 @@ def _success_answer(
             "没有变化的任务尽量留在原来的时间。"
         )
     else:
+        verified_parts = ["时间顺序"]
+        if travel_items:
+            verified_parts.append("路上耗时")
+        if opening_rules_available:
+            verified_parts.append("场所开放时段")
         lines = [
             "这几件事能排开。"
-            "我把路上的时间和场所开放时段也留意过了，"
+            f"我把{'、'.join(verified_parts)}一起核对过了，"
             "按这个节奏走，不需要卡着分钟一路赶。"
         ]
         if any("自习" in title or "学习" in title for title in task_titles):
-            lines.append(
+            thought = (
                 "安排思路：先留出一段完整、连续的学习时间，"
                 "再按你说的先后顺序衔接其他事情，避免把专注时间切得"
-                "太碎；"
-                "跨地点之间的通勤时间也已经按你选择的出行方式单独留出。"
+                "太碎。"
             )
+            if travel_items:
+                thought += (
+                    "跨地点之间的通勤时间也已经按你选择的出行方式"
+                    "单独留出。"
+                )
+            lines.append(thought)
         else:
             lines.append(
                 f"安排思路：把{task_names}按时间和地点顺序连起来，"
@@ -341,17 +358,28 @@ def _success_answer(
     ]
     if warning_messages:
         lines.append("提醒：" + "；".join(dict.fromkeys(warning_messages)))
-    elif weather_adjustment:
+    elif weather_adjustment and opening_rules_available:
         lines.append(
             "时间、通勤、开放时段和天气风险都已经核对过，"
             "户外任务安排在已知风险时段之前。"
         )
-    else:
+    elif weather_adjustment:
         lines.append(
-            "时间、通勤和开放时段都已经核对过，可以安心照着执行。"
+            "时间、通勤和天气风险已经核对过；这所学校的开放规则"
+            "尚未导入，出发前请再确认场所是否开放。"
         )
-    reminders = _knowledge_reminders(facts)
-    weather_reminder = _weather_reminder(weather)
+    else:
+        verified_summary = ["时间"]
+        if travel_items:
+            verified_summary.append("通勤")
+        if opening_rules_available:
+            verified_summary.append("开放时段")
+        lines.append(
+            f"{'、'.join(verified_summary)}已经核对过，"
+            "可以按这份安排执行。"
+        )
+    reminders = _knowledge_reminders(facts, query=query)
+    weather_reminder = _weather_reminder(weather, query=query)
     if weather_reminder:
         reminders.insert(0, weather_reminder)
         reminders = reminders[:2]
@@ -380,10 +408,14 @@ def _success_answer(
         lines.append("再替你留意两点：")
         lines.extend(f"• {item}" for item in reminders)
     if ordered_items:
-        lines.append(
-            f"整套安排预计在 {ordered_items[-1].end_at:%H:%M} 收尾，"
-            f"其中已经留出 {plan.metrics.travel_minutes} 分钟通勤。"
+        finish_line = (
+            f"整套安排预计在 {ordered_items[-1].end_at:%H:%M} 收尾"
         )
+        if plan.metrics.travel_minutes > 0:
+            finish_line += (
+                f"，其中已经留出 {plan.metrics.travel_minutes} 分钟通勤"
+            )
+        lines.append(finish_line + "。")
     lines.append(
         "如果临时晚出发、课程拖堂或身体状态有变化，直接告诉我"
         "晚了多久或哪一项想保留，我会只调整受影响的部分。"
@@ -405,7 +437,11 @@ def _has_precise_weather_risk(weather: list[WeatherContext]) -> bool:
     )
 
 
-def _weather_reminder(weather: list[WeatherContext]) -> str | None:
+def _weather_reminder(
+    weather: list[WeatherContext],
+    *,
+    query: str = "",
+) -> str | None:
     live = next(
         (
             item
@@ -417,32 +453,57 @@ def _weather_reminder(weather: list[WeatherContext]) -> str | None:
     if live is None:
         return None
     condition = live.condition or ""
-    if (
-        "雨" in condition
-        or "雪" in condition
-        or "风" in condition
-        or (live.rain_probability or 0) >= 0.5
-    ):
+    has_rain = (
+        "雨" in condition or (live.rain_probability or 0) >= 0.5
+    )
+    has_snow = "雪" in condition
+    has_wind = "风" in condition
+    if has_rain or has_snow or has_wind:
+        if has_rain:
+            care = (
+                "随身带把伞，雨后路面可能湿滑，步行或骑行都慢一点"
+            )
+        elif has_snow:
+            care = "注意保暖和路面湿滑，步行或骑行都慢一点"
+        else:
+            care = "尽量避开临时搭建物和树下，骑行时注意侧风"
         if live.risk_start_at:
             if live.source.value == "user":
                 return (
                     f"你提醒 {live.risk_start_at:%H:%M} 后有雨，户外活动"
-                    "已经按这个时间边界处理；出发前再看一次临近预报"
-                    "会更稳妥。"
+                    f"已经按这个时间边界处理；{care}，出发前再看一次"
+                    "临近预报会更稳妥。"
                 )
             return (
                 f"{live.risk_start_at:%H:%M} 后有“{condition or '降雨'}”"
-                "风险，户外活动已按这个时间边界处理；出发前再看一次"
-                "临近预报会更稳妥。"
+                f"风险，户外活动已按这个时间边界处理；{care}，"
+                "出发前再看一次临近预报会更稳妥。"
             )
         return (
             f"天气信息显示“{condition}”，目前只能精确到日/夜时段；"
-            "户外活动出发前请再看一次临近预报，变化时我可以局部调整。"
+            f"{care}。户外活动出发前请再看一次临近预报，变化时"
+            "我可以局部调整。"
         )
     if live.temperature_c is not None and live.temperature_c >= 32:
+        if any(
+            marker in query
+            for marker in (
+                "跑步",
+                "运动",
+                "打球",
+                "足球",
+                "篮球",
+                "羽毛球",
+                "骑行",
+            )
+        ):
+            return (
+                f"当前预报约 {live.temperature_c:g}℃，运动前记得补水，"
+                "尽量避开最晒的时段。"
+            )
         return (
-            f"当前预报约 {live.temperature_c:g}℃，运动前记得补水，"
-            "尽量避开最晒的时段。"
+            f"当前预报约 {live.temperature_c:g}℃，出门记得防晒和补水，"
+            "尽量走阴凉处；室内外温差较大时也可以带件薄外套。"
         )
     return None
 
@@ -508,25 +569,96 @@ def _congestion_suggested_actions(
 def _knowledge_reminders(
     facts: list[RetrievedFact],
     *,
+    query: str,
     limit: int = 2,
 ) -> list[str]:
     reminders: list[str] = []
-    for fact in sorted(facts, key=lambda item: -item.priority):
-        compact = " ".join(fact.content.split())
-        first_sentence = re.split(r"(?<=[。！？])", compact)[0].strip()
-        if not first_sentence:
+    reminder_topics: set[str] = set()
+    query_topics = _knowledge_topics(query)
+    source_rank = {
+        DataSource.USER: 5,
+        DataSource.STRUCTURED: 4,
+        DataSource.LIVE_API: 3,
+        DataSource.RAG: 2,
+    }
+    ordered = sorted(
+        enumerate(facts),
+        key=lambda pair: (
+            -source_rank.get(pair[1].source, 0),
+            -pair[1].priority,
+            pair[0],
+        ),
+    )
+    for _, fact in ordered:
+        fact_topic = _knowledge_topic(fact.content)
+        if (
+            fact.source == DataSource.RAG
+            and query_topics
+            and fact_topic
+            and fact_topic not in query_topics
+        ):
             continue
-        if len(first_sentence) > 150:
-            first_sentence = first_sentence[:150].rstrip() + "…"
+        excerpt = (
+            " ".join(fact.content.split())
+            if fact.source == DataSource.STRUCTURED
+            else _knowledge_answer_excerpt(fact.content, query)
+        )
+        if not excerpt:
+            continue
+        if len(excerpt) > 180:
+            excerpt = excerpt[:180].rstrip() + "…"
         if any(
-            first_sentence[:60] == existing[:60]
+            excerpt[:60] == existing[:60]
             for existing in reminders
         ):
             continue
-        reminders.append(first_sentence)
+        topic = fact_topic or _knowledge_topic(excerpt)
+        if topic and topic in reminder_topics:
+            continue
+        reminders.append(excerpt)
+        if topic:
+            reminder_topics.add(topic)
         if len(reminders) >= limit:
             break
     return reminders
+
+
+def _knowledge_topic(content: str) -> str | None:
+    topics = _knowledge_topics(content)
+    return next(
+        (
+            topic
+            for topic in (
+                "sun_run",
+                "library",
+                "parcel",
+                "dormitory",
+                "hot_water",
+                "clinic",
+                "class",
+                "congestion",
+            )
+            if topic in topics
+        ),
+        None,
+    )
+
+
+def _knowledge_topics(content: str) -> set[str]:
+    result: set[str] = set()
+    for topic, markers in (
+        ("sun_run", ("阳光长跑", "田径场", "操场")),
+        ("library", ("图书馆", "阅览室")),
+        ("parcel", ("快递", "驿站")),
+        ("dormitory", ("门禁", "公寓楼", "熄灯")),
+        ("hot_water", ("热水",)),
+        ("clinic", ("校医院", "就诊")),
+        ("class", ("上课时间", "第1节", "课表")),
+        ("congestion", ("拥堵", "集中通行")),
+    ):
+        if any(marker in content for marker in markers):
+            result.add(topic)
+    return result
 
 
 def _infeasible_answer(
@@ -899,6 +1031,21 @@ def _polished_answer_is_grounded(
         r"高德(?:实时|返回).{0,8}(?:路线|时间|数据)",
         answer,
     ):
+        return False
+    campus_rules_missing = any(
+        raw.get("code") == "CAMPUS_KNOWLEDGE_NOT_CONFIGURED"
+        for raw in warnings
+    )
+    if campus_rules_missing and re.search(
+        r"(?:开放时间|开放时段|场所开放)[^。；\n]{0,12}"
+        r"(?:已|已经)?(?:核对|确认|留意|检查)",
+        answer,
+    ):
+        return False
+    has_travel = any(
+        item.item_type == "travel" for item in plan.items
+    )
+    if not has_travel and re.search(r"(?:留出|预留)\s*0\s*分钟通勤", answer):
         return False
     return True
 

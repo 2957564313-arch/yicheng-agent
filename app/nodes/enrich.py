@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime, time
 from itertools import combinations
+import math
 from zoneinfo import ZoneInfo
 
 from app.container import AppContainer
@@ -18,6 +19,29 @@ def make_enrich_node(container: AppContainer):
     async def enrich(state: CampusAgentState) -> dict:
         tasks = [Task.model_validate(raw) for raw in state["tasks"]]
         is_knowledge_query = state.get("intent") == "query"
+        active_campus = state.get("active_campus") or {}
+        default_campus_id = (
+            container.campus_profile.get("profile_id")
+            or container.locations.campus_id
+        )
+        active_campus_id = (
+            active_campus.get("campus_id")
+            or default_campus_id
+        )
+        uses_default_campus_pack = active_campus_id == default_campus_id
+        campus_query = (
+            active_campus.get("display_name")
+            or container.campus_profile.get("display_name")
+            or ""
+        )
+        search_city = (
+            active_campus.get("search_city")
+            or (
+                container.campus_profile.get("external_services", {})
+                .get("amap", {})
+                .get("search_city", "")
+            )
+        )
         warnings = [
             Issue.model_validate(raw)
             for raw in state.get("provider_warnings", [])
@@ -33,9 +57,15 @@ def make_enrich_node(container: AppContainer):
         for index, task in enumerate(tasks):
             raw_location = task.location_raw or task.location_id
             location = (
-                container.locations.get(task.location_id)
+                container.locations.get(
+                    task.location_id,
+                    campus_id=active_campus_id,
+                )
                 if task.location_id
-                else container.locations.resolve(task.location_raw)
+                else container.locations.resolve(
+                    task.location_raw,
+                    campus_id=active_campus_id,
+                )
             )
             if (
                 location is None
@@ -44,7 +74,12 @@ def make_enrich_node(container: AppContainer):
                 and container.geocoder is not None
             ):
                 try:
-                    location = await container.geocoder.resolve(raw_location)
+                    location = await container.geocoder.resolve(
+                        _generic_location_name(raw_location),
+                        campus_id=active_campus_id,
+                        campus_query=campus_query,
+                        search_city=search_city,
+                    )
                 except Exception:
                     location = None
             if location:
@@ -73,7 +108,8 @@ def make_enrich_node(container: AppContainer):
         initial_location_raw = state.get("initial_location_raw")
         if initial_location_raw:
             initial_location = container.locations.resolve(
-                initial_location_raw
+                initial_location_raw,
+                campus_id=active_campus_id,
             )
             if (
                 initial_location is None
@@ -82,7 +118,10 @@ def make_enrich_node(container: AppContainer):
             ):
                 try:
                     initial_location = await container.geocoder.resolve(
-                        initial_location_raw
+                        initial_location_raw,
+                        campus_id=active_campus_id,
+                        campus_query=campus_query,
+                        search_city=search_city,
                     )
                 except Exception:
                     initial_location = None
@@ -120,7 +159,9 @@ def make_enrich_node(container: AppContainer):
             location_ids = sorted(set(location_ids))
         if is_knowledge_query:
             query_text = state["query"]
-            for location in container.locations.all():
+            for location in container.locations.all(
+                campus_id=active_campus_id,
+            ):
                 names = [location.name, *location.aliases]
                 if any(name and name in query_text for name in names):
                     location_ids.append(location.id)
@@ -142,6 +183,10 @@ def make_enrich_node(container: AppContainer):
                     routes.append(estimate)
                 except LookupError:
                     continue
+        routes = [
+            _personalize_walking_estimate(route, preferences.walking_speed)
+            for route in routes
+        ]
         route_warning_messages = list(
             dict.fromkeys(
                 route.warning for route in routes if route.warning
@@ -221,9 +266,13 @@ def make_enrich_node(container: AppContainer):
             if state.get("academic_day_context")
             else None
         )
-        congestion_windows = container.rules.congestion_contexts(target_date)
+        congestion_windows = (
+            container.rules.congestion_contexts(target_date)
+            if uses_default_campus_pack
+            else []
+        )
         opening_windows = {}
-        for location_id in location_ids:
+        for location_id in location_ids if uses_default_campus_pack else []:
             if not container.rules.has_opening_rule(location_id):
                 continue
             windows = container.rules.opening_windows(
@@ -268,10 +317,29 @@ def make_enrich_node(container: AppContainer):
                         )
                     )
 
-        structured_facts = container.rules.facts_for_locations(
-            set(location_ids)
+        structured_facts = (
+            container.rules.facts_for_locations(set(location_ids))
+            if uses_default_campus_pack
+            else []
         )
-        if academic_day and (
+        if not uses_default_campus_pack:
+            warnings.append(
+                Issue(
+                    code="CAMPUS_KNOWLEDGE_NOT_CONFIGURED",
+                    severity=IssueSeverity.WARNING,
+                    message=(
+                        f"已切换到“{campus_query or active_campus_id}”的"
+                        "高德地点目录，但这所学校的开放时间、节次和制度"
+                        "知识包尚未导入；本次不会借用其他学校的规则"
+                    ),
+                    details={
+                        "active_campus_id": active_campus_id,
+                        "default_campus_id": default_campus_id,
+                    },
+                    recoverable=True,
+                )
+            )
+        if uses_default_campus_pack and academic_day and (
             academic_day.course_action != "normal"
             or academic_day.day_type == "unknown"
         ):
@@ -338,7 +406,11 @@ def make_enrich_node(container: AppContainer):
                 ),
                 *structured_facts,
             ]
-        if is_knowledge_query and state.get("timetable_summary"):
+        if (
+            uses_default_campus_pack
+            and is_knowledge_query
+            and state.get("timetable_summary")
+        ):
             structured_facts = [
                 RetrievedFact(
                     id="personal_timetable",
@@ -350,7 +422,10 @@ def make_enrich_node(container: AppContainer):
                 *structured_facts,
             ]
         rag_facts = []
-        if not (is_knowledge_query and state.get("timetable_summary")):
+        if (
+            uses_default_campus_pack
+            and not (is_knowledge_query and state.get("timetable_summary"))
+        ):
             rag_facts = await container.rag.retrieve(
                 [
                     state["query"],
@@ -358,6 +433,7 @@ def make_enrich_node(container: AppContainer):
                     *location_ids,
                 ],
                 top_k=5 if is_knowledge_query else 3,
+                purpose="auto" if is_knowledge_query else "planning",
             )
         weather = []
         if not is_knowledge_query:
@@ -368,6 +444,12 @@ def make_enrich_node(container: AppContainer):
                     state.get("mode") in {"auto", "live"}
                     and container.settings.live_weather_enabled
                 ),
+                city_adcode=(
+                    active_campus.get("weather_adcode")
+                    if active_campus
+                    else None
+                ),
+                allow_static=uses_default_campus_pack,
             )
             user_weather = _explicit_user_weather(
                 query=state["query"],
@@ -427,6 +509,39 @@ def make_enrich_node(container: AppContainer):
         }
 
     return enrich
+
+
+def _generic_location_name(raw_name: str) -> str:
+    """Translate internal generic IDs without binding them to one school."""
+    return {
+        "library": "图书馆",
+        "track": "操场",
+        "parcel_station": "快递驿站",
+        "canteen": "食堂",
+        "laboratory": "实验室",
+    }.get(raw_name, raw_name)
+
+
+def _personalize_walking_estimate(
+    estimate,
+    walking_speed: str,
+):
+    """Adjust walk time only when the user explicitly saved a pace."""
+    if estimate.mode != "walk" or walking_speed == "normal":
+        return estimate
+    factor = {"slow": 1.25, "fast": 0.85}.get(walking_speed, 1.0)
+    base = (
+        estimate.base_duration_min
+        if estimate.base_duration_min is not None
+        else estimate.duration_min
+    )
+    personalized = max(1, math.ceil(base * factor))
+    return estimate.model_copy(
+        update={
+            "duration_min": personalized,
+            "base_duration_min": personalized,
+        }
+    )
 
 
 def _explicit_user_weather(

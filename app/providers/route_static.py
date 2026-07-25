@@ -54,6 +54,17 @@ class StaticRouteProvider:
                 confidence=1,
             )
 
+        origin_location = self.locations.get(origin_id)
+        destination_location = self.locations.get(destination_id)
+        if (
+            origin_location is None
+            or destination_location is None
+            or origin_location.campus_id != destination_location.campus_id
+        ):
+            raise LookupError(
+                "route endpoints are unknown or belong to different campuses"
+            )
+
         pair = self._pairs.get((origin_id, destination_id))
         if pair:
             duration_min = self._duration_for_mode(

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "campus_id": "hdu_xiasha_reference",
+  "campus_id": "hdu_xiasha",
   "data_quality": "project_owner_verified_names_amap_poi_partial",
   "updated_at": "2026-07-24T02:50:00+08:00",
   "locations": [

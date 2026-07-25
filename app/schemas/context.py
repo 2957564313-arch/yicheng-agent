@@ -16,6 +16,7 @@ class SourceMetadata(BaseModel):
 
 class CampusLocation(BaseModel):
     id: str
+    campus_id: str | None = None
     name: str
     aliases: list[str] = Field(default_factory=list)
     category: str

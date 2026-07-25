@@ -802,6 +802,135 @@ def test_browser_memory_snapshot_survives_without_server_record(tmp_path):
         )
 
 
+def test_saved_walking_pace_personalizes_travel_time(tmp_path):
+    def request(client, user_id, memories):
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": user_id,
+                "thread_id": f"{user_id}_thread",
+                "query": (
+                    "今天14点从第六教学楼出发，"
+                    "步行去图书馆自习1小时。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "memories": memories,
+                },
+            },
+        )
+        assert response.status_code == 200, response.text
+        return next(
+            item
+            for item in response.json()["plan"]["items"]
+            if item["item_type"] == "travel"
+        )
+
+    with TestClient(build_test_app(tmp_path)) as client:
+        normal = request(client, "normal_walk_user", [])
+        slow = request(
+            client,
+            "slow_walk_user",
+            [
+                {
+                    "category": "preference",
+                    "key": "walking_speed",
+                    "label": "步行节奏",
+                    "value": "slow",
+                    "enabled": True,
+                }
+            ],
+        )
+
+    assert slow["base_duration_min"] > normal["base_duration_min"]
+    assert slow["end_at"] > normal["end_at"]
+
+
+def test_saved_preferred_place_applies_when_request_has_no_place(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "preferred_place_user",
+                "thread_id": "preferred_place_thread",
+                "query": "今天14点后自习1小时。",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "memories": [
+                        {
+                            "category": "preference",
+                            "key": "preferred_locations",
+                            "label": "常用地点",
+                            "value": ["第六教学楼"],
+                            "enabled": True,
+                        }
+                    ],
+                },
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    study = next(
+        item
+        for item in task_items(response.json()).values()
+        if "自习" in item["title"]
+    )
+    assert study["location_id"] == "teaching_building_6"
+
+
+def test_avoid_tight_schedule_memory_can_be_disabled(tmp_path):
+    def buffer_after_travel(client, user_id, memory_value):
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": user_id,
+                "thread_id": f"{user_id}_thread",
+                "query": (
+                    "今天14点后去图书馆自习1小时，"
+                    "再去菜鸟驿站取快递。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "memories": [
+                        {
+                            "category": "preference",
+                            "key": "avoid_tight_schedule",
+                            "label": "避免行程太紧",
+                            "value": memory_value,
+                            "enabled": True,
+                        }
+                    ],
+                },
+            },
+        )
+        assert response.status_code == 200, response.text
+        items = sorted(
+            response.json()["plan"]["items"],
+            key=lambda item: item["start_at"],
+        )
+        travel = next(item for item in items if item["item_type"] == "travel")
+        parcel = next(
+            item for item in items if item.get("task_id") == "parcel"
+        )
+        return int(
+            (
+                datetime.fromisoformat(parcel["start_at"])
+                - datetime.fromisoformat(travel["end_at"])
+            ).total_seconds()
+            // 60
+        )
+
+    with TestClient(build_test_app(tmp_path)) as client:
+        relaxed = buffer_after_travel(client, "relaxed_user", False)
+        buffered = buffer_after_travel(client, "buffered_user", True)
+
+    assert relaxed == 0
+    assert buffered >= 10
+
+
 def test_browser_timetable_snapshot_is_a_fixed_constraint(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         response = client.post(

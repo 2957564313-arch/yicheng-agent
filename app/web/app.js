@@ -38,6 +38,12 @@ const calendarWeekday = $("#calendar-weekday");
 const calendarLabel = $("#calendar-label");
 const calendarSave = $("#calendar-save");
 const calendarList = $("#calendar-list");
+const campusName = $("#campus-name");
+const campusCity = $("#campus-city");
+const campusDiscover = $("#campus-discover");
+const campusReset = $("#campus-reset");
+const campusState = $("#campus-state");
+const campusSummary = $("#campus-summary");
 const adjustmentPanel = $(".adjustment-panel");
 const consoleUserId = getOrCreateLocalIdentity(
   "yicheng_user_id",
@@ -56,6 +62,7 @@ const memorySnapshotKey = "yicheng_memory_snapshot";
 const timetableSnapshotKey = "yicheng_timetable_snapshot";
 const calendarSnapshotKey = "yicheng_calendar_snapshot";
 const planSnapshotKey = "yicheng_current_plan_snapshot";
+const campusSnapshotKey = "yicheng_campus_snapshot";
 
 function readLocalSnapshot(key, fallback) {
   try {
@@ -74,6 +81,7 @@ function clientContextSnapshot() {
   const timetableData = readLocalSnapshot(timetableSnapshotKey, null);
   const calendarOverrides = readLocalSnapshot(calendarSnapshotKey, []);
   const previousPlan = readLocalSnapshot(planSnapshotKey, null);
+  const campus = readLocalSnapshot(campusSnapshotKey, null);
   return {
     memories: memories.map((item) => ({
       category: item.category,
@@ -99,8 +107,96 @@ function clientContextSnapshot() {
       source_ref: item.source_ref || null,
     })),
     previous_plan: previousPlan,
+    campus,
   };
 }
+
+function renderCampus(campus, { isDefault = false } = {}) {
+  if (!campus) {
+    campusState.textContent = "尚未选择";
+    campusSummary.textContent = "请先输入学校和校区。";
+    campusSummary.classList.add("muted");
+    campusReset.hidden = true;
+    return;
+  }
+  const locationCount = campus.locations?.length
+    ?? campus.location_count
+    ?? 0;
+  campusName.value = campus.display_name || "";
+  campusCity.value = campus.search_city || "";
+  campusState.textContent = isDefault ? "默认校园" : "已切换";
+  campusState.classList.add("ready");
+  campusSummary.classList.remove("muted");
+  campusSummary.innerHTML = `
+    <strong>${escapeHtml(campus.display_name)}</strong>
+    <span>已保存 ${locationCount} 个本校地点${
+      isDefault
+        ? "，并已配置本校知识规则。"
+        : "。地点可用于路线计算；开放时间、节次和制度仍需导入本校知识包。"
+    }</span>
+  `;
+  campusReset.hidden = isDefault;
+}
+
+async function loadCampus() {
+  const saved = readLocalSnapshot(campusSnapshotKey, null);
+  if (saved) {
+    renderCampus(saved);
+    return;
+  }
+  const response = await fetch("/api/v1/campuses/current");
+  const data = await response.json();
+  if (!response.ok) throw data;
+  renderCampus(data, { isDefault: true });
+}
+
+campusDiscover.addEventListener("click", async () => {
+  const schoolName = campusName.value.trim();
+  if (!schoolName) {
+    campusSummary.textContent = "请先填写学校名称，最好包含具体校区。";
+    campusSummary.classList.remove("muted");
+    return;
+  }
+  campusDiscover.disabled = true;
+  campusDiscover.textContent = "正在查找校园地点…";
+  campusSummary.textContent = "正在通过高德分类查找本校地点，请稍候。";
+  try {
+    const response = await fetch("/api/v1/campuses/discover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        school_name: schoolName,
+        city: campusCity.value.trim(),
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw data;
+    writeLocalSnapshot(campusSnapshotKey, data.campus);
+    localStorage.removeItem(planSnapshotKey);
+    renderCampus(data.campus);
+    campusSummary.insertAdjacentHTML(
+      "beforeend",
+      `<small>${escapeHtml(data.coverage_note)}</small>`,
+    );
+  } catch (error) {
+    campusState.textContent = "查找失败";
+    campusSummary.textContent = error?.error?.message
+      || "暂时无法查找这所学校，请检查名称和城市后重试。";
+    campusSummary.classList.remove("muted");
+  } finally {
+    campusDiscover.disabled = false;
+    campusDiscover.textContent = "查找这所学校";
+  }
+});
+
+campusReset.addEventListener("click", async () => {
+  localStorage.removeItem(campusSnapshotKey);
+  localStorage.removeItem(planSnapshotKey);
+  campusName.value = "";
+  campusCity.value = "";
+  campusState.classList.remove("ready");
+  await loadCampus().catch((error) => renderDebug(error));
+});
 
 function getOrCreateLocalIdentity(storageKey, prefix) {
   const stored = localStorage.getItem(storageKey);
@@ -159,11 +255,6 @@ const memoryDefinitions = {
     label: "常用地点",
     placeholder: "例如：图书馆、东操场",
     category: "preference",
-  },
-  custom_note: {
-    label: "其他习惯",
-    placeholder: "例如：晚上更适合运动",
-    category: "habit",
   },
 };
 
@@ -1075,6 +1166,11 @@ updateMemoryPlaceholder();
 loadMemories().catch((error) => renderDebug(error));
 loadTimetable().catch((error) => renderDebug(error));
 loadCalendarOverrides().catch((error) => renderDebug(error));
+loadCampus().catch((error) => {
+  campusState.textContent = "读取失败";
+  campusSummary.textContent = "暂时无法读取校园设置。";
+  renderDebug(error);
+});
 loadDemos().catch(() => {
   demoButtons.textContent = "案例加载失败";
 });

@@ -228,9 +228,19 @@ def _planning_insights(
     query: str,
     time_context: PlanningTimeContext,
 ) -> list[PlanningInsight]:
+    source_rank = {
+        DataSource.USER.value: 5,
+        DataSource.STRUCTURED.value: 4,
+        DataSource.LIVE_API.value: 3,
+        DataSource.RAG.value: 2,
+    }
     facts = sorted(
         result.get("retrieved_facts", []),
-        key=lambda item: (-int(item.get("priority", 0)), item.get("id", "")),
+        key=lambda item: (
+            -source_rank.get(str(item.get("source", "")), 0),
+            -int(item.get("priority", 0)),
+            item.get("id", ""),
+        ),
     )
     insights: list[PlanningInsight] = [
         PlanningInsight(
@@ -242,7 +252,7 @@ def _planning_insights(
                     else "本次指定北京时间为 "
                 )
                 + f"{time_context.now:%Y年%m月%d日 %H:%M} "
-                f"计算；本次任务和天气查询对应"
+                f"计算；本次规划对应"
                 f"{time_context.target_date:%Y年%m月%d日}"
                 f"（{time_context.weekday}）"
             ),
@@ -296,6 +306,7 @@ def _planning_insights(
         )
     seen_content: set[str] = set()
     fact_limit = 3 if result.get("intent") == "query" else 2
+    fact_count = 0
     top_rag_priority = max(
         (
             int(fact.get("priority", 0))
@@ -350,7 +361,8 @@ def _planning_insights(
                 importance=importance,
             )
         )
-        if len(insights) >= fact_limit:
+        fact_count += 1
+        if fact_count >= fact_limit:
             break
 
     weather = result.get("weather_context", [])
@@ -595,6 +607,18 @@ async def execute_chat(
         ),
     )
     started = perf_counter()
+    active_campus = (
+        payload.client_context.campus
+        if payload.client_context
+        else None
+    )
+    if active_campus is not None:
+        for location in active_campus.locations:
+            container.locations.register_runtime(
+                location.model_copy(
+                    update={"campus_id": active_campus.campus_id}
+                )
+            )
     initial_state = {
         "trace_id": trace_id,
         "user_id": payload.user_id,
@@ -636,6 +660,11 @@ async def execute_chat(
                 else []
             )
         ],
+        "active_campus": (
+            active_campus.model_dump(mode="json")
+            if active_campus is not None
+            else None
+        ),
         "user_memories": [],
         "timetable_summary": None,
         "academic_day_context": None,

@@ -6,6 +6,7 @@ from app.nodes.respond import (
     _plain_text_answer,
     _polished_answer_is_grounded,
     _success_answer,
+    _weather_reminder,
 )
 from app.schemas.common import DataSource, PlanStatus
 from app.schemas.context import WeatherContext
@@ -183,3 +184,108 @@ def test_markdown_bullets_are_normalized_for_plain_text_frontend():
     assert "- " not in answer
     assert "• 第一项提醒" in answer
     assert "• 第二项提醒" in answer
+
+
+def test_rain_reminder_includes_umbrella_and_wet_surface_care():
+    reminder = _weather_reminder(
+        [
+            WeatherContext(
+                date=datetime(2026, 7, 24, tzinfo=TZ).date(),
+                period="afternoon",
+                condition="用户告知有雨",
+                risk_start_at=datetime(2026, 7, 24, 17, 0, tzinfo=TZ),
+                source=DataSource.USER,
+            )
+        ],
+        query="17点后去操场跑步",
+    )
+
+    assert reminder is not None
+    assert "带把伞" in reminder
+    assert "湿滑" in reminder
+    assert "17:00" in reminder
+
+
+def test_hot_weather_reminder_matches_non_sport_task():
+    reminder = _weather_reminder(
+        [
+            WeatherContext(
+                date=datetime(2026, 7, 24, tzinfo=TZ).date(),
+                period="day",
+                condition="晴",
+                temperature_c=38,
+                source=DataSource.LIVE_API,
+            )
+        ],
+        query="去图书馆学习",
+    )
+
+    assert reminder is not None
+    assert "防晒和补水" in reminder
+    assert "运动前" not in reminder
+
+
+def test_custom_campus_without_rules_never_claims_opening_hours_checked():
+    single_task_plan = Plan(
+        id="custom_campus_plan",
+        user_id="user",
+        thread_id="thread",
+        date=datetime(2026, 7, 25, tzinfo=TZ).date(),
+        status=PlanStatus.VALID,
+        items=[
+            PlanItem(
+                id="study_item",
+                task_id="study",
+                item_type="task",
+                title="图书馆自习",
+                start_at=datetime(2026, 7, 25, 14, 0, tzinfo=TZ),
+                end_at=datetime(2026, 7, 25, 15, 0, tzinfo=TZ),
+                location_id="custom_library",
+                source=DataSource.USER,
+            )
+        ],
+        created_at=datetime(2026, 7, 24, 13, 0, tzinfo=TZ),
+    )
+    answer = _success_answer(
+        single_task_plan,
+        [
+            {
+                "code": "CAMPUS_KNOWLEDGE_NOT_CONFIGURED",
+                "severity": "warning",
+                "message": "本校知识包尚未导入",
+                "details": {},
+            }
+        ],
+        intent="plan",
+        query="明天14点去图书馆学习1小时",
+        facts=[],
+        weather=[],
+        congestion_windows=[],
+    )
+
+    assert "开放时段也留意过" not in answer
+    assert "开放时段都已经核对过" not in answer
+    assert "留出 0 分钟通勤" not in answer
+    assert "本校知识包尚未导入" in answer
+
+    assert not _polished_answer_is_grounded(
+        (
+            "图书馆自习安排在14:00—15:00，"
+            "场所开放时段已经核对过。"
+        ),
+        tasks=[
+            Task(
+                id="study",
+                title="图书馆自习",
+                date=single_task_plan.date,
+                duration_min=60,
+            )
+        ],
+        plan=single_task_plan,
+        warnings=[
+            {
+                "code": "CAMPUS_KNOWLEDGE_NOT_CONFIGURED",
+                "severity": "warning",
+            }
+        ],
+    )

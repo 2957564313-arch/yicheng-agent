@@ -11,6 +11,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from app.api import (
     academic_calendar,
+    campuses,
     chat,
     demos,
     health,
@@ -97,6 +98,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
     application.include_router(memories.router)
     application.include_router(timetables.router)
     application.include_router(academic_calendar.router)
+    application.include_router(campuses.router)
     application.mount(
         "/",
         StaticFiles(directory=BASE_DIR / "app" / "web", html=True),

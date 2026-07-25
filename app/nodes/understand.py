@@ -202,6 +202,15 @@ def make_understand_node(container: AppContainer):
             result.preferences,
             memories,
         )
+        result = result.model_copy(
+            update={
+                "tasks": _apply_preferred_locations(
+                    result.tasks,
+                    preferences=preferences,
+                    query=state["query"],
+                )
+            }
+        )
         explicit_mode = container.parser.transport_mode_from_query(state["query"])
         explicit_avoid_congestion = (
             container.parser.avoid_congestion_from_query(state["query"])
@@ -528,6 +537,16 @@ def _apply_memory_preferences(
         if memory.key == "preferred_locations" and isinstance(value, str):
             value = [item.strip() for item in value.split("、") if item.strip()]
         update[memory.key] = value
+    if (
+        update.get("avoid_tight_schedule") is False
+        and "buffer_min" not in update
+    ):
+        update["buffer_min"] = 0
+    elif (
+        update.get("avoid_tight_schedule") is True
+        and "buffer_min" not in update
+    ):
+        update["buffer_min"] = max(preferences.buffer_min, 10)
     if not update:
         return preferences
     try:
@@ -539,6 +558,58 @@ def _apply_memory_preferences(
         )
     except Exception:
         return preferences
+
+
+def _apply_preferred_locations(
+    tasks: list[Task],
+    *,
+    preferences: UserPreferences,
+    query: str,
+) -> list[Task]:
+    """Use saved places only when this request did not name another place."""
+    preferred = [
+        value.strip()
+        for value in preferences.preferred_locations
+        if value.strip()
+    ]
+    if not preferred:
+        return tasks
+    keyword_groups = {
+        "study": ("图书馆", "自习室", "教室", "宿舍", "教学楼"),
+        "run": ("操场", "田径场", "体育馆", "跑道"),
+        "dinner": ("食堂", "餐厅"),
+        "parcel": ("快递", "驿站"),
+    }
+    adjusted: list[Task] = []
+    for task in tasks:
+        if task.flexibility.value != "movable":
+            adjusted.append(task)
+            continue
+        if task.location_raw and task.location_raw in query:
+            adjusted.append(task)
+            continue
+        kind = _task_kind(task.title, task.location_raw)
+        keywords = keyword_groups.get(kind or "", ())
+        choice = next(
+            (
+                location
+                for location in preferred
+                if any(keyword in location for keyword in keywords)
+            ),
+            None,
+        )
+        if choice is None:
+            adjusted.append(task)
+            continue
+        adjusted.append(
+            task.model_copy(
+                update={
+                    "location_id": None,
+                    "location_raw": choice,
+                }
+            )
+        )
+    return adjusted
 
 
 def _task_kind(title: str, location_raw: str | None) -> str | None:

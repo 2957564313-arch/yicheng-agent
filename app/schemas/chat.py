@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.common import Issue
 from app.schemas.calendar import CalendarOverrideCreate
+from app.schemas.campus import CampusSelection
 from app.schemas.memory import MemoryCreate
 from app.schemas.plan import DataFreshness, Plan
 from app.schemas.timetable import CourseSessionCreate
@@ -33,6 +34,7 @@ class ClientContext(BaseModel):
         max_length=60,
     )
     previous_plan: Plan | None = None
+    campus: CampusSelection | None = None
 
     @model_validator(mode="after")
     def validate_now(self) -> "ClientContext":

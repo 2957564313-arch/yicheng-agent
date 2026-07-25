@@ -8,7 +8,7 @@
       content="面向校园学习与生活任务的时空规划智能体"
     />
     <title>易程智策 · 规划控制台</title>
-    <link rel="stylesheet" href="/styles.css?v=20260724-4" />
+    <link rel="stylesheet" href="/styles.css?v=20260724-5" />
   </head>
   <body>
     <header class="masthead">
@@ -57,6 +57,44 @@
               placeholder="例如：14点以后去图书馆学习2小时，取快递，再跑步30分钟，18点前结束。"
             ></textarea>
             <button id="submit" class="primary">交给易程智策</button>
+          </article>
+
+          <article class="panel campus-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="step">所在学校</p>
+                <h2>先确认你的校园</h2>
+              </div>
+              <span id="campus-state" class="campus-state">正在读取…</span>
+            </div>
+            <p class="panel-note">
+              输入学校和校区后，系统会从高德分类发现教学、学习、餐饮、
+              住宿、运动和生活服务地点。实时接口失败时，只使用本校已
+              缓存地点进行估算，不会借用其他学校的数据。
+            </p>
+            <div class="campus-form">
+              <input
+                id="campus-name"
+                type="text"
+                placeholder="例如：浙江大学紫金港校区"
+                maxlength="120"
+              />
+              <input
+                id="campus-city"
+                type="text"
+                placeholder="所在城市（可选）"
+                maxlength="60"
+              />
+              <button id="campus-discover" class="ghost">
+                查找这所学校
+              </button>
+            </div>
+            <div id="campus-summary" class="campus-summary muted">
+              正在读取当前校园。
+            </div>
+            <button id="campus-reset" class="text-button" hidden>
+              恢复项目默认校园
+            </button>
           </article>
 
           <article class="panel execution-panel">
@@ -186,7 +224,6 @@
                 <option value="avoid_rain">避雨偏好</option>
                 <option value="avoid_tight_schedule">日程松紧</option>
                 <option value="preferred_locations">常用地点</option>
-                <option value="custom_note">其他习惯</option>
               </select>
               <input
                 id="memory-value"
@@ -299,6 +336,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260724-4" defer></script>
+    <script src="/app.js?v=20260724-5" defer></script>
   </body>
 </html>
