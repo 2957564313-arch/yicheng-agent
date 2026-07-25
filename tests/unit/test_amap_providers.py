@@ -322,6 +322,53 @@ async def test_amap_route_uses_requested_non_motor_mode(
 
 
 @pytest.mark.asyncio
+async def test_electrobike_quota_falls_back_to_live_bicycle_route(
+    monkeypatch,
+    tmp_path: Path,
+):
+    fake = type(
+        "ElectrobikeQuotaFallbackClient",
+        (SequencedFakeAsyncClient,),
+        {},
+    )
+    fake.payloads = [
+        {
+            "status": "0",
+            "info": "USER_DAILY_QUERY_OVER_LIMIT",
+        },
+        {
+            "status": "1",
+            "route": {
+                "paths": [
+                    {
+                        "distance": "860",
+                        "cost": {"duration": "300"},
+                    }
+                ]
+            },
+        },
+    ]
+    fake.calls = []
+    monkeypatch.setattr("app.providers.amap.httpx.AsyncClient", fake)
+    provider = AmapRouteProvider(
+        locations=build_locations(tmp_path),
+        api_key="test-key",
+        min_request_interval_seconds=0,
+        qps_retry_count=0,
+    )
+
+    result = await provider.get_route("a", "b", mode="electrobike")
+
+    assert result.mode == "electrobike"
+    assert result.source == DataSource.LIVE_API
+    assert result.duration_min == 5
+    assert result.confidence == 0.72
+    assert "高德普通骑行路线" in (result.warning or "")
+    assert fake.calls[0][0].endswith("/v5/direction/electrobike")
+    assert fake.calls[1][0].endswith("/v5/direction/bicycling")
+
+
+@pytest.mark.asyncio
 async def test_amap_route_requires_verified_coordinates(tmp_path: Path):
     provider = AmapRouteProvider(
         locations=build_locations(tmp_path, with_coordinates=False),

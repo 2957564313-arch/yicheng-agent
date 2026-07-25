@@ -258,6 +258,32 @@ def test_missing_requested_weather_is_explained_without_provider_jargon():
     assert "目标日期暂时没有可靠的天气预报" in answer
 
 
+def test_electrobike_live_fallback_is_disclosed_to_user():
+    message = (
+        "电瓶车实时路线当前受接口额度或服务状态限制，已采用"
+        "高德普通骑行路线作为保守参考；实际骑行请遵守校园"
+        "限速、停放和禁行规定"
+    )
+    answer = _success_answer(
+        _plan(),
+        [
+            {
+                "code": "ROUTE_FALLBACK",
+                "severity": "warning",
+                "message": message,
+                "details": {"transport_mode": "electrobike"},
+            }
+        ],
+        intent="plan",
+        query="今天骑电瓶车去图书馆自习再取快递。",
+        facts=[],
+        weather=[],
+        congestion_windows=[],
+    )
+
+    assert message in answer
+
+
 def test_markdown_bullets_are_normalized_for_plain_text_frontend():
     answer = _plain_text_answer(
         "好的，安排如下：\n* 第一项提醒\n- 第二项提醒"

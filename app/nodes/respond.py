@@ -428,6 +428,14 @@ def _success_answer(
             }
         )
     ]
+    warning_messages.extend(
+        Issue.model_validate(raw).message
+        for raw in warnings
+        if (
+            raw.get("code") == "ROUTE_FALLBACK"
+            and "电瓶车实时路线" in str(raw.get("message", ""))
+        )
+    )
     if warning_messages:
         lines.append("提醒：" + "；".join(dict.fromkeys(warning_messages)))
     elif weather_adjustment and opening_rules_available:

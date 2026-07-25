@@ -595,6 +595,50 @@ class AmapRouteProvider:
         }
         if mode == "walk":
             params["alternative_route"] = "1"
+        effective_mode = mode
+        route_warning = None
+        try:
+            path, duration_seconds = await self._request_path(
+                mode=mode,
+                params=params,
+            )
+        except Exception as primary_error:
+            if mode != "electrobike":
+                raise
+            try:
+                path, duration_seconds = await self._request_path(
+                    mode="bicycle",
+                    params=params,
+                )
+            except Exception:
+                raise primary_error
+            effective_mode = "bicycle"
+            route_warning = (
+                "电瓶车实时路线当前受接口额度或服务状态限制，已采用"
+                "高德普通骑行路线作为保守参考；实际骑行请遵守校园"
+                "限速、停放和禁行规定"
+            )
+        estimate = TravelEstimate(
+            origin_id=origin_id,
+            destination_id=destination_id,
+            mode=mode,
+            distance_m=int(path["distance"]),
+            duration_min=max(1, math.ceil(duration_seconds / 60)),
+            base_duration_min=max(1, math.ceil(duration_seconds / 60)),
+            source=DataSource.LIVE_API,
+            confidence=0.9 if effective_mode == mode else 0.72,
+            fetched_at=datetime.now(ZoneInfo("Asia/Shanghai")),
+            warning=route_warning,
+        )
+        self._cache[cache_key] = estimate
+        return estimate.model_copy(deep=True)
+
+    async def _request_path(
+        self,
+        *,
+        mode: str,
+        params: dict[str, str],
+    ) -> tuple[dict, int]:
         payload = await self._request(self._route_url(mode), params)
         if payload.get("status") != "1":
             raise RuntimeError(
@@ -611,19 +655,7 @@ class AmapRouteProvider:
         )
         if duration_seconds <= 0:
             raise RuntimeError("AMap route has no duration")
-        estimate = TravelEstimate(
-            origin_id=origin_id,
-            destination_id=destination_id,
-            mode=mode,
-            distance_m=int(path["distance"]),
-            duration_min=max(1, math.ceil(duration_seconds / 60)),
-            base_duration_min=max(1, math.ceil(duration_seconds / 60)),
-            source=DataSource.LIVE_API,
-            confidence=0.9,
-            fetched_at=datetime.now(ZoneInfo("Asia/Shanghai")),
-        )
-        self._cache[cache_key] = estimate
-        return estimate.model_copy(deep=True)
+        return path, duration_seconds
 
 class AmapWeatherProvider:
     """高德天气预报适配器。"""

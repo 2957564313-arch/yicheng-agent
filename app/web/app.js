@@ -1036,7 +1036,13 @@ function renderEvidence(data) {
     "LLM_DEGRADED",
   ]);
   const warningItems = (data.warnings || []).filter(
-    (item) => !hiddenTechnicalCodes.has(item.code),
+    (item) => (
+      !hiddenTechnicalCodes.has(item.code)
+      || (
+        item.code === "ROUTE_FALLBACK"
+        && item.message?.includes("电瓶车实时路线")
+      )
+    ),
   );
   const careInsights = (data.insights || []).filter(
     (item) => ["required", "attention"].includes(item.importance)
