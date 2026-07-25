@@ -637,6 +637,35 @@ def _can_apply_rule_guard(
         for task in rule_result.tasks
     ):
         return True
+    rule_kinds = {
+        _task_kind(task.title, task.location_raw)
+        for task in rule_result.tasks
+    }
+    explicit_common_plan = (
+        rule_result.intent.value == "plan"
+        and not rule_result.clarifications
+        and bool(rule_result.tasks)
+        and None not in rule_kinds
+        and bool(
+            re.search(
+                r"(?:[01]?\d|2[0-3])"
+                r"(?:\s*[:：]\s*[0-5]?\d|"
+                r"\s*点(?:\s*[0-5]?\d\s*分?)?)",
+                query,
+            )
+        )
+        and all(
+            task.fixed_start is not None
+            or task.earliest_start is not None
+            for task in rule_result.tasks
+        )
+    )
+    if explicit_common_plan and llm_result.clarifications:
+        # A model occasionally asks whether a venue is open even though the
+        # structured campus rule layer can validate that downstream. Once the
+        # local parser has a complete common task and explicit time anchor,
+        # the model must not invent a blocking clarification.
+        return True
     if (
         llm_result.intent.value != "plan"
         or rule_result.intent.value != "plan"
@@ -645,13 +674,14 @@ def _can_apply_rule_guard(
         or len(llm_result.tasks) != len(rule_result.tasks)
     ):
         return False
+    if explicit_common_plan and re.search(r"从.{1,40}出发", query):
+        # Keep the explicit journey origin separate from task semantics. Some
+        # model outputs merge “从某楼出发” into the first task title/location,
+        # which can even change the apparent task category.
+        return True
     llm_kinds = {
         _task_kind(task.title, task.location_raw)
         for task in llm_result.tasks
-    }
-    rule_kinds = {
-        _task_kind(task.title, task.location_raw)
-        for task in rule_result.tasks
     }
     if None in llm_kinds or None in rule_kinds or llm_kinds != rule_kinds:
         return False
