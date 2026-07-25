@@ -66,6 +66,11 @@ def make_respond_node(container: AppContainer):
             else:
                 answer = _facts_answer(facts, query=state["query"])
                 used_llm = False
+            answer = _ensure_query_guardrails(
+                answer,
+                query=state["query"],
+                facts=facts,
+            )
             return {
                 "final_answer": answer,
                 "final_plan": None,
@@ -1128,6 +1133,52 @@ def _facts_answer(
         ]
     )
     return "\n".join(lines)
+
+
+def _ensure_query_guardrails(
+    answer: str,
+    *,
+    query: str,
+    facts: list[RetrievedFact],
+) -> str:
+    """Keep mandatory campus caveats stable across model variations."""
+    evidence = "\n".join(fact.content for fact in facts)
+    additions: list[str] = []
+    if (
+        "图书馆" in query
+        and any(marker in evidence for marker in ("六层", "十二层"))
+        and any(marker in evidence for marker in ("七，八，九", "七至十一层"))
+        and "不同楼层" not in answer
+    ):
+        additions.append(
+            "还要留意：不同楼层开放时间不同，晚间前往时请按具体"
+            "楼层的闭馆时间安排。"
+        )
+    holiday_names = (
+        "元旦",
+        "春节",
+        "清明节",
+        "劳动节",
+        "端午节",
+        "中秋节",
+        "国庆节",
+        "法定节假日",
+    )
+    if (
+        any(name in query for name in holiday_names)
+        and any(
+            marker in evidence
+            for marker in ("放假", "调休", "国务院办公厅")
+        )
+        and not any(marker in answer for marker in ("学校校历", "教务通知"))
+    ):
+        additions.append(
+            "国家放假安排不等于学校课程安排；是否停课、补课仍要以"
+            "学校校历和教务通知为准。"
+        )
+    if not additions:
+        return answer
+    return "\n\n".join([answer.rstrip(), *additions])
 
 
 def _knowledge_answer_excerpt(content: str, query: str) -> str:

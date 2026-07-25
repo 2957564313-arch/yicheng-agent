@@ -3,13 +3,14 @@ from zoneinfo import ZoneInfo
 
 from app.nodes.respond import (
     _claims_peak_was_avoided,
+    _ensure_query_guardrails,
     _plain_text_answer,
     _polished_answer_is_grounded,
     _success_answer,
     _weather_reminder,
 )
 from app.schemas.common import DataSource, PlanStatus
-from app.schemas.context import WeatherContext
+from app.schemas.context import RetrievedFact, WeatherContext
 from app.schemas.plan import Plan, PlanItem
 from app.schemas.task import Task
 
@@ -289,3 +290,41 @@ def test_custom_campus_without_rules_never_claims_opening_hours_checked():
             }
         ],
     )
+
+
+def test_library_query_keeps_floor_specific_caveat():
+    answer = _ensure_query_guardrails(
+        "图书馆整体开放到22:30，六层和十二层可以使用。",
+        query="今天22点去图书馆自习30分钟可以吗",
+        facts=[
+            RetrievedFact(
+                id="library_hours",
+                content=(
+                    "六层、十二层7:00—22:30；"
+                    "七至十一层8:00—21:30。"
+                ),
+                source=DataSource.RAG,
+                source_ref="杭电时间知识库.docx",
+            )
+        ],
+    )
+
+    assert "不同楼层开放时间不同" in answer
+
+
+def test_holiday_query_keeps_school_calendar_caveat():
+    answer = _ensure_query_guardrails(
+        "2026年国庆节10月1日至7日放假，共7天。",
+        query="2026年国庆节怎么放假",
+        facts=[
+            RetrievedFact(
+                id="holiday",
+                content="国务院办公厅通知：国庆节放假调休。",
+                source=DataSource.RAG,
+                source_ref="gov.cn",
+            )
+        ],
+    )
+
+    assert "学校校历" in answer
+    assert "教务通知" in answer
