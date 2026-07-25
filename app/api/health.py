@@ -22,6 +22,8 @@ def health(request: Request) -> dict:
         database_status = "error"
     return {
         "status": "ok" if database_status == "ok" else "degraded",
+        "service": "yicheng-agent",
+        "display_name": "易程智策",
         "version": "0.1.0",
         "database": database_status,
         "llm": "configured" if container.llm.configured else "not_configured",

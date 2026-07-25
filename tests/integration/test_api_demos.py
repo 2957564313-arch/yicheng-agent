@@ -44,6 +44,8 @@ def test_health_and_demo_catalog(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         health = client.get("/api/v1/health")
         assert health.status_code == 200
+        assert health.json()["service"] == "yicheng-agent"
+        assert health.json()["display_name"] == "易程智策"
         assert health.json()["database"] == "ok"
         assert health.json()["knowledge_chunks"] >= 1
         assert health.json()["timezone"] == "Asia/Shanghai"
