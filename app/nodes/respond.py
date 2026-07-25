@@ -1481,9 +1481,18 @@ def _direct_policy_answer(
         "毕业",
         "学位",
         "补考",
+        "缓考",
         "重修",
         "考试",
         "考核",
+        "成绩单",
+        "退学警示",
+        "试读",
+        "结业",
+        "肄业",
+        "毕业证",
+        "学历证书",
+        "学位证书",
     )
     if not any(topic in query for topic in policy_topics):
         return None
@@ -1763,6 +1772,62 @@ def _ensure_query_guardrails(
 
 
 def _knowledge_answer_excerpt(content: str, query: str) -> str:
+    if (
+        "申诉" in query
+        and any(marker in query for marker in ("省级", "教育部门"))
+        and any(marker in query for marker in ("收到", "处理", "多久"))
+    ):
+        compact_provincial_content = re.sub(r"\s+", "", content)
+        provincial_processing_match = re.search(
+            r"(省级教育行政部门应当在接到学生书面申诉之日起"
+            r"30个工作日内，对申诉人的问题给予处理并作出决定。)",
+            compact_provincial_content,
+        )
+        if provincial_processing_match:
+            return provincial_processing_match.group(1)
+    if (
+        "申诉" in query
+        and any(
+            marker in query
+            for marker in ("没告诉", "未告知", "没有告知")
+        )
+    ):
+        compact_uninformed_content = re.sub(r"\s+", "", content)
+        uninformed_deadline_match = re.search(
+            r"(处理、处分或者复查决定书未告知学生申诉期限的，"
+            r"申诉期限自学生知道或者应当知道处理或者处分决定之日"
+            r"起计算，但最长不得超过6个月。)",
+            compact_uninformed_content,
+        )
+        if uninformed_deadline_match:
+            return uninformed_deadline_match.group(1)
+    if (
+        "退学警示" in query
+        and any(
+            marker in query
+            for marker in ("什么情况", "哪些情况", "条件", "会收到")
+        )
+    ):
+        compact_warning_content = re.sub(r"\s+", "", content)
+        warning_match = re.search(
+            r"(第三十九条退学警示。学生一学期.*?"
+            r"小于14学分，且.*?小于18学分。)",
+            compact_warning_content,
+        )
+        if warning_match:
+            return warning_match.group(1)
+    if "试读" in query and any(
+        marker in query for marker in ("多久", "什么时候", "何时", "期限")
+    ):
+        compact_trial_content = re.sub(r"\s+", "", content)
+        trial_match = re.search(
+            r"(第四十二条因第四十一条第（一）款原因达到退学条件"
+            r"的学生，可申请试读。试读期为一学期。"
+            r"申请试读应在每学期开学后六周内办理)",
+            compact_trial_content,
+        )
+        if trial_match:
+            return trial_match.group(1) + "。"
     if "图书馆" in query:
         compact_library_content = re.sub(r"\s+", "", content)
         upper_floor_requested = any(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -511,12 +512,48 @@ def test_student_handbook_questions_keep_the_direct_rule_in_answer(tmp_path):
 
             assert response.status_code == 200, response.text
             payload = response.json()
-            assert payload["status"] == "completed"
+            assert payload["status"] == "completed", (
+                f"{case['query']=}; answer={payload['answer']}"
+            )
             assert payload["plan"] is None
             for expected in expected_markers:
                 assert expected in payload["answer"], (
                     f"{query=}; {expected=}; answer={payload['answer']}"
                 )
+            assert "依据来源" in payload["answer"]
+
+
+def test_extended_handbook_blind_questions_are_grounded_end_to_end(tmp_path):
+    cases = json.loads(
+        (
+            BASE_DIR
+            / "tests"
+            / "fixtures"
+            / "knowledge_retrieval_cases.json"
+        ).read_text(encoding="utf-8")
+    )[21:]
+    with TestClient(build_test_app(tmp_path)) as client:
+        for index, case in enumerate(cases):
+            response = client.post(
+                "/api/v1/chat",
+                json={
+                    "user_id": f"extended_handbook_user_{index}",
+                    "thread_id": f"extended_handbook_thread_{index}",
+                    "query": case["query"],
+                    "mode": "offline",
+                },
+            )
+
+            assert response.status_code == 200, response.text
+            payload = response.json()
+            assert payload["status"] == "completed", (
+                f"{case['query']=}; answer={payload['answer']}"
+            )
+            assert payload["plan"] is None
+            assert all(
+                marker in payload["answer"]
+                for marker in case["expected_markers"]
+            ), f"{case['query']=}; answer={payload['answer']}"
             assert "依据来源" in payload["answer"]
 
 

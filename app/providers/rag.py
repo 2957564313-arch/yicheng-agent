@@ -66,6 +66,33 @@ QUERY_EXPANSIONS = {
         "不得申请",
     ),
     "奖学金": ("评奖评优", "奖助学金", "综合测评"),
+    "补考": (
+        "课程成绩记载",
+        "补考成绩在60分以上的一律按60分记载",
+        "不予补考",
+        "必须重新学习",
+    ),
+    "缓考": (
+        "考试冲突",
+        "患病或意外事故",
+        "必须在该课程考核前办理",
+        "随该课程的补考进行",
+    ),
+    "退学警示": (
+        "小于14学分",
+        "小于18学分",
+        "累计2次受到退学警示",
+        "应予退学",
+    ),
+    "试读": ("试读期为一学期", "开学后六周内"),
+    "提前毕业": ("毕业学期开学后一个月内",),
+    "结业": ("90%", "可以结业离校", "返校重学"),
+    "肄业": ("学满一年以上", "肄业证书"),
+    "毕业证": (
+        "毕业证书",
+        "遗失或者损坏",
+        "证明书与原证书具有同等效力",
+    ),
 }
 
 QUERY_NORMALIZATIONS = {
@@ -127,6 +154,14 @@ POLICY_TERMS = (
     "转专业",
     "评奖",
     "综合测评",
+    "补考",
+    "缓考",
+    "退学警示",
+    "试读",
+    "提前毕业",
+    "毕业证",
+    "结业",
+    "肄业",
 )
 
 
@@ -345,7 +380,9 @@ def _normalize_pdf_layout(content: str) -> str:
         r"^[一二三四五六七八九十]+[、.]",
     )
     for raw_line in lines:
-        line = re.sub(r"[ \t]+", " ", raw_line).strip()
+        line = _repair_pdf_visual_spacing(
+            re.sub(r"[ \t]+", " ", raw_line).strip()
+        )
         if not line:
             flush()
             continue
@@ -373,6 +410,24 @@ def _normalize_pdf_layout(content: str) -> str:
             current += line
     flush()
     return "\n\n".join(paragraphs)
+
+
+def _repair_pdf_visual_spacing(line: str) -> str:
+    """Remove spaced-out OCR glyphs without joining real title words."""
+    line = re.sub(r"\s*（\s*", "（", line)
+    line = re.sub(r"\s*）\s*", "）", line)
+    line = re.sub(r"\s+([，。；：！？、])", r"\1", line)
+    cjk_gaps = re.findall(
+        r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])",
+        line,
+    )
+    if len(cjk_gaps) >= 3:
+        line = re.sub(
+            r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])",
+            "",
+            line,
+        )
+    return line
 
 
 def _content_chunks_without_headings(
@@ -748,11 +803,52 @@ class KnowledgeRepository:
             )
         )
         for query in list(expanded):
+            appeal_missing_deadline = (
+                "申诉" in query
+                and any(
+                    marker in query
+                    for marker in ("没告诉", "未告知", "没有告知")
+                )
+            )
+            appeal_provincial_processing = (
+                "申诉" in query
+                and any(marker in query for marker in ("省级", "教育部门"))
+                and any(marker in query for marker in ("收到", "处理", "多久"))
+            )
             for keyword, related in QUERY_EXPANSIONS.items():
                 if keyword in query:
+                    if keyword == "申诉" and (
+                        appeal_missing_deadline
+                        or appeal_provincial_processing
+                    ):
+                        # The generic 10-day appeal phrase otherwise outranks
+                        # the rarer “not informed” and provincial-processing
+                        # rules even though the user explicitly narrowed the
+                        # question.
+                        continue
                     expanded.extend(
                         value for value in related if value not in expanded
                     )
+            conditional: tuple[str, ...] = ()
+            if appeal_missing_deadline:
+                conditional = (
+                    "未告知学生申诉期限",
+                    "最长不得超过6个月",
+                )
+            elif appeal_provincial_processing:
+                conditional = (
+                    "省级教育行政部门",
+                    "30个工作日内",
+                )
+            if "转专业" in query and "放弃" in query:
+                conditional = (
+                    *conditional,
+                    "放弃转专业",
+                    "不得再次申请普通类转专业",
+                )
+            expanded.extend(
+                value for value in conditional if value not in expanded
+            )
         return expanded
 
     def _inverse_document_frequency(self, token: str) -> float:

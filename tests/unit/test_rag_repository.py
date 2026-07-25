@@ -119,6 +119,30 @@ def test_chunk_overlap_keeps_pdf_wrapped_rule_across_boundary():
     )
 
 
+def test_pdf_visual_spaces_are_removed_between_chinese_characters(tmp_path):
+    official = tmp_path / "official"
+    official.mkdir()
+    (official / "handbook.md").write_text(
+        "---\n"
+        'source_path: "学生手册.pdf"\n'
+        "verified: true\nknowledge_type: policy\n"
+        "document_pages: 1\n"
+        "---\n\n"
+        "- 56 -\n"
+        "放 弃 转 专 业 （ 类 ） 的 学 生 ， "
+        "不 得 再 次 申 请 普 通 类 转 专 业 （ 类 ）。",
+        encoding="utf-8",
+    )
+
+    repository = KnowledgeRepository(tmp_path)
+
+    assert repository.chunk_count == 1
+    assert "放弃转专业（类）的学生" in repository._chunks[0].content
+    assert "不得再次申请普通类转专业（类）" in (
+        repository._chunks[0].content
+    )
+
+
 @pytest.mark.asyncio
 async def test_specific_chinese_phrase_outranks_generic_character_matches(
     tmp_path: Path,

@@ -135,5 +135,110 @@
     "expected_markers": ["每天按6节课计"],
     "expected_type": "policy",
     "expected_page": 36
+  },
+  {
+    "category": "学生手册制度",
+    "query": "补考考到80分，成绩单会记多少分？",
+    "expected_markers": ["补考成绩在60分以上的一律按60分记载"],
+    "expected_type": "policy",
+    "expected_pages": [38, 39]
+  },
+  {
+    "category": "学生手册制度",
+    "query": "考试作弊的课程还能参加补考吗？",
+    "expected_markers": ["不予补考", "必须重新学习"],
+    "expected_type": "policy",
+    "expected_page": 40
+  },
+  {
+    "category": "学生手册制度",
+    "query": "因为考试冲突想申请缓考，需要什么时候办？",
+    "expected_markers": ["必须在该课程考核前办理"],
+    "expected_type": "policy",
+    "expected_page": 40
+  },
+  {
+    "category": "学生手册制度",
+    "query": "什么情况下会收到退学警示？",
+    "expected_markers": ["小于14学分", "小于18学分"],
+    "expected_type": "policy",
+    "expected_page": 44
+  },
+  {
+    "category": "学生手册制度",
+    "query": "累计两次退学警示会怎样？",
+    "expected_markers": ["应予退学"],
+    "expected_type": "policy",
+    "expected_pages": [44, 45]
+  },
+  {
+    "category": "学生手册制度",
+    "query": "达到退学条件后试读期有多久，什么时候申请？",
+    "expected_markers": ["试读期为一学期", "开学后六周内"],
+    "expected_type": "policy",
+    "expected_page": 45
+  },
+  {
+    "category": "学生手册制度",
+    "query": "想提前毕业，最晚什么时候申请？",
+    "expected_markers": ["毕业学期开学后一个月内"],
+    "expected_type": "policy",
+    "expected_page": 46
+  },
+  {
+    "category": "学生手册制度",
+    "query": "毕业学分达到百分之九十但没达到毕业要求怎么办？",
+    "expected_markers": ["90%", "可以结业离校"],
+    "expected_type": "policy",
+    "expected_page": 46
+  },
+  {
+    "category": "学生手册制度",
+    "query": "学满一年后退学，学校会发什么证明？",
+    "expected_markers": ["肄业证书"],
+    "expected_type": "policy",
+    "expected_page": 46
+  },
+  {
+    "category": "学生手册制度",
+    "query": "毕业证丢了能补办同等效力的材料吗？",
+    "expected_markers": ["证明书与原证书具有同等效力"],
+    "expected_type": "policy",
+    "expected_pages": [9, 47]
+  },
+  {
+    "category": "学生手册制度",
+    "query": "不开除学籍的话，处分期限一般多久？",
+    "expected_markers": ["6到12个月"],
+    "expected_type": "policy",
+    "expected_pages": [12, 13]
+  },
+  {
+    "category": "学生手册制度",
+    "query": "处分决定没告诉申诉期限，最晚多久还能申诉？",
+    "expected_markers": ["最长不得超过6个月"],
+    "expected_type": "policy",
+    "expected_page": 14
+  },
+  {
+    "category": "学生手册制度",
+    "query": "省级教育部门收到学生申诉后多久处理？",
+    "expected_markers": ["30个工作日"],
+    "expected_type": "policy",
+    "expected_page": 14
+  },
+  {
+    "category": "学生手册制度",
+    "query": "转专业公示时放弃了，以后还能再申请普通转专业吗？",
+    "expected_markers": ["不得再次申请普通类转专业"],
+    "expected_type": "policy",
+    "expected_pages": [56, 57]
+  },
+  {
+    "category": "学生手册制度",
+    "query": "转专业后不适应，多久内能申请回原专业？",
+    "expected_markers": ["开学4周内"],
+    "expected_type": "policy",
+    "expected_page": 57
   }
 ]

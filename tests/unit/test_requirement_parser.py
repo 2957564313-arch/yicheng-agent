@@ -129,6 +129,20 @@ def test_operational_questions_do_not_create_fake_tasks():
         assert result.clarifications == [], query
 
 
+def test_student_handbook_questions_do_not_become_empty_plans():
+    for query in (
+        "补考考到80分，成绩单会记多少分？",
+        "因为考试冲突想申请缓考，需要什么时候办？",
+        "达到退学条件后试读期有多久？",
+        "毕业证丢了能补办同等效力的材料吗？",
+        "毕业学分达到百分之九十但没达到毕业要求怎么办？",
+    ):
+        result = parse(query)
+        assert result.intent == "query", query
+        assert result.tasks == [], query
+        assert result.clarifications == [], query
+
+
 def test_question_word_does_not_hide_explicit_planning_request():
     result = parse(
         "明天下午去图书馆七楼自习2小时，可以帮我安排吗？"

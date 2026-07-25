@@ -459,6 +459,61 @@ const cases = [
     },
   },
   {
+    id: "handbook_makeup_exam_grade",
+    query: "补考考到80分，成绩单会记多少分？",
+    check(data) {
+      return [
+        expectText(
+          data.answer,
+          "补考成绩在60分以上的一律按60分记载",
+          "应准确回答补考成绩记载规则",
+        ),
+        expectText(data.answer, "依据来源", "应展示学生手册来源"),
+      ];
+    },
+  },
+  {
+    id: "handbook_uninformed_appeal_deadline",
+    query: "处分决定没告诉申诉期限，最晚多久还能申诉？",
+    check(data) {
+      return [
+        expectText(
+          data.answer,
+          "最长不得超过6个月",
+          "不能用普通10日规则覆盖未告知期限的特殊情形",
+        ),
+        expectText(data.answer, "未告知学生申诉期限", "应保留适用前提"),
+      ];
+    },
+  },
+  {
+    id: "handbook_trial_period",
+    query: "达到退学条件后试读期有多久，什么时候申请？",
+    check(data) {
+      return [
+        expectText(data.answer, "试读期为一学期", "应回答试读时长"),
+        expectText(data.answer, "开学后六周内", "应同时回答申请期限"),
+      ];
+    },
+  },
+  {
+    id: "handbook_transfer_withdrawal",
+    query: "转专业公示时放弃了，以后还能再申请普通转专业吗？",
+    check(data) {
+      return [
+        expectText(
+          data.answer,
+          "不得再次申请普通类转专业",
+          "应回答放弃转专业后的资格限制",
+        ),
+        expectTrue(
+          !data.answer.includes("放 弃 转 专 业"),
+          "PDF视觉字间空格不应进入用户回答",
+        ),
+      ];
+    },
+  },
+  {
     id: "national_holiday_answer",
     query: "2026年国庆节什么时候放假？",
     check(data) {
