@@ -104,6 +104,35 @@ class AcademicCalendarRepository:
             )
         return cursor.rowcount > 0
 
+    def clear_overrides(self, user_id: str) -> int:
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                """
+                DELETE FROM academic_calendar_overrides
+                WHERE user_id = ?
+                """,
+                (user_id,),
+            )
+        return cursor.rowcount
+
+    def delete_except_dates(
+        self,
+        *,
+        user_id: str,
+        event_dates: set[date],
+    ) -> int:
+        if not event_dates:
+            return self.clear_overrides(user_id)
+        values = sorted(item.isoformat() for item in event_dates)
+        placeholders = ",".join("?" for _ in values)
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                "DELETE FROM academic_calendar_overrides "
+                f"WHERE user_id = ? AND event_date NOT IN ({placeholders})",
+                [user_id, *values],
+            )
+        return cursor.rowcount
+
     def resolve(
         self,
         *,

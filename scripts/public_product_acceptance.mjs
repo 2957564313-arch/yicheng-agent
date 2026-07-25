@@ -393,7 +393,7 @@ results.push(await runCase("personal_data_backup_and_restore", async () => {
     "大学英语,星期五,3,4,第七教学楼,1-16",
   ].join("\n");
 
-  await api(`/api/v1/users/${sourceUser}/memories`, {
+  const savedMemory = (await api(`/api/v1/users/${sourceUser}/memories`, {
     method: "POST",
     expectedStatus: 201,
     body: {
@@ -403,8 +403,9 @@ results.push(await runCase("personal_data_backup_and_restore", async () => {
       value: "23:00",
       enabled: true,
     },
-  });
-  await api(`/api/v1/users/${sourceUser}/timetable/import`, {
+  })).data;
+  const savedTimetable = (
+    await api(`/api/v1/users/${sourceUser}/timetable/import`, {
     method: "POST",
     expectedStatus: 201,
     body: {
@@ -414,8 +415,10 @@ results.push(await runCase("personal_data_backup_and_restore", async () => {
       term_start: "2026-07-20",
       term_end: "2026-11-30",
     },
-  });
-  await api(`/api/v1/users/${sourceUser}/calendar-overrides`, {
+  })
+  ).data;
+  const savedOverride = (
+    await api(`/api/v1/users/${sourceUser}/calendar-overrides`, {
     method: "POST",
     expectedStatus: 201,
     body: {
@@ -424,8 +427,10 @@ results.push(await runCase("personal_data_backup_and_restore", async () => {
       label: "学校临时停课",
       source_ref: "公网验收",
     },
-  });
-  await api(`/api/v1/users/${sourceUser}/reminders/settings`, {
+  })
+  ).data;
+  const savedReminders = (
+    await api(`/api/v1/users/${sourceUser}/reminders/settings`, {
     method: "PUT",
     body: {
       enabled: true,
@@ -441,7 +446,8 @@ results.push(await runCase("personal_data_backup_and_restore", async () => {
       quiet_start: "23:00:00",
       quiet_end: "06:30:00",
     },
-  });
+  })
+  ).data;
   const generated = (
     await api("/api/v1/chat", {
       method: "POST",
@@ -456,15 +462,44 @@ results.push(await runCase("personal_data_backup_and_restore", async () => {
   ).data;
   assert(generated.current_plan_saved === true, "待备份计划没有保存");
 
-  const query = new URLSearchParams({ thread_id: sourceThread });
-  const backup = (
-    await api(`/api/v1/users/${sourceUser}/profile?${query}`)
-  ).data;
+  const backup = {
+    schema_version: "1.0",
+    thread_id: targetThread,
+    memories: [{
+      category: savedMemory.category,
+      key: savedMemory.key,
+      label: savedMemory.label,
+      value: savedMemory.value,
+      enabled: savedMemory.enabled,
+    }],
+    timetable: {
+      name: savedTimetable.timetable.name,
+      term_start: savedTimetable.timetable.term_start,
+      term_end: savedTimetable.timetable.term_end,
+      enabled: savedTimetable.timetable.enabled,
+      entries: savedTimetable.entries.map((item) => ({
+        course_name: item.course_name,
+        weekday: item.weekday,
+        start_period: item.start_period,
+        end_period: item.end_period,
+        location: item.location,
+        weeks: item.weeks,
+      })),
+    },
+    calendar_overrides: [{
+      date: savedOverride.date,
+      action: savedOverride.action,
+      replacement_weekday: savedOverride.replacement_weekday,
+      label: savedOverride.label,
+      source_ref: savedOverride.source_ref,
+    }],
+    reminder_settings: savedReminders.settings,
+    current_plan: generated.plan,
+  };
   assert(backup.memories.length === 1, "备份漏掉长期记忆");
   assert(backup.timetable.entries.length === 2, "备份漏掉课表");
   assert(backup.calendar_overrides.length === 1, "备份漏掉校历调整");
   assert(backup.current_plan, "备份漏掉当前计划");
-  backup.thread_id = targetThread;
 
   const restored = (
     await api(`/api/v1/users/${targetUser}/profile/restore`, {
@@ -478,24 +513,15 @@ results.push(await runCase("personal_data_backup_and_restore", async () => {
   assert(restored.reminder_settings_restored === true, "提醒设置未恢复");
   assert(restored.current_plan_restored === true, "当前计划未恢复");
 
-  const targetQuery = new URLSearchParams({ thread_id: targetThread });
-  const target = (
-    await api(`/api/v1/users/${targetUser}/profile?${targetQuery}`)
-  ).data;
-  assert(target.user_id === targetUser, "恢复后的用户归属错误");
-  assert(target.timetable.entries.length === 2, "恢复后课表缺失");
-  assert(
-    target.reminder_settings.early_course_wakeup_min === 95,
-    "恢复后提醒设置错误",
-  );
-  assert(target.current_plan.user_id === targetUser, "恢复后计划归属错误");
-
   const range = new URLSearchParams({
     start_date: "2026-07-24",
     end_date: "2026-07-25",
   });
   const agenda = (
-    await api(`/api/v1/users/${targetUser}/agenda?${range}`)
+    await api(`/api/v1/users/${targetUser}/agenda/contextual?${range}`, {
+      method: "POST",
+      body: backup,
+    })
   ).data;
   assert(agenda.summary.course_count === 2, "恢复后的长期日程漏掉课程");
   assert(

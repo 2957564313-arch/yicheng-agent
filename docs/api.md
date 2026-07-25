@@ -173,6 +173,28 @@ Demo 强制采用离线模式，保证比赛演示不依赖外部网络。
 测试版仍以 Vercel 临时运行环境为主，因此这个接口和网页导出功能用于
 跨设备迁移与主动备份；正式长期运营仍应接入持久化数据库。
 
+## 长期日程、提醒与系统日历
+
+- `GET /api/v1/users/{user_id}/agenda`：读取服务端当前实例中的日程；
+- `POST /api/v1/users/{user_id}/agenda/contextual`：先用请求中的个人
+  快照同步当前执行实例，再返回日程；
+- `GET /api/v1/users/{user_id}/reminders/due`：读取当前到点提醒；
+- `POST /api/v1/users/{user_id}/reminders/due/contextual`：携带个人
+  快照检查到点提醒；
+- `GET /api/v1/users/{user_id}/agenda.ics`：导出当前实例中的日历；
+- `POST /api/v1/users/{user_id}/agenda.ics/contextual`：携带个人快照
+  生成包含闹钟的日历文件。
+
+三个 `contextual` 接口的请求体与
+`PersonalDataRestoreRequest` 相同，包含 `thread_id`、长期记忆、个人课表、
+校历调整、提醒设置和当前计划。网页端默认使用这些接口，把浏览器快照作为
+公开测试版的个人数据事实来源。服务端会在同一次请求内完成校验、同步和
+计算；重复请求不会重复创建相同计划，用户已在浏览器删除的记忆、课表或
+校历也不会被旧的临时实例重新带回。
+
+该机制用于抵御 Vercel 临时实例切换，不等同于正式持久化数据库。用户跨
+设备时仍需使用个人数据备份；正式运营版本应改用持久化数据库。
+
 ## 自然语言周规划
 
 `POST /api/v1/weeks/plan/from-text`

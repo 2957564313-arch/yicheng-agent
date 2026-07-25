@@ -12,6 +12,8 @@ from app.schemas.agenda import (
     ReminderSettings,
     ReminderSettingsResponse,
 )
+from app.schemas.profile import PersonalDataRestoreRequest
+from app.services.personal_data import hydrate_personal_data
 
 
 router = APIRouter(prefix="/api/v1/users", tags=["agenda"])
@@ -91,6 +93,43 @@ def get_agenda(
     container = request.app.state.container
     timezone = ZoneInfo(container.settings.app_timezone)
     now = datetime.now(timezone)
+    start, end = _resolve_range(
+        start_date=start_date,
+        end_date=end_date,
+        today=now.date(),
+    )
+    return _agenda_response(
+        user_id=user_id,
+        start_date=start,
+        end_date=end,
+        request=request,
+        now=now,
+    )
+
+
+@router.post(
+    "/{user_id}/agenda/contextual",
+    response_model=AgendaResponse,
+)
+def get_contextual_agenda(
+    user_id: str,
+    payload: PersonalDataRestoreRequest,
+    request: Request,
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+) -> AgendaResponse:
+    """Build an agenda from the browser snapshot on the active instance."""
+
+    container = request.app.state.container
+    timezone = ZoneInfo(container.settings.app_timezone)
+    now = datetime.now(timezone)
+    hydrate_personal_data(
+        container=container,
+        user_id=user_id,
+        payload=payload,
+        now=now,
+        authoritative=True,
+    )
     start, end = _resolve_range(
         start_date=start_date,
         end_date=end_date,
@@ -189,6 +228,59 @@ def get_due_reminders(
     )
 
 
+@router.post(
+    "/{user_id}/reminders/due/contextual",
+    response_model=ReminderDueResponse,
+)
+def get_contextual_due_reminders(
+    user_id: str,
+    payload: PersonalDataRestoreRequest,
+    request: Request,
+    now: datetime | None = Query(default=None),
+    window_min: int = Query(default=2, ge=1, le=15),
+) -> ReminderDueResponse:
+    container = request.app.state.container
+    timezone = ZoneInfo(container.settings.app_timezone)
+    effective_now = now or datetime.now(timezone)
+    if effective_now.tzinfo is None:
+        raise AppError(
+            "INVALID_REMINDER_TIME",
+            "提醒查询时间必须包含时区。",
+            status_code=422,
+        )
+    effective_now = effective_now.astimezone(timezone)
+    hydrate_personal_data(
+        container=container,
+        user_id=user_id,
+        payload=payload,
+        now=effective_now,
+        authoritative=True,
+    )
+    window_end = effective_now + timedelta(minutes=window_min)
+    items = container.agenda.list_items(
+        user_id=user_id,
+        start_date=effective_now.date(),
+        end_date=window_end.date(),
+    )
+    settings, _ = container.reminders.get(user_id)
+    reminders = [
+        item
+        for item in container.agenda.build_reminders(
+            items=items,
+            settings=settings,
+            user_id=user_id,
+            start_date=effective_now.date(),
+            end_date=window_end.date(),
+        )
+        if effective_now <= item.notify_at < window_end
+    ]
+    return ReminderDueResponse(
+        now=effective_now,
+        window_end=window_end,
+        reminders=reminders,
+    )
+
+
 def _ical_escape(value: str) -> str:
     return (
         value.replace("\\", "\\\\")
@@ -202,30 +294,7 @@ def _ical_datetime(value: datetime) -> str:
     return value.strftime("%Y%m%dT%H%M%S")
 
 
-@router.get("/{user_id}/agenda.ics")
-def export_agenda_ics(
-    user_id: str,
-    request: Request,
-    start_date: date | None = Query(default=None),
-    end_date: date | None = Query(default=None),
-) -> Response:
-    container = request.app.state.container
-    timezone = ZoneInfo(container.settings.app_timezone)
-    now = datetime.now(timezone)
-    start, end = _resolve_range(
-        start_date=start_date,
-        end_date=end_date,
-        today=now.date(),
-        default_days=90,
-        max_days=183,
-    )
-    data = _agenda_response(
-        user_id=user_id,
-        start_date=start,
-        end_date=end,
-        request=request,
-        now=now,
-    )
+def _ical_response(data: AgendaResponse, *, now: datetime) -> Response:
     reminders_by_item: dict[str, list] = {}
     for reminder in data.reminders:
         reminders_by_item.setdefault(reminder.agenda_item_id, []).append(
@@ -328,3 +397,65 @@ def export_agenda_ics(
             )
         },
     )
+
+
+@router.get("/{user_id}/agenda.ics")
+def export_agenda_ics(
+    user_id: str,
+    request: Request,
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+) -> Response:
+    container = request.app.state.container
+    timezone = ZoneInfo(container.settings.app_timezone)
+    now = datetime.now(timezone)
+    start, end = _resolve_range(
+        start_date=start_date,
+        end_date=end_date,
+        today=now.date(),
+        default_days=90,
+        max_days=183,
+    )
+    data = _agenda_response(
+        user_id=user_id,
+        start_date=start,
+        end_date=end,
+        request=request,
+        now=now,
+    )
+    return _ical_response(data, now=now)
+
+
+@router.post("/{user_id}/agenda.ics/contextual")
+def export_contextual_agenda_ics(
+    user_id: str,
+    payload: PersonalDataRestoreRequest,
+    request: Request,
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+) -> Response:
+    container = request.app.state.container
+    timezone = ZoneInfo(container.settings.app_timezone)
+    now = datetime.now(timezone)
+    hydrate_personal_data(
+        container=container,
+        user_id=user_id,
+        payload=payload,
+        now=now,
+        authoritative=True,
+    )
+    start, end = _resolve_range(
+        start_date=start_date,
+        end_date=end_date,
+        today=now.date(),
+        default_days=90,
+        max_days=183,
+    )
+    data = _agenda_response(
+        user_id=user_id,
+        start_date=start,
+        end_date=end,
+        request=request,
+        now=now,
+    )
+    return _ical_response(data, now=now)

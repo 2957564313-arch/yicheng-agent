@@ -85,6 +85,109 @@ def test_imported_early_course_gets_wakeup_and_class_reminders(tmp_path):
         )
 
 
+def test_contextual_agenda_reminders_and_ical_hydrate_browser_snapshot(
+    tmp_path,
+):
+    with TestClient(build_test_app(tmp_path)) as client:
+        assert client.post(
+            "/api/v1/users/context_source/timetable/import",
+            json={
+                "name": "浏览器快照课表",
+                "format": "csv",
+                "content": CSV_CONTENT,
+                "term_start": "2026-07-20",
+                "term_end": "2026-11-30",
+            },
+        ).status_code == 201
+        assert client.post(
+            "/api/v1/users/context_source/memories",
+            json={
+                "category": "habit",
+                "key": "usual_bedtime",
+                "label": "常用就寝时间",
+                "value": "23:00",
+                "enabled": True,
+            },
+        ).status_code == 201
+        generated = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "context_source",
+                "thread_id": "context_source_thread",
+                "query": "2026年7月25日14点去图书馆自习2小时。",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T20:00:00+08:00"
+                },
+            },
+        )
+        assert generated.status_code == 200, generated.text
+        backup = client.get(
+            "/api/v1/users/context_source/profile",
+            params={"thread_id": "context_source_thread"},
+        ).json()
+        backup["thread_id"] = "context_target_thread"
+
+        agenda = client.post(
+            "/api/v1/users/context_target/agenda/contextual",
+            params={
+                "start_date": "2026-07-24",
+                "end_date": "2026-07-25",
+            },
+            json=backup,
+        )
+        assert agenda.status_code == 200, agenda.text
+        payload = agenda.json()
+        assert payload["summary"]["course_count"] == 2
+        assert any(
+            item["title"] == "图书馆自习"
+            for item in payload["items"]
+        )
+        assert any(
+            reminder["kind"] == "bedtime"
+            for reminder in payload["reminders"]
+        )
+
+        repeated = client.post(
+            "/api/v1/users/context_target/agenda/contextual",
+            params={
+                "start_date": "2026-07-24",
+                "end_date": "2026-07-25",
+            },
+            json=backup,
+        )
+        assert repeated.status_code == 200, repeated.text
+        assert len(repeated.json()["items"]) == len(payload["items"])
+
+        due = client.post(
+            "/api/v1/users/context_target/reminders/due/contextual",
+            params={
+                "now": "2026-07-24T22:30:00+08:00",
+                "window_min": 1,
+            },
+            json=backup,
+        )
+        assert due.status_code == 200, due.text
+        assert any(
+            item["kind"] == "bedtime"
+            for item in due.json()["reminders"]
+        )
+
+        exported = client.post(
+            "/api/v1/users/context_target/agenda.ics/contextual",
+            params={
+                "start_date": "2026-07-24",
+                "end_date": "2026-07-25",
+            },
+            json=backup,
+        )
+        assert exported.status_code == 200, exported.text
+        assert "text/calendar" in exported.headers["content-type"]
+        assert "SUMMARY:高等数学" in exported.text
+        assert "SUMMARY:图书馆自习" in exported.text
+        assert "SUMMARY:准备休息" in exported.text
+
+
 def test_reminder_settings_are_user_managed_and_ics_has_alarms(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         assert client.post(

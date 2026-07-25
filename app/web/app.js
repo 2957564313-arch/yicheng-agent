@@ -472,6 +472,20 @@ function clientContextSnapshot() {
   };
 }
 
+function personalContextPayload() {
+  const context = clientContextSnapshot();
+  return {
+    schema_version: "1.0",
+    thread_id: consoleThreadId,
+    memories: context.memories,
+    timetable: context.timetable,
+    calendar_overrides: context.calendar_overrides,
+    reminder_settings: currentReminderSettings
+      || readLocalSnapshot(reminderSettingsSnapshotKey, null),
+    current_plan: context.previous_plan,
+  };
+}
+
 function renderCampus(campus, { isDefault = false } = {}) {
   currentCampusProfile = campus;
   renderPersonalizationState();
@@ -1319,9 +1333,14 @@ async function loadAgenda(selectedDate = shanghaiDateString()) {
   agendaState.textContent = "正在汇总";
   const endDate = addWeeklyDays(selectedDate, 6);
   const response = await fetch(
-    `/api/v1/users/${consoleUserId}/agenda`
+    `/api/v1/users/${consoleUserId}/agenda/contextual`
       + `?start_date=${encodeURIComponent(selectedDate)}`
       + `&end_date=${encodeURIComponent(endDate)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(personalContextPayload()),
+    },
   );
   const data = await response.json();
   if (!response.ok) throw data;
@@ -1451,7 +1470,12 @@ async function pollDueReminders() {
   ) return;
   try {
     const response = await fetch(
-      `/api/v1/users/${consoleUserId}/reminders/due?window_min=2`,
+      `/api/v1/users/${consoleUserId}/reminders/due/contextual?window_min=2`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(personalContextPayload()),
+      },
     );
     const data = await response.json();
     if (!response.ok) throw data;
@@ -1530,9 +1554,14 @@ agendaExport.addEventListener("click", async (event) => {
   agendaExport.textContent = "正在生成日历文件…";
   try {
     const response = await fetch(
-      `/api/v1/users/${consoleUserId}/agenda.ics`
+      `/api/v1/users/${consoleUserId}/agenda.ics/contextual`
         + `?start_date=${encodeURIComponent(startDate)}`
         + `&end_date=${encodeURIComponent(endDate)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(personalContextPayload()),
+      },
     );
     if (!response.ok) throw await response.json();
     const blob = await response.blob();

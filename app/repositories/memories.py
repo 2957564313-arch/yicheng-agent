@@ -148,6 +148,31 @@ class MemoryRepository:
             )
         return cursor.rowcount > 0
 
+    def clear(self, user_id: str) -> int:
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                "DELETE FROM user_memories WHERE user_id = ?",
+                (user_id,),
+            )
+        return cursor.rowcount
+
+    def delete_except_keys(
+        self,
+        *,
+        user_id: str,
+        memory_keys: set[str],
+    ) -> int:
+        if not memory_keys:
+            return self.clear(user_id)
+        placeholders = ",".join("?" for _ in memory_keys)
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                "DELETE FROM user_memories "
+                f"WHERE user_id = ? AND memory_key NOT IN ({placeholders})",
+                [user_id, *sorted(memory_keys)],
+            )
+        return cursor.rowcount
+
     @staticmethod
     def _to_item(row) -> MemoryItem:
         return MemoryItem(

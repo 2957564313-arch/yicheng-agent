@@ -179,6 +179,32 @@ class PlanRepository:
             for row in rows
         ]
 
+    def clear_thread(self, *, user_id: str, thread_id: str) -> int:
+        with self.database.transaction() as connection:
+            plan_rows = connection.execute(
+                """
+                SELECT id FROM plans
+                WHERE user_id = ? AND thread_id = ?
+                """,
+                (user_id, thread_id),
+            ).fetchall()
+            plan_ids = [row["id"] for row in plan_rows]
+            if plan_ids:
+                placeholders = ",".join("?" for _ in plan_ids)
+                connection.execute(
+                    "DELETE FROM plan_items "
+                    f"WHERE plan_id IN ({placeholders})",
+                    plan_ids,
+                )
+            cursor = connection.execute(
+                """
+                DELETE FROM plans
+                WHERE user_id = ? AND thread_id = ?
+                """,
+                (user_id, thread_id),
+            )
+        return cursor.rowcount
+
     def reset_user(self, user_id: str) -> None:
         """Reset demo conversations while preserving long-term user memories."""
 
