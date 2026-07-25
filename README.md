@@ -33,6 +33,7 @@
 - 离线评估：70/70 通过；
 - 端到端场景：25/25 通过；
 - 连续状态场景：14/14 通过；
+- 产品级公网旅程：7/7 通过；
 - 三个固定 Demo：全部通过；
 - 运行范围：本地版本与 Vercel 公网版本均可直接运行。
 
@@ -100,6 +101,7 @@ LIVE_WEATHER_ENABLED=true
 .venv/bin/python scripts/demo_smoke.py
 node scripts/public_acceptance.mjs
 node scripts/public_stateful_acceptance.mjs
+node scripts/public_product_acceptance.mjs
 ```
 
 真实接口检查：
@@ -143,3 +145,4 @@ knowledge/
 - 部署：[`docs/deployment.md`](docs/deployment.md)
 - 发布检查：[`reports/release_checklist.md`](reports/release_checklist.md)
 - 评估报告：[`reports/evaluation.md`](reports/evaluation.md)
+- 公网产品验收：[`reports/product_acceptance.md`](reports/product_acceptance.md)
