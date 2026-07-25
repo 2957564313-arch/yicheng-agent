@@ -3,6 +3,7 @@
 验收日期：2026-07-25  
 验收版本：`897a327`  
 公网入口：https://yicheng-agent.vercel.app/  
+入口二维码：`app/web/assets/yicheng-public-entry.png`
 验收结果：**7/7 条完整用户旅程通过**
 
 ## 验收目的

@@ -39,6 +39,10 @@
 
 公网测试入口：<https://yicheng-agent.vercel.app/>
 
+入口二维码：
+
+![易程智策公网入口二维码](app/web/assets/yicheng-public-entry.png)
+
 当前 Vercel 版本用于跨网络体验和比赛测试。个人课表、记忆、提醒设置会在
 浏览器本机保留快照；正式长期运营前仍需迁移到具备持久化数据库的国内
 服务器。
@@ -146,3 +150,4 @@ knowledge/
 - 发布检查：[`reports/release_checklist.md`](reports/release_checklist.md)
 - 评估报告：[`reports/evaluation.md`](reports/evaluation.md)
 - 公网产品验收：[`reports/product_acceptance.md`](reports/product_acceptance.md)
+- 公网入口二维码：[`app/web/assets/yicheng-public-entry.png`](app/web/assets/yicheng-public-entry.png)
