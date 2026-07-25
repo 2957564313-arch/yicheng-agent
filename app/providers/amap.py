@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from hashlib import sha1
 import math
+import re
 from datetime import date, datetime
 from time import monotonic
 from zoneinfo import ZoneInfo
@@ -26,6 +27,26 @@ _TRANSIENT_AMAP_ERRORS = {
     "SERVICE_NOT_AVAILABLE",
     "UNKNOWN_ERROR",
 }
+
+
+def _compact_text(value: object) -> str:
+    return re.sub(r"\s+", "", str(value or ""))
+
+
+def _campus_match_tokens(campus_query: str) -> list[str]:
+    compact = _compact_text(campus_query)
+    tokens = [compact] if compact else []
+    institution = re.search(r"(.+?(?:大学|学院))", compact)
+    if institution:
+        tokens.append(institution.group(1))
+    stripped = re.sub(
+        r"(?:下沙|高教园|钱塘|本部|主|新)?校区$",
+        "",
+        compact,
+    )
+    if len(stripped) >= 4:
+        tokens.append(stripped)
+    return list(dict.fromkeys(token for token in tokens if len(token) >= 4))
 
 
 async def _get_amap_json(
@@ -136,7 +157,29 @@ class AmapGeocodingProvider:
         pois = place_payload.get("pois", [])
 
         if pois:
-            result = pois[0]
+            campus_tokens = _campus_match_tokens(active_campus_query)
+
+            def poi_score(poi: dict) -> tuple[int, int]:
+                combined = _compact_text(
+                    f"{poi.get('name', '')} {poi.get('address', '')}"
+                )
+                campus_score = max(
+                    (
+                        100 - index * 20
+                        for index, token in enumerate(campus_tokens)
+                        if token in combined
+                    ),
+                    default=0,
+                )
+                name_score = (
+                    30 if _compact_text(name) in combined else 0
+                )
+                return campus_score + name_score, -len(combined)
+
+            # Common building names can return another university first even
+            # with a city filter. Prefer the result that explicitly belongs
+            # to the active school before trusting AMap's original rank.
+            result = max(pois, key=poi_score)
             source_type = "amap_poi"
             reference = " ".join(
                 str(value).strip()

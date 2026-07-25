@@ -393,6 +393,14 @@ def make_enrich_node(container: AppContainer):
             if uses_default_campus_pack
             else []
         )
+        if uses_default_campus_pack and is_knowledge_query:
+            query_facts = container.rules.facts_for_query(state["query"])
+            structured_facts = list(
+                {
+                    fact.id: fact
+                    for fact in [*query_facts, *structured_facts]
+                }.values()
+            )
         if not uses_default_campus_pack:
             warnings.append(
                 Issue(

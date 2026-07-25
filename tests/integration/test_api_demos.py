@@ -314,6 +314,69 @@ def test_offline_knowledge_query_uses_local_campus_facts(tmp_path):
         assert "阳光长跑" not in visible_knowledge[0]["content"]
 
 
+def test_operational_knowledge_answers_are_exact_and_focused(tmp_path):
+    cases = (
+        (
+            "校医院周末几点可以看病？",
+            ("双休日和节假日", "8:00—11:30", "13:30—16:00"),
+            ("各餐厅开放时间",),
+        ),
+        (
+            "阳光长跑哪个时间段可以计入？",
+            ("东操场 7:00—21:00", "西北田径场 18:30—21:00"),
+            ("第1节",),
+        ),
+        (
+            "体育馆周末开放吗？",
+            ("工作日 11:30—20:30", "周末不开放"),
+            ("各楼层具体开放时间",),
+        ),
+        (
+            "宿舍周五晚上几点关门？",
+            ("周五、周六及节假日", "6:20—24:00"),
+            ("各快递点开放时间",),
+        ),
+    )
+
+    with TestClient(build_test_app(tmp_path)) as client:
+        for index, (query, expected, forbidden) in enumerate(cases):
+            response = client.post(
+                "/api/v1/chat",
+                json={
+                    "user_id": "focused_qa",
+                    "thread_id": f"focused_qa_{index}",
+                    "query": query,
+                    "mode": "offline",
+                },
+            )
+            assert response.status_code == 200, response.text
+            payload = response.json()
+            assert payload["status"] == "completed"
+            assert payload["plan"] is None
+            assert all(text in payload["answer"] for text in expected)
+            assert all(text not in payload["answer"] for text in forbidden)
+
+
+def test_handbook_duration_answer_keeps_decisive_quantity(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "policy_qa",
+                "thread_id": "policy_suspension_duration",
+                "query": "普通学生休学最多可以多久？",
+                "mode": "offline",
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        answer = response.json()["answer"]
+        assert "累计不得超过两年" in answer
+        assert "创业休学" in answer
+        assert answer.split("• ", 1)[1].startswith("休学时间一般")
+        assert "转学完成后" not in answer
+
+
 def test_open_ended_overload_request_gets_caring_structured_prompt(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         response = client.post(

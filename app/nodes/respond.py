@@ -578,16 +578,30 @@ def _weather_reminder(
     *,
     query: str = "",
 ) -> str | None:
-    live = next(
-        (
-            item
-            for item in weather
-            if item.source.value in {"user", "live_api"}
-        ),
-        None,
-    )
-    if live is None:
+    live_items = [
+        item
+        for item in weather
+        if item.source.value in {"user", "live_api"}
+    ]
+    if not live_items:
         return None
+
+    def risk_score(item: WeatherContext) -> tuple[int, int, float]:
+        condition = item.condition or ""
+        severe = int(
+            "雨" in condition
+            or "雪" in condition
+            or "风" in condition
+            or (item.rain_probability or 0) >= 0.5
+        )
+        explicit_boundary = int(item.risk_start_at is not None)
+        temperature = item.temperature_c or -100
+        return severe, explicit_boundary, temperature
+
+    live = max(
+        live_items,
+        key=risk_score,
+    )
     condition = live.condition or ""
     has_rain = (
         "雨" in condition or (live.rain_probability or 0) >= 0.5
@@ -615,8 +629,16 @@ def _weather_reminder(
                 f"风险，户外活动已按这个时间边界处理；{care}，"
                 "出发前再看一次临近预报会更稳妥。"
             )
+        period_label = {
+            "day": "白天",
+            "night": "夜间",
+            "morning": "上午",
+            "afternoon": "下午",
+            "evening": "晚间",
+        }.get(live.period, live.period)
         return (
-            f"天气信息显示“{condition}”，目前只能精确到日/夜时段；"
+            f"{period_label}天气信息显示“{condition}”，目前只能精确到"
+            "日/夜时段；"
             f"{care}。户外活动出发前请再看一次临近预报，变化时"
             "我可以局部调整。"
         )
@@ -1364,6 +1386,10 @@ def _facts_answer(
     primary_source = candidates[0][1].source_ref if candidates else ""
     selected: list[RetrievedFact] = []
     excerpts: list[str] = []
+    wants_decisive_quantity = any(
+        marker in query
+        for marker in ("最长", "最多", "几年")
+    )
     for excerpt, fact in candidates:
         if primary_source and fact.source_ref != primary_source:
             continue
@@ -1373,6 +1399,11 @@ def _facts_answer(
             continue
         selected.append(fact)
         excerpts.append(excerpt)
+        if wants_decisive_quantity and any(
+            marker in excerpt
+            for marker in ("不得超过", "最长", "至多", "累计")
+        ):
+            break
         if len(selected) >= 3:
             break
     if not selected:
@@ -1424,9 +1455,11 @@ def _direct_operational_answer(
     rule whenever it is present.
     """
     by_id = {fact.id: fact for fact in facts}
-    if "图书馆" in query and any(
-        marker in query
-        for marker in (
+    if "图书馆" in query:
+        fact = by_id.get("library_floor_hours")
+        upper_floor_requested = any(
+            marker in query
+            for marker in (
             "七层",
             "七楼",
             "八层",
@@ -1448,14 +1481,114 @@ def _direct_operational_answer(
             "11层",
             "11楼",
         )
-    ):
-        fact = by_id.get("library_floor_hours")
-        if fact is not None:
+        )
+        lower_floor_requested = any(
+            marker in query
+            for marker in (
+                "六层",
+                "六楼",
+                "十二层",
+                "十二楼",
+                "6层",
+                "6楼",
+                "12层",
+                "12楼",
+            )
+        )
+        if fact is not None and upper_floor_requested:
             return (
                 "图书馆七至十一层每天 8:00—21:30 开放"
                 "（法定节假日除外），所以七楼晚上 21:30 关闭。"
                 "如果临近闭馆去自习，建议把收拾和离馆时间也预留出来；"
                 "21:30 以后可改选仍开放到 22:30 的六层或十二层。\n\n"
+                f"依据来源：{fact.source_ref or '杭电时间知识库'}"
+            )
+        if fact is not None and lower_floor_requested:
+            return (
+                "图书馆六层和十二层每天 7:00—22:30 开放"
+                "（法定节假日除外）。如果是晚间自习，建议至少提前"
+                "十分钟收拾离馆，别把闭馆时间当作最后离开时间。\n\n"
+                f"依据来源：{fact.source_ref or '杭电时间知识库'}"
+            )
+        if fact is not None:
+            return (
+                "图书馆法定节假日外每天开放，但楼层时间不同：六层、"
+                "十二层为 7:00—22:30，七至十一层为 8:00—21:30。"
+                "如果要排晚间自习，告诉我具体楼层，我会按对应闭馆"
+                "时间留出收拾和离馆余量。\n\n"
+                f"依据来源：{fact.source_ref or '杭电时间知识库'}"
+            )
+    if "阳光长跑" in query:
+        fact = by_id.get("sun_run_locations")
+        if fact is not None:
+            return (
+                "阳光长跑可计入时段是：体育馆副馆南侧塑胶跑道和"
+                "东操场 7:00—21:00，西北田径场 18:30—21:00。"
+                "这里说的是“可计入成绩的时段”，不等同于场地全天"
+                "开放时间；实际跑步还要结合课程、天气和往返通勤。\n\n"
+                f"依据来源：{fact.source_ref or '杭电时间知识库'}"
+            )
+    if "校医院" in query or any(
+        marker in query for marker in ("医务室", "就诊", "看病")
+    ):
+        fact = by_id.get("campus_hospital_hours")
+        if fact is not None:
+            return (
+                "校医院工作日 8:00—20:00 就诊；双休日和节假日分为"
+                " 8:00—11:30、13:30—16:00 两个时段，中午不接诊。"
+                "如果身体明显不舒服，先以就医为主，不必为了原计划"
+                "硬撑；需要的话我也可以帮你把当天其他安排顺延。\n\n"
+                f"依据来源：{fact.source_ref or '杭电时间知识库'}"
+            )
+    if any(
+        marker in query
+        for marker in ("快递", "驿站", "顺丰", "京东", "菜鸟")
+    ):
+        fact = by_id.get("express_service_hours")
+        if fact is not None:
+            if "顺丰" in query:
+                detail = "顺丰快递点 8:00—18:00 开放"
+            elif "京东" in query:
+                detail = "京东快递点 8:00—22:00 开放"
+            elif "菜鸟" in query or "驿站" in query:
+                detail = "菜鸟驿站 8:30—22:30 开放"
+            else:
+                detail = (
+                    "顺丰 8:00—18:00、京东 8:00—22:00、"
+                    "菜鸟驿站 8:30—22:30 开放"
+                )
+            return (
+                f"{detail}。不同快递点闭门时间差异很大，安排取件时"
+                "最好说清具体站点，我会把通勤和截止时间一起算进去。\n\n"
+                f"依据来源：{fact.source_ref or '杭电时间知识库'}"
+            )
+    if (
+        not any(marker in query for marker in ("热水", "供水"))
+        and any(
+            marker in query
+            for marker in ("宿舍", "寝室", "公寓", "门禁", "熄灯")
+        )
+    ):
+        fact = by_id.get("dormitory_access_and_lights")
+        if fact is not None:
+            return (
+                "宿舍周日至周四 6:20—23:00 开门，22:50 自主熄灯、"
+                "23:00 统一熄灯；周五、周六及节假日 "
+                "6:20—24:00 开门，23:50 自主熄灯、24:00 统一"
+                "熄灯。晚间安排还要把回宿舍的通勤时间留在门禁之前。\n\n"
+                f"依据来源：{fact.source_ref or '杭电时间知识库'}"
+            )
+    if any(
+        marker in query
+        for marker in ("体育馆", "综合馆", "羽毛球", "乒乓球")
+    ):
+        fact = by_id.get("summer_indoor_sports_hours")
+        if fact is not None:
+            return (
+                "现有已核验的暑期规则记录：7月1日至9月4日，体育馆"
+                "主馆二楼乒乓球房和综合馆羽毛球馆仅工作日 "
+                "11:30—20:30 开放，周末不开放，并需按要求预约。"
+                "室外场地另有开放规则，不能把两者混在一起判断。\n\n"
                 f"依据来源：{fact.source_ref or '杭电时间知识库'}"
             )
     if any(keyword in query for keyword in ("热水", "供水")):
@@ -1491,7 +1624,39 @@ def _answer_relevance_score(content: str, query: str) -> int:
         "一下",
         "是多少",
     }
-    return sum(len(term) ** 2 for term in terms if term in content)
+    score = sum(len(term) ** 2 for term in terms if term in content)
+    if any(
+        marker in query
+        for marker in ("最长", "最多", "几年")
+    ):
+        decisive_topics = (
+            "请假",
+            "休学",
+            "申诉",
+            "修业年限",
+            "转专业",
+            "注册",
+            "旷课",
+        )
+        requested_topics = {
+            topic for topic in decisive_topics if topic in query
+        }
+        same_topic = not requested_topics or any(
+            topic in content for topic in requested_topics
+        )
+        if same_topic:
+            if any(
+                marker in content
+                for marker in ("不得超过", "最长", "至多", "累计")
+            ):
+                score += 500
+            quantities = re.findall(
+                r"(?:\d+(?:\.\d+)?|[一二三四五六七八九十百两]+)"
+                r"\s*(?:日|天|周|个月|年|学期|小时|分钟)",
+                content,
+            )
+            score += 30 * len(set(quantities))
+    return score
 
 
 def _ensure_query_guardrails(
@@ -1588,6 +1753,46 @@ def _knowledge_answer_excerpt(content: str, query: str) -> str:
                 )
     if (
         "申诉" in query
+        and any(marker in query for marker in ("浙江省教育厅", "省级"))
+        and any(
+            marker in query
+            for marker in ("多久", "多少天", "期限", "什么时候")
+        )
+    ):
+        compact_appeal_content = re.sub(r"\s+", "", content)
+        provincial_appeal_match = re.search(
+            r"((?:学生对复查决定有异议的，)?"
+            r"在接到学校(?:复查|申诉处理)决定书之日起15日内，"
+            r"可以向(?:学校所在地省级教育行政部门|浙江省教育厅)"
+            r"提出书面申诉。)",
+            compact_appeal_content,
+        )
+        if provincial_appeal_match:
+            return provincial_appeal_match.group(1)
+    if (
+        "申诉" in query
+        and "学校" in query
+        and any(
+            marker in query
+            for marker in ("处理决定", "复查结论", "作出决定")
+        )
+        and any(
+            marker in query
+            for marker in ("多久", "多少天", "期限", "什么时候")
+        )
+    ):
+        compact_appeal_content = re.sub(r"\s+", "", content)
+        school_appeal_match = re.search(
+            r"((?:学生申诉处理委员会.*?|申诉委员会.*?)?"
+            r"(?:在|自)接到(?:书面申诉|申诉申请书)(?:之日起|后的)"
+            r"15日内(?:作出复查结论并告知申诉人|"
+            r"产生对申诉的处理决定，并送达申诉人)。?)",
+            compact_appeal_content,
+        )
+        if school_appeal_match:
+            return school_appeal_match.group(1)
+    if (
+        "申诉" in query
         and any(marker in query for marker in ("处分", "处理"))
         and any(marker in query for marker in ("期限", "多少天", "多久"))
         and not any(marker in query for marker in ("教育厅", "省级"))
@@ -1624,6 +1829,21 @@ def _knowledge_answer_excerpt(content: str, query: str) -> str:
         )
         if leave_match:
             return leave_match.group(1)
+    if (
+        "休学" in query
+        and any(
+            marker in query
+            for marker in ("最长", "最多", "多久", "期限", "几年")
+        )
+    ):
+        compact_suspension_content = re.sub(r"\s+", "", content)
+        suspension_match = re.search(
+            r"(休学时间一般以一学期或者一学年为单位，"
+            r"但累计不得超过两年(?:\(创业休学的除外\))?。?)",
+            compact_suspension_content,
+        )
+        if suspension_match:
+            return suspension_match.group(1)
     for holiday_name in (
         "元旦",
         "春节",

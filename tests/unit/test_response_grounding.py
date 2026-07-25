@@ -336,6 +336,34 @@ def test_hot_weather_reminder_matches_non_sport_task():
     assert "运动前" not in reminder
 
 
+def test_weather_reminder_checks_night_forecast_not_only_first_period():
+    target_date = datetime(2026, 7, 24, tzinfo=TZ).date()
+    reminder = _weather_reminder(
+        [
+            WeatherContext(
+                date=target_date,
+                period="day",
+                condition="多云",
+                temperature_c=31,
+                source=DataSource.LIVE_API,
+            ),
+            WeatherContext(
+                date=target_date,
+                period="night",
+                condition="小雨",
+                temperature_c=26,
+                source=DataSource.LIVE_API,
+            ),
+        ],
+        query="晚上去图书馆自习",
+    )
+
+    assert reminder is not None
+    assert "夜间" in reminder
+    assert "小雨" in reminder
+    assert "带把伞" in reminder
+
+
 def test_custom_campus_without_rules_never_claims_opening_hours_checked():
     single_task_plan = Plan(
         id="custom_campus_plan",

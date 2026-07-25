@@ -133,6 +133,44 @@ async def test_amap_geocoder_registers_unknown_campus_building(
 
 
 @pytest.mark.asyncio
+async def test_amap_geocoder_prefers_active_campus_over_first_same_name_poi(
+    monkeypatch,
+    tmp_path: Path,
+):
+    fake = type("ScopedGeocodingClient", (FakeAsyncClient,), {})
+    fake.payload = {
+        "status": "1",
+        "pois": [
+            {
+                "name": "第七教学楼",
+                "address": "浙江某大学校内",
+                "location": "120.100000,30.100000",
+            },
+            {
+                "name": "杭州电子科技大学第七教学科研楼",
+                "address": "杭州电子科技大学下沙校区",
+                "location": "120.343791,30.314490",
+            },
+        ],
+    }
+    fake.calls = []
+    monkeypatch.setattr("app.providers.amap.httpx.AsyncClient", fake)
+    provider = AmapGeocodingProvider(
+        locations=build_locations(tmp_path),
+        api_key="test-key",
+        campus_query="杭州电子科技大学下沙校区",
+        search_city="杭州",
+    )
+
+    result = await provider.resolve("第七教学楼")
+
+    assert result is not None
+    assert result.longitude == 120.343791
+    assert result.latitude == 30.31449
+    assert "杭州电子科技大学" in result.source.reference
+
+
+@pytest.mark.asyncio
 async def test_amap_geocoder_retries_after_transient_qps_limit(
     monkeypatch,
     tmp_path: Path,

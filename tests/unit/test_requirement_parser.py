@@ -97,6 +97,47 @@ def test_empty_task_request_requires_clarification():
     assert result.clarifications == ["请告诉我需要安排的具体任务。"]
 
 
+def test_timetable_reference_does_not_turn_planning_request_into_query():
+    result = parse(
+        "根据我的课表帮我安排明天下午去图书馆自习2小时"
+        "和跑步30分钟。"
+    )
+
+    assert result.intent == "plan"
+    assert {task.id for task in result.tasks} == {"study", "run"}
+    assert result.clarifications == []
+
+
+def test_timetable_question_with_natural_wording_is_a_query():
+    result = parse("我明天有哪些课？")
+
+    assert result.intent == "query"
+    assert result.tasks == []
+    assert result.clarifications == []
+
+
+def test_operational_questions_do_not_create_fake_tasks():
+    for query in (
+        "校医院周末几点可以看病？",
+        "阳光长跑哪个时间段可以计入？",
+        "体育馆周末开放吗？",
+        "图书馆七楼今天开吗？",
+    ):
+        result = parse(query)
+        assert result.intent == "query", query
+        assert result.tasks == [], query
+        assert result.clarifications == [], query
+
+
+def test_question_word_does_not_hide_explicit_planning_request():
+    result = parse(
+        "明天下午去图书馆七楼自习2小时，可以帮我安排吗？"
+    )
+
+    assert result.intent == "plan"
+    assert [task.id for task in result.tasks] == ["study"]
+
+
 def test_competition_demo_parses_minutes_without_cross_task_capture():
     result = parse(
         "今天14点以后去图书馆学习2小时，取快递，"

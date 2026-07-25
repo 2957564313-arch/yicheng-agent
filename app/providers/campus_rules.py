@@ -11,6 +11,40 @@ from app.schemas.context import CongestionWindow, RetrievedFact
 
 WEEKDAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
+QUERY_RULE_MARKERS = {
+    "library_floor_hours": ("图书馆", "阅览室"),
+    "express_service_hours": (
+        "快递",
+        "驿站",
+        "顺丰",
+        "京东",
+        "菜鸟",
+    ),
+    "dormitory_access_and_lights": (
+        "宿舍",
+        "寝室",
+        "公寓",
+        "门禁",
+        "熄灯",
+    ),
+    "summer_indoor_sports_hours": (
+        "体育馆",
+        "综合馆",
+        "羽毛球",
+        "乒乓球",
+    ),
+    "sun_run_locations": ("阳光长跑",),
+    "canteen_service_periods": ("餐厅", "食堂", "用餐"),
+    "hot_water_hours": ("热水", "供水", "洗澡", "洗漱"),
+    "campus_hospital_hours": ("校医院", "医务室", "就诊", "看病"),
+    "campus_congestion_policy": (
+        "拥堵",
+        "高峰",
+        "集中通行",
+        "错峰",
+    ),
+}
+
 
 class CampusRulesRepository:
     def __init__(
@@ -171,23 +205,40 @@ class CampusRulesRepository:
             applies_to = set(rule.get("applies_to", []))
             if not (applies_to & location_ids):
                 continue
-            verified_at = (
-                date.fromisoformat(rule["verified_at"])
-                if rule.get("verified_at")
-                else None
-            )
-            facts.append(
-                RetrievedFact(
-                    id=rule["id"],
-                    content=rule["content"],
-                    applies_to=list(applies_to),
-                    priority=rule.get("priority", 0),
-                    source=DataSource.STRUCTURED,
-                    source_ref=rule.get("source_url"),
-                    verified_at=verified_at,
-                )
-            )
+            facts.append(self._rule_fact(rule))
         return facts
+
+    def facts_for_query(self, query: str) -> list[RetrievedFact]:
+        """Return exact operational facts before broad document excerpts.
+
+        A direct question has no planned task and therefore often has no
+        resolved location ID. Matching the verified rule by topic keeps exact
+        hours visible instead of letting a long mixed document chunk bury the
+        answer.
+        """
+        facts = []
+        for rule in self._rules:
+            markers = QUERY_RULE_MARKERS.get(rule["id"], ())
+            if markers and any(marker in query for marker in markers):
+                facts.append(self._rule_fact(rule))
+        return facts
+
+    @staticmethod
+    def _rule_fact(rule: dict) -> RetrievedFact:
+        verified_at = (
+            date.fromisoformat(rule["verified_at"])
+            if rule.get("verified_at")
+            else None
+        )
+        return RetrievedFact(
+            id=rule["id"],
+            content=rule["content"],
+            applies_to=list(rule.get("applies_to", [])),
+            priority=rule.get("priority", 0),
+            source=DataSource.STRUCTURED,
+            source_ref=rule.get("source_url"),
+            verified_at=verified_at,
+        )
 
     def congestion_windows(
         self,

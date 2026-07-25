@@ -151,6 +151,94 @@ class RuleBasedRequirementParser:
 
     @staticmethod
     def _is_knowledge_query(query: str) -> bool:
+        explicit_planning_markers = (
+            "安排",
+            "规划",
+            "帮我安排",
+            "请安排",
+            "安排一下",
+            "重新安排",
+            "帮我规划",
+            "请规划",
+            "加入日程",
+            "加入计划",
+            "排进日程",
+            "排进计划",
+        )
+        operational_domains = (
+            "图书馆",
+            "体育馆",
+            "操场",
+            "田径场",
+            "阳光长跑",
+            "快递",
+            "驿站",
+            "顺丰",
+            "京东",
+            "菜鸟",
+            "校医院",
+            "热水",
+            "供水",
+            "宿舍",
+            "公寓",
+            "门禁",
+            "餐厅",
+            "食堂",
+        )
+        operational_question_markers = (
+            "几点",
+            "什么时候",
+            "何时",
+            "哪个时间段",
+            "哪些时间",
+            "开放吗",
+            "开吗",
+            "营业吗",
+            "到几点",
+            "计入",
+            "有什么规定",
+            "有哪些规定",
+            "怎么规定",
+        )
+        planning_keywords = (
+            "安排",
+            "规划",
+            "自习",
+            "学习",
+            "取快递",
+            "拿快递",
+            "取顺丰",
+            "拿顺丰",
+            "顺丰快递",
+            "取京东",
+            "拿京东",
+            "京东快递",
+            "跑步",
+            "长跑",
+            "阳光长跑",
+            "运动",
+            "羽毛球",
+            "乒乓球",
+            "校医院",
+            "看医生",
+            "就诊",
+            "洗澡",
+            "洗漱",
+            "热水",
+            "吃饭",
+        )
+        if (
+            not any(marker in query for marker in explicit_planning_markers)
+            and any(domain in query for domain in operational_domains)
+            and any(
+                marker in query
+                for marker in operational_question_markers
+            )
+        ):
+            # 场馆、门禁、快递和校医院等“什么时候开放/能否计入”
+            # 是校园事实查询。不能因为句子里同时出现“看病、长跑”等
+            # 任务词，就误创建一项日程。
+            return True
         if (
             any(keyword in query for keyword in ("热水", "供水"))
             and any(
@@ -185,11 +273,17 @@ class RuleBasedRequirementParser:
             # “顺丰几点关闭”“校医院什么时候可以就诊”是在询问
             # 已核验规则，不是要求系统现在创建一项取件或就诊任务。
             return True
+        if any(keyword in query for keyword in planning_keywords):
+            # “根据我的课表帮我安排自习”等句子虽然包含“课表”，
+            # 但核心动作是生成计划。课表应作为硬约束参与排程，而不是
+            # 把整句话提前截断为知识问答。
+            return False
         if any(
             re.search(pattern, query)
             for pattern in (
                 r"课表",
                 r"哪几节.*课",
+                r"有哪些课",
                 r"(?:有|没|没有)课吗",
                 r"有没有课",
                 r"是否有课",
@@ -198,35 +292,6 @@ class RuleBasedRequirementParser:
             )
         ):
             return True
-        planning_keywords = (
-            "安排",
-            "规划",
-            "自习",
-            "学习",
-            "取快递",
-            "拿快递",
-            "取顺丰",
-            "拿顺丰",
-            "顺丰快递",
-            "取京东",
-            "拿京东",
-            "京东快递",
-            "跑步",
-            "长跑",
-            "阳光长跑",
-            "运动",
-            "羽毛球",
-            "乒乓球",
-            "校医院",
-            "看医生",
-            "就诊",
-            "洗澡",
-            "洗漱",
-            "热水",
-            "吃饭",
-        )
-        if any(keyword in query for keyword in planning_keywords):
-            return False
         return any(
             keyword in query
             for keyword in (
