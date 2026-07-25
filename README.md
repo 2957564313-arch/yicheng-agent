@@ -25,7 +25,7 @@
 - 个性化建议：用户主动开启后才识别重复行为，只征求确认、不自动加任务，
   支持忽略冷却、重复拒绝降频和手动重置；
 - 测试入口保护：可选固定测试账号登录，高成本接口使用短期签名凭证；
-- 自动化测试：141 项通过；
+- 自动化测试：144 项通过；
 - 离线评估：60/60 通过；
 - 端到端场景：25/25 通过；
 - 连续状态场景：10/10 通过；
@@ -125,6 +125,7 @@ Profile。未导入时系统会明确提示，并禁止借用默认学校规则�
 
 - 当前交付状态：[`docs/plans/项目交付清单与待办.md`](docs/plans/项目交付清单与待办.md)
 - 完整工程方案：[`docs/plans/新版工程执行计划.md`](docs/plans/新版工程执行计划.md)
+- 周规划与滚动重排：[`docs/WEEKLY_PLANNING.md`](docs/WEEKLY_PLANNING.md)
 - 校园配置：[`docs/CAMPUS_PROFILE.md`](docs/CAMPUS_PROFILE.md)
 - 环境：[`docs/environment.md`](docs/environment.md)
 - API：[`docs/api.md`](docs/api.md)
