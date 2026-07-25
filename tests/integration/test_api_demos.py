@@ -40,6 +40,15 @@ class FailingLLM:
         raise TimeoutError("simulated timeout")
 
 
+class MisleadingKnowledgeLLM:
+    configured = True
+
+    async def answer_question(self, **_kwargs):
+        return (
+            "普通学生最多只能休学一年，具体规定请自行查看学校文件。"
+        )
+
+
 def test_health_and_demo_catalog(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         health = client.get("/api/v1/health")
@@ -375,6 +384,28 @@ def test_handbook_duration_answer_keeps_decisive_quantity(tmp_path):
         assert "创业休学" in answer
         assert answer.split("• ", 1)[1].startswith("休学时间一般")
         assert "转学完成后" not in answer
+
+
+def test_verified_handbook_rule_bypasses_llm_paraphrase(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        client.app.state.container.llm = MisleadingKnowledgeLLM()
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "policy_live_qa",
+                "thread_id": "policy_live_suspension_duration",
+                "query": "普通学生休学最多可以多久？",
+                "mode": "live",
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        answer = payload["answer"]
+        assert "累计不得超过两年" in answer
+        assert "创业休学" in answer
+        assert "最多只能休学一年" not in answer
+        assert "依据来源" in answer
 
 
 def test_open_ended_overload_request_gets_caring_structured_prompt(tmp_path):

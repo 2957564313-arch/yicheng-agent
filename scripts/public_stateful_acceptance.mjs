@@ -187,6 +187,35 @@ results.push(await runCase("timetable_snapshot_hard_constraint", async () => {
   assert(course.end_at === "2026-07-24T15:05:00+08:00", "课程结束时间被修改");
 }));
 
+results.push(await runCase("timetable_reference_still_plans", async () => {
+  const data = await chat({
+    user_id: `stateful_timetable_wording_${stamp}`,
+    thread_id: `stateful_timetable_wording_thread_${stamp}`,
+    query:
+      "根据我的课表帮我安排今天下午去图书馆自习1小时，"
+      + "再去菜鸟驿站取快递，18点前结束。",
+    mode: "offline",
+    client_context: {
+      now: "2026-07-24T12:30:00+08:00",
+      timetable,
+    },
+  });
+  const tasks = taskItems(data);
+  assert(data.status === "completed", "包含“课表”的规划请求被误判为问答");
+  assert(
+    tasks.some((item) => item.title.includes("数据结构")),
+    "个人课表课程没有作为硬约束加入",
+  );
+  assert(
+    tasks.some((item) => item.title.includes("自习")),
+    "自习任务被意图判断漏掉",
+  );
+  assert(
+    tasks.some((item) => item.title.includes("取快递")),
+    "取快递任务被意图判断漏掉",
+  );
+}));
+
 results.push(await runCase("new_query_does_not_reuse_old_plan", async () => {
   const seed = await chat({
     user_id: `stateful_isolation_${stamp}`,

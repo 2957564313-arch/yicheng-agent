@@ -40,12 +40,19 @@ def make_respond_node(container: AppContainer):
                 state["query"],
                 facts,
             )
+            direct_policy_answer = _direct_policy_answer(
+                state["query"],
+                facts,
+            )
             timetable_fact = next(
                 (fact for fact in facts if fact.id == "personal_timetable"),
                 None,
             )
             if direct_operational_answer is not None:
                 answer = direct_operational_answer
+                used_llm = False
+            elif direct_policy_answer is not None:
+                answer = direct_policy_answer
                 used_llm = False
             elif timetable_fact is not None:
                 answer = _timetable_answer(timetable_fact.content)
@@ -1441,6 +1448,56 @@ def _fact_source_label(fact: RetrievedFact) -> str:
     if title:
         parts.append(title)
     return " · ".join(parts)
+
+
+def _direct_policy_answer(
+    query: str,
+    facts: list[RetrievedFact],
+) -> str | None:
+    """Keep verified handbook rules exact instead of model-paraphrased.
+
+    Student-status rules, deadlines and eligibility conditions are
+    high-stakes factual answers.  Once the retriever has found the verified
+    handbook passage, a rendering model is not allowed to alter its number,
+    exception or source label.
+    """
+    policy_topics = (
+        "学生手册",
+        "学籍",
+        "处分",
+        "申诉",
+        "请假",
+        "休学",
+        "复学",
+        "转专业",
+        "注册",
+        "旷课",
+        "迟到",
+        "早退",
+        "奖学金",
+        "助学金",
+        "修业",
+        "退学",
+        "毕业",
+        "学位",
+        "补考",
+        "重修",
+        "考试",
+        "考核",
+    )
+    if not any(topic in query for topic in policy_topics):
+        return None
+    handbook_facts = [
+        fact
+        for fact in facts
+        if (
+            "学生手册" in fact.source_ref
+            or "学生手册" in str(fact.metadata.get("title") or "")
+        )
+    ]
+    if not handbook_facts:
+        return None
+    return _facts_answer(handbook_facts, query=query)
 
 
 def _direct_operational_answer(

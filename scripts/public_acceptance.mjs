@@ -404,6 +404,61 @@ const cases = [
     },
   },
   {
+    id: "sun_run_all_venues",
+    query: "阳光长跑哪个时间段可以计入？",
+    check(data) {
+      return [
+        expectText(
+          data.answer,
+          "东操场 7:00—21:00",
+          "应完整回答东操场计入时段",
+        ),
+        expectText(
+          data.answer,
+          "西北田径场 18:30—21:00",
+          "应完整回答西北田径场计入时段",
+        ),
+        expectTrue(
+          !data.answer.includes("第1节"),
+          "回答不能混入无关上课时间长段落",
+        ),
+      ];
+    },
+  },
+  {
+    id: "gym_weekend_focus",
+    query: "体育馆周末开放吗？",
+    check(data) {
+      return [
+        expectText(data.answer, "周末不开放", "应直接说明室内场馆周末关闭"),
+        expectText(
+          data.answer,
+          "工作日 11:30—20:30",
+          "应给出可替代的工作日开放时段",
+        ),
+        expectTrue(
+          !data.answer.includes("各楼层具体开放时间"),
+          "回答不能混入图书馆等无关长段落",
+        ),
+      ];
+    },
+  },
+  {
+    id: "handbook_suspension_limit",
+    query: "普通学生休学最多可以多久？",
+    check(data) {
+      return [
+        expectText(data.answer, "累计不得超过两年", "应保留休学期限结论"),
+        expectText(data.answer, "创业休学", "应保留规则中的例外条件"),
+        expectTrue(
+          data.answer.indexOf("累计不得超过两年")
+            < data.answer.indexOf("依据来源"),
+          "直接结论应出现在来源说明之前",
+        ),
+      ];
+    },
+  },
+  {
     id: "national_holiday_answer",
     query: "2026年国庆节什么时候放假？",
     check(data) {
