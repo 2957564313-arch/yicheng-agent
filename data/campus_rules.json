@@ -1,28 +1,126 @@
 {
   "schema_version": "1.0",
   "data_quality": "project_owner_verified",
+  "activity_rules": [
+    {
+      "id": "sun_run_east_and_gym",
+      "title_keywords": ["阳光长跑"],
+      "location_ids": ["track", "gym_south_track"],
+      "weekly": {
+        "mon": [["07:00", "21:00"]],
+        "tue": [["07:00", "21:00"]],
+        "wed": [["07:00", "21:00"]],
+        "thu": [["07:00", "21:00"]],
+        "fri": [["07:00", "21:00"]],
+        "sat": [["07:00", "21:00"]],
+        "sun": [["07:00", "21:00"]]
+      },
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "id": "sun_run_northwest",
+      "title_keywords": ["阳光长跑"],
+      "location_ids": ["northwest_track"],
+      "weekly": {
+        "mon": [["18:30", "21:00"]],
+        "tue": [["18:30", "21:00"]],
+        "wed": [["18:30", "21:00"]],
+        "thu": [["18:30", "21:00"]],
+        "fri": [["18:30", "21:00"]],
+        "sat": [["18:30", "21:00"]],
+        "sun": [["18:30", "21:00"]]
+      },
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "id": "dormitory_hot_water",
+      "title_keywords": ["热水", "洗澡", "洗漱"],
+      "location_ids": ["student_dormitory"],
+      "weekly": {
+        "mon": [["06:00", "08:00"], ["16:30", "24:00"]],
+        "tue": [["06:00", "08:00"], ["16:30", "24:00"]],
+        "wed": [["06:00", "08:00"], ["16:30", "24:00"]],
+        "thu": [["06:00", "08:00"], ["16:30", "24:00"]],
+        "fri": [["06:00", "08:00"], ["16:30", "24:00"]],
+        "sat": [["06:00", "08:00"], ["16:30", "24:00"]],
+        "sun": [["06:00", "08:00"], ["16:30", "24:00"]]
+      },
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    }
+  ],
   "rules": [
     {
-      "id": "library_overall_hours",
-      "content": "图书馆整体周一至周日（法定节假日除外）7:00-22:30开放；不同楼层开放时间可能不同。",
-      "applies_to": ["library"],
-      "priority": 100,
+      "id": "library_floor_hours",
+      "content": "图书馆不同楼层开放时间不同：六层、十二层周一至周日7:00-22:30开放；七至十一层周一至周日8:00-21:30开放，法定节假日除外。21:30以后只能选择仍开放的六层或十二层，不能把22:30视为所有楼层的统一闭馆时间。",
+      "applies_to": ["library", "library_floor_6_12", "library_floor_7_11"],
+      "priority": 110,
       "source_url": "杭电时间知识库.docx",
       "verified_at": "2026-07-24"
     },
     {
-      "id": "parcel_station_hours",
-      "content": "项目知识快照记录菜鸟驿站开放时间为8:30-22:30。",
-      "applies_to": ["parcel_station"],
-      "priority": 100,
+      "id": "express_service_hours",
+      "content": "顺丰快递点8:00-18:00开放，京东快递点8:00-22:00开放，菜鸟驿站8:30-22:30开放；安排取件时必须先确认具体快递点。",
+      "applies_to": ["parcel_station", "sf_express", "jd_express"],
+      "priority": 105,
       "source_url": "杭电时间知识库.docx",
       "verified_at": "2026-07-24"
     },
     {
-      "id": "east_track_sun_run",
-      "content": "项目知识快照记录东操场阳光长跑计入时段为7:00-21:00。",
-      "applies_to": ["track"],
-      "priority": 90,
+      "id": "dormitory_access_and_lights",
+      "content": "学生公寓周日至周四6:20-23:00开门，22:50自主熄灯、23:00统一熄灯；周五、周六及节假日6:20-24:00开门，23:50自主熄灯、24:00统一熄灯。晚间计划需预留返回宿舍的通勤时间。",
+      "applies_to": ["student_dormitory"],
+      "priority": 110,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "id": "summer_indoor_sports_hours",
+      "content": "7月1日至9月4日，体育馆主馆二楼乒乓球房和综合馆羽毛球馆仅工作日11:30-20:30开放，周末不开放，并需按要求预约。",
+      "applies_to": ["gym_main", "gym_comprehensive"],
+      "priority": 105,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "id": "sun_run_locations",
+      "content": "阳光长跑可计入时段：体育馆副馆南侧塑胶跑道和东操场为7:00-21:00，西北田径场为18:30-21:00；场地开放时间与阳光长跑计入时段不是同一概念。",
+      "applies_to": ["track", "gym_south_track", "northwest_track"],
+      "priority": 110,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "id": "canteen_service_periods",
+      "content": "第一、三、五、六餐厅及快餐点供应早中晚餐；教师餐厅、清真餐厅供应中晚餐；梅花餐厅供应中晚餐和夜宵。具体档口营业情况以现场为准。",
+      "applies_to": ["canteen"],
+      "priority": 85,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "id": "hot_water_hours",
+      "content": "学生公寓热水供应时段为6:00-8:00和16:30-24:00；涉及洗漱或用热水的安排应落在供应时段内。",
+      "applies_to": ["student_dormitory"],
+      "priority": 115,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "id": "campus_hospital_hours",
+      "content": "校医院工作日8:00-20:00就诊；双休日及节假日8:00-11:30、13:30-16:00就诊。身体不适时应优先就医，不以普通学习任务的优先级处理。",
+      "applies_to": ["campus_hospital"],
+      "priority": 120,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "id": "campus_congestion_policy",
+      "content": "校园集中通行时段为7:45-8:00、9:40-10:00、12:25-12:45、13:20-13:30、15:05-15:20、16:00-16:15。系统不强制用户错峰，但必须在高德基础通勤时间上增加缓冲并提示可选错峰方案。",
+      "applies_to": ["campus_mobility"],
+      "priority": 95,
       "source_url": "杭电时间知识库.docx",
       "verified_at": "2026-07-24"
     }

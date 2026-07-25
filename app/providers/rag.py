@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
 from app.schemas.common import DataSource
@@ -19,9 +20,109 @@ QUERY_EXPANSIONS = {
     "吃饭": ("餐厅", "食堂", "就餐"),
     "处分": ("违纪", "纪律处分", "学生管理"),
     "作弊": ("考试违纪", "考试纪律", "处分"),
-    "请假": ("销假", "请假手续", "学生管理"),
+    "请假": (
+        "销假",
+        "请假手续",
+        "学生管理",
+        "最长请假时间不能超过四周",
+    ),
+    "注册": (
+        "暂缓注册",
+        "未按期注册",
+        "每天按6节课计",
+        "学籍",
+    ),
+    "旷课": ("考勤", "课程考核资格", "三分之一", "迟到", "早退"),
+    "迟到": ("早退", "旷课", "0.5学时", "考勤"),
+    "早退": ("迟到", "旷课", "0.5学时", "考勤"),
+    "申诉": (
+        "书面申诉",
+        "学生申诉处理委员会",
+        "处分决定书",
+        "10日",
+    ),
+    "休学": (
+        "一学期或者一学年",
+        "累计不得超过两年",
+        "休学期间",
+        "复学",
+    ),
+    "复学": (
+        "休学期满",
+        "开学两周内",
+        "复学申请",
+        "教务处",
+    ),
+    "修业年限": (
+        "创业休学",
+        "四年制本科生",
+        "最长修业年限为8年",
+    ),
+    "转专业": (
+        "普通类转专业",
+        "实际在校学期",
+        "超过四学期",
+        "不得申请",
+    ),
     "奖学金": ("评奖评优", "奖助学金", "综合测评"),
 }
+
+OPERATIONAL_TERMS = (
+    "开放",
+    "营业",
+    "时间",
+    "几点",
+    "门禁",
+    "熄灯",
+    "热水",
+    "快递",
+    "驿站",
+    "图书馆",
+    "操场",
+    "田径场",
+    "跑步",
+    "阳光长跑",
+    "体育馆",
+    "餐厅",
+    "食堂",
+    "校医院",
+    "节次",
+    "课表",
+    "上课",
+    "拥堵",
+)
+
+POLICY_TERMS = (
+    "处分",
+    "作弊",
+    "违纪",
+    "奖学金",
+    "请假",
+    "旷课",
+    "考勤",
+    "迟到",
+    "早退",
+    "申诉",
+    "休学",
+    "复学",
+    "注册",
+    "修业年限",
+    "学籍",
+    "转专业",
+    "评奖",
+    "综合测评",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _KnowledgeChunk:
+    id: str
+    content: str
+    tokens: Counter[str]
+    source_ref: str
+    verified: bool
+    source_tier: int
+    knowledge_type: str
 
 
 def _tokens(text: str) -> Counter[str]:
@@ -86,6 +187,27 @@ def _split_long_unit(unit: str, max_chars: int) -> list[str]:
 
 def _content_chunks(content: str, max_chars: int = 1600) -> list[str]:
     """Build bounded chunks so saved long documents remain searchable."""
+    heading_sections = [
+        section.strip()
+        for section in re.split(r"(?m)(?=^#{1,4}\s+)", content)
+        if section.strip()
+    ]
+    if len(heading_sections) > 1:
+        chunks: list[str] = []
+        for section in heading_sections:
+            if len(section) <= max_chars:
+                chunks.append(section)
+            else:
+                chunks.extend(_content_chunks_without_headings(section, max_chars))
+        return chunks
+    return _content_chunks_without_headings(content, max_chars)
+
+
+def _content_chunks_without_headings(
+    content: str,
+    max_chars: int,
+) -> list[str]:
+    """Split prose while keeping Markdown sections as independent evidence."""
     raw_units = [
         part.strip()
         for part in re.split(r"\n\s*\n", content)
@@ -105,14 +227,106 @@ def _content_chunks(content: str, max_chars: int = 1600) -> list[str]:
         separator_chars = 2 if current else 0
         if current and current_chars + separator_chars + len(unit) > max_chars:
             chunks.append("\n\n".join(current))
-            current = []
-            current_chars = 0
-            separator_chars = 0
+            # Keep one short source line as overlap. PDF extraction often
+            # wraps a single sentence across two visual lines, and without
+            # overlap a rule such as “累计不｜得超过两年” is split between
+            # chunks and cannot be quoted completely.
+            overlap = (
+                [current[-1]]
+                if current and len(current[-1]) <= min(400, max_chars // 2)
+                else []
+            )
+            current = overlap
+            current_chars = len(overlap[0]) if overlap else 0
+            separator_chars = 2 if current else 0
         current.append(unit)
         current_chars += separator_chars + len(unit)
     if current:
         chunks.append("\n\n".join(current))
     return chunks
+
+
+def _focused_evidence_excerpt(
+    content: str,
+    *,
+    terms: list[str],
+    max_chars: int = 1200,
+) -> str:
+    """Keep the part of a long chunk that actually matched the query.
+
+    A plain ``content[:max_chars]`` can silently cut off a rule located near
+    the end of a PDF-derived chunk.  Rank candidate windows by the matching
+    query and expansion terms they contain, then return the densest window.
+    """
+    if len(content) <= max_chars:
+        return content
+    matches: list[tuple[int, int]] = []
+    for term in dict.fromkeys(value.strip() for value in terms):
+        if len(term) < 2:
+            continue
+        start = 0
+        while True:
+            position = content.find(term, start)
+            if position < 0:
+                break
+            # Long, explicit expansion phrases carry substantially more
+            # meaning than repeated two-character words such as “休学”.
+            matches.append((position, min(len(term) ** 3, 1000)))
+            start = position + max(1, len(term))
+    if not matches:
+        return content[:max_chars]
+
+    best_start = 0
+    best_score = -1
+    for position, _ in matches:
+        candidate_start = min(
+            max(0, position - max_chars // 2),
+            len(content) - max_chars,
+        )
+        candidate_end = candidate_start + max_chars
+        score = sum(
+            weight
+            for match_position, weight in matches
+            if candidate_start <= match_position < candidate_end
+        )
+        if score > best_score or (
+            score == best_score and candidate_start > best_start
+        ):
+            best_start = candidate_start
+            best_score = score
+
+    if best_start:
+        previous_newline = content.rfind("\n", 0, best_start)
+        if previous_newline >= 0:
+            best_start = previous_newline + 1
+    best_end = min(len(content), best_start + max_chars)
+    return content[best_start:best_end]
+
+
+def _infer_knowledge_type(
+    *,
+    path: Path,
+    content: str,
+    metadata: dict[str, str],
+) -> str:
+    declared = metadata.get("knowledge_type", "").strip().lower()
+    if declared in {"operations", "policy", "calendar", "general"}:
+        return declared
+    name = path.stem
+    if any(term in name for term in ("学生手册", "制度", "办法", "条例")):
+        return "policy"
+    if any(
+        term in name
+        for term in ("时间", "开放", "服务", "地点", "课表", "作息")
+    ):
+        return "operations"
+    operation_hits = sum(term in content for term in OPERATIONAL_TERMS)
+    policy_hits = sum(term in content for term in POLICY_TERMS)
+    if operation_hits >= 3 and operation_hits > policy_hits:
+        return "operations"
+    if policy_hits >= 2 and policy_hits > operation_hits:
+        return "policy"
+    return "general"
 
 
 class KnowledgeRepository:
@@ -125,9 +339,7 @@ class KnowledgeRepository:
 
     def __init__(self, directory: Path) -> None:
         self.directory = directory
-        self._chunks: list[
-            tuple[str, str, Counter[str], str, bool, int]
-        ] = []
+        self._chunks: list[_KnowledgeChunk] = []
         if directory.exists():
             for path in sorted(directory.glob("**/*.md")):
                 if path.name.lower() == "readme.md":
@@ -142,20 +354,26 @@ class KnowledgeRepository:
                 )
                 relative_parts = path.relative_to(directory).parts
                 source_tier = (
-                    3
-                    if "official" in relative_parts
-                    else (2 if "curated" in relative_parts else 1)
+                    4
+                    if "curated" in relative_parts
+                    else (3 if "official" in relative_parts else 1)
+                )
+                knowledge_type = _infer_knowledge_type(
+                    path=path,
+                    content=content,
+                    metadata=metadata,
                 )
                 for index, chunk in enumerate(_content_chunks(content)):
                     chunk_id = f"{path.stem}:{index}"
                     self._chunks.append(
-                        (
-                            chunk_id,
-                            chunk,
-                            _tokens(chunk),
-                            source_ref,
-                            verified,
-                            source_tier,
+                        _KnowledgeChunk(
+                            id=chunk_id,
+                            content=chunk,
+                            tokens=_tokens(chunk),
+                            source_ref=source_ref,
+                            verified=verified,
+                            source_tier=source_tier,
+                            knowledge_type=knowledge_type,
                         )
                     )
 
@@ -168,60 +386,73 @@ class KnowledgeRepository:
         queries: list[str],
         *,
         top_k: int = 3,
+        purpose: str = "auto",
     ) -> list[RetrievedFact]:
         expanded_queries = self._expand_queries(queries)
+        allowed_types = self._allowed_types(
+            purpose=purpose,
+            queries=queries,
+        )
         query_tokens = Counter()
         for query in expanded_queries:
             query_tokens.update(_tokens(query))
 
-        ranked: list[tuple[int, str, str, str, bool, int]] = []
-        for (
-            chunk_id,
-            content,
-            chunk_tokens,
-            source_ref,
-            verified,
-            source_tier,
-        ) in self._chunks:
+        ranked: list[tuple[int, _KnowledgeChunk]] = []
+        for chunk in self._chunks:
+            if (
+                allowed_types is not None
+                and chunk.knowledge_type not in allowed_types
+            ):
+                continue
             lexical_score = sum(
                 _token_weight(token)
-                * min(count, chunk_tokens.get(token, 0))
+                * min(count, chunk.tokens.get(token, 0))
                 for token, count in query_tokens.items()
             )
             exact_bonus = sum(
                 18
                 for query in queries
-                if len(query.strip()) >= 3 and query.strip() in content
+                if (
+                    len(query.strip()) >= 3
+                    and query.strip() in chunk.content
+                )
             )
             expansion_bonus = sum(
                 6
                 for query in expanded_queries[len(queries) :]
-                if len(query) >= 2 and query in content
+                if len(query) >= 2 and query in chunk.content
             )
-            authority_bonus = source_tier * 8 + (12 if verified else 0)
+            phrase_density_bonus = min(
+                30,
+                round(
+                    lexical_score
+                    * 260
+                    / max(len(chunk.content), 260)
+                ),
+            )
+            authority_bonus = (
+                chunk.source_tier * 8
+                + (12 if chunk.verified else 0)
+            )
             score = (
                 lexical_score
                 + exact_bonus
                 + expansion_bonus
+                + phrase_density_bonus
                 + authority_bonus
             )
             if lexical_score > 0:
-                ranked.append(
-                    (
-                        score,
-                        chunk_id,
-                        content,
-                        source_ref,
-                        verified,
-                        source_tier,
-                    )
-                )
-        ranked.sort(key=lambda item: (-item[0], item[1]))
+                ranked.append((score, chunk))
+        ranked.sort(key=lambda item: (-item[0], item[1].id))
 
-        selected: list[tuple[int, str, str, str, bool, int]] = []
+        selected: list[tuple[int, _KnowledgeChunk]] = []
         for candidate in ranked[: max(top_k * 8, 20)]:
             if any(
-                self._content_similarity(candidate[2], current[2]) >= 0.82
+                self._content_similarity(
+                    candidate[1].content,
+                    current[1].content,
+                )
+                >= 0.82
                 for current in selected
             ):
                 continue
@@ -231,32 +462,51 @@ class KnowledgeRepository:
 
         return [
             RetrievedFact(
-                id=chunk_id,
-                content=content[:1200],
-                priority=source_tier * 15 + (25 if verified else 0) + min(
+                id=chunk.id,
+                content=_focused_evidence_excerpt(
+                    chunk.content,
+                    terms=expanded_queries,
+                ),
+                priority=(
+                    chunk.source_tier * 10
+                    + (15 if chunk.verified else 0)
+                    + min(
                     score,
-                    20,
+                    50,
+                    )
                 ),
                 source=DataSource.RAG,
-                source_ref=source_ref,
+                source_ref=chunk.source_ref,
                 verified_at=None,
                 metadata={
-                    "retrieval": "enhanced_lexical_rerank",
-                    "verified": verified,
-                    "source_tier": source_tier,
+                    "retrieval": "scoped_lexical_rerank",
+                    "verified": chunk.verified,
+                    "source_tier": chunk.source_tier,
                     "retrieval_score": score,
                     "query_expansion": True,
+                    "knowledge_type": chunk.knowledge_type,
+                    "purpose": purpose,
                 },
             )
-            for (
-                score,
-                chunk_id,
-                content,
-                source_ref,
-                verified,
-                source_tier,
-            ) in selected
+            for score, chunk in selected
         ]
+
+    @staticmethod
+    def _allowed_types(
+        *,
+        purpose: str,
+        queries: list[str],
+    ) -> set[str] | None:
+        if purpose == "planning":
+            return {"operations", "calendar", "general"}
+        query = " ".join(queries)
+        operation_hits = sum(term in query for term in OPERATIONAL_TERMS)
+        policy_hits = sum(term in query for term in POLICY_TERMS)
+        if operation_hits and operation_hits >= policy_hits:
+            return {"operations", "calendar", "general"}
+        if policy_hits:
+            return {"policy", "general"}
+        return None
 
     @staticmethod
     def _expand_queries(queries: list[str]) -> list[str]:

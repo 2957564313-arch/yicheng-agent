@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "campus_id": "hdu_xiasha_reference",
+  "campus_id": "hdu_xiasha",
   "data_quality": "project_owner_verified_names_amap_poi_partial",
   "updated_at": "2026-07-24T02:50:00+08:00",
   "locations": [
@@ -92,6 +92,156 @@
         "type": "demo_fixture",
         "reference": "待从项目知识库核验",
         "verified_at": null
+      }
+    },
+    {
+      "id": "library_floor_6_12",
+      "name": "图书馆六层或十二层",
+      "aliases": ["图书馆六层", "图书馆6楼", "图书馆十二层", "图书馆12楼"],
+      "category": "study",
+      "longitude": 120.343325,
+      "latitude": 30.314857,
+      "zone": "teaching_area",
+      "is_outdoor": false,
+      "source": {
+        "type": "project_owner_verified",
+        "reference": "杭电时间知识库.docx；沿用图书馆高德入口坐标",
+        "verified_at": "2026-07-24"
+      }
+    },
+    {
+      "id": "library_floor_7_11",
+      "name": "图书馆七至十一层",
+      "aliases": ["图书馆七层", "图书馆7楼", "图书馆八层", "图书馆8楼", "图书馆九层", "图书馆9楼", "图书馆十层", "图书馆10楼", "图书馆十一层", "图书馆11楼"],
+      "category": "study",
+      "longitude": 120.343325,
+      "latitude": 30.314857,
+      "zone": "teaching_area",
+      "is_outdoor": false,
+      "source": {
+        "type": "project_owner_verified",
+        "reference": "杭电时间知识库.docx；沿用图书馆高德入口坐标",
+        "verified_at": "2026-07-24"
+      }
+    },
+    {
+      "id": "sf_express",
+      "name": "顺丰快递点",
+      "aliases": ["顺丰快递", "顺丰取件点", "顺丰"],
+      "category": "service",
+      "longitude": null,
+      "latitude": null,
+      "zone": "living_area",
+      "is_outdoor": false,
+      "source": {
+        "type": "project_owner_verified_name",
+        "reference": "杭电时间知识库.docx；坐标由用户实际查询时通过高德补全",
+        "verified_at": "2026-07-24"
+      }
+    },
+    {
+      "id": "jd_express",
+      "name": "京东快递点",
+      "aliases": ["京东快递", "京东取件点", "京东"],
+      "category": "service",
+      "longitude": null,
+      "latitude": null,
+      "zone": "living_area",
+      "is_outdoor": false,
+      "source": {
+        "type": "project_owner_verified_name",
+        "reference": "杭电时间知识库.docx；坐标由用户实际查询时通过高德补全",
+        "verified_at": "2026-07-24"
+      }
+    },
+    {
+      "id": "student_dormitory",
+      "name": "学生公寓",
+      "aliases": ["宿舍", "宿舍楼", "公寓楼", "寝室"],
+      "category": "residential",
+      "longitude": null,
+      "latitude": null,
+      "zone": "living_area",
+      "is_outdoor": false,
+      "source": {
+        "type": "project_owner_verified_name",
+        "reference": "杭电时间知识库.docx；具体楼栋由用户实际输入并通过高德补全",
+        "verified_at": "2026-07-24"
+      }
+    },
+    {
+      "id": "gym_main",
+      "name": "体育馆主馆",
+      "aliases": ["主馆", "乒乓球馆", "二楼乒乓球房"],
+      "category": "sports",
+      "longitude": null,
+      "latitude": null,
+      "zone": "sports_area",
+      "is_outdoor": false,
+      "source": {
+        "type": "project_owner_verified_name",
+        "reference": "杭电时间知识库.docx；坐标由高德补全",
+        "verified_at": "2026-07-24"
+      }
+    },
+    {
+      "id": "gym_comprehensive",
+      "name": "综合馆",
+      "aliases": ["羽毛球馆", "综合馆羽毛球馆"],
+      "category": "sports",
+      "longitude": null,
+      "latitude": null,
+      "zone": "sports_area",
+      "is_outdoor": false,
+      "source": {
+        "type": "project_owner_verified_name",
+        "reference": "杭电时间知识库.docx；坐标由高德补全",
+        "verified_at": "2026-07-24"
+      }
+    },
+    {
+      "id": "gym_south_track",
+      "name": "体育馆副馆南侧塑胶跑道",
+      "aliases": ["副馆南侧跑道", "体育馆跑道"],
+      "category": "sports",
+      "longitude": null,
+      "latitude": null,
+      "zone": "sports_area",
+      "is_outdoor": true,
+      "source": {
+        "type": "project_owner_verified_name",
+        "reference": "杭电时间知识库.docx；坐标由高德补全",
+        "verified_at": "2026-07-24"
+      }
+    },
+    {
+      "id": "northwest_track",
+      "name": "西北田径场",
+      "aliases": ["北区", "北区操场", "西北操场"],
+      "category": "sports",
+      "longitude": null,
+      "latitude": null,
+      "zone": "sports_area",
+      "is_outdoor": true,
+      "source": {
+        "type": "project_owner_verified_name",
+        "reference": "杭电时间知识库.docx；坐标由高德补全",
+        "verified_at": "2026-07-24"
+      }
+    },
+    {
+      "id": "campus_hospital",
+      "name": "校医院",
+      "aliases": ["学校医院", "医务室"],
+      "category": "service",
+      "longitude": null,
+      "latitude": null,
+      "zone": "living_area",
+      "is_outdoor": false,
+      "source": {
+        "type": "project_owner_verified_name",
+        "reference": "杭电时间知识库.docx；坐标由高德补全",
+        "verified_at": "2026-07-24"
       }
     }
   ]

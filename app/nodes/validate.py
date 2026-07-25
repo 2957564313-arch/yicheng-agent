@@ -32,6 +32,16 @@ def make_validate_node(container: AppContainer):
                 "opening_windows", {}
             ).items()
         }
+        task_windows = {
+            task_id: [
+                (
+                    datetime.fromisoformat(start),
+                    datetime.fromisoformat(end),
+                )
+                for start, end in windows
+            ]
+            for task_id, windows in state.get("task_windows", {}).items()
+        }
         context = PlanningContext(
             target_date=plan.date,
             timezone=ZoneInfo(state["timezone"]),
@@ -41,6 +51,7 @@ def make_validate_node(container: AppContainer):
                 for route in routes
             },
             opening_windows=opening_windows,
+            task_windows=task_windows,
             weather=[
                 WeatherContext.model_validate(raw)
                 for raw in state.get("weather_context", [])
@@ -60,8 +71,18 @@ def make_validate_node(container: AppContainer):
                 )
             ),
             old_plan=(
-                container.plans.get(state["old_plan_id"])
-                if state.get("old_plan_id")
+                Plan.model_validate(state["old_plan"])
+                if state.get("old_plan")
+                else (
+                    container.plans.get(state["old_plan_id"])
+                    if state.get("old_plan_id")
+                    else None
+                )
+            ),
+            initial_location_id=state.get("initial_location_id"),
+            initial_departure_at=(
+                datetime.fromisoformat(state["initial_departure_at"])
+                if state.get("initial_departure_at")
                 else None
             ),
         )

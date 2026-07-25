@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from app.schemas.common import DataSource
 from app.schemas.context import TravelEstimate, WeatherContext
 
 
@@ -35,7 +36,8 @@ class RouteFallbackService:
         )
         if live_error:
             estimate.warning = (
-                "实时路线不可用，已降级为静态或估算路线"
+                "实时路线暂不可用，已降级为根据当前学校已缓存的地点坐标"
+                "进行保守估算；不会采用校园范围外的同名地点"
             )
         return estimate
 
@@ -51,15 +53,37 @@ class WeatherFallbackService:
         location_id: str,
         *,
         prefer_live: bool,
+        city_adcode: str | None = None,
+        allow_static: bool = True,
     ) -> list[WeatherContext]:
         if prefer_live and self.live:
             try:
                 live = await self.live.get_forecast(
                     target_date,
                     location_id,
+                    city_adcode=city_adcode,
                 )
                 if any(item.source.value != "unknown" for item in live):
                     return live
             except Exception:
                 pass
-        return await self.static.get_forecast(target_date, location_id)
+            return [
+                WeatherContext(
+                    date=target_date,
+                    period="day",
+                    source=DataSource.UNKNOWN,
+                )
+            ]
+        if allow_static:
+            return await self.static.get_forecast(
+                target_date,
+                location_id,
+                city_adcode=city_adcode,
+            )
+        return [
+            WeatherContext(
+                date=target_date,
+                period="day",
+                source=DataSource.UNKNOWN,
+            )
+        ]

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "course_range_digits",
+    "query": "今天第1至2节有课，下课后去图书馆自习1小时。",
+    "expected_ids": ["course_1_2", "study"],
+    "fixed_ids": ["course_1_2"]
+  },
+  {
+    "id": "course_range_chinese",
+    "query": "今天第三到第四节上课，下课后取快递。",
+    "expected_ids": ["course_3_4", "parcel"],
+    "fixed_ids": ["course_3_4"]
+  },
+  {
+    "id": "course_non_contiguous",
+    "query": "今天第1、3节有课，还要跑步30分钟。",
+    "expected_ids": ["course_1_1", "course_3_3", "run"],
+    "fixed_ids": ["course_1_1", "course_3_3"]
+  },
+  {
+    "id": "fixed_meeting",
+    "query": "今天15:00到16:30固定参加社团会议，之后去取快递。",
+    "expected_ids": ["fixed_1500_1630_1", "parcel"],
+    "fixed_ids": ["fixed_1500_1630_1"]
+  },
+  {
+    "id": "fixed_evening_exercise",
+    "query": "今天晚上7点到8点跑步，下午去图书馆自习1小时。",
+    "expected_ids": ["fixed_1900_2000_1", "study"],
+    "fixed_ids": ["fixed_1900_2000_1"]
+  },
+  {
+    "id": "scoped_parcel_deadline",
+    "query": "今天下午学习2小时，18点前取快递，晚上跑步30分钟。",
+    "expected_ids": ["study", "parcel", "run"],
+    "fixed_ids": []
+  },
+  {
+    "id": "fixed_exam",
+    "query": "明天上午9点到11点考试，下午2点后学习90分钟。",
+    "expected_ids": ["fixed_0900_1100_1", "study"],
+    "fixed_ids": ["fixed_0900_1100_1"]
+  },
+  {
+    "id": "meal_and_activity",
+    "query": "今天17点后先吃晚饭，然后去东操场运动30分钟。",
+    "expected_ids": ["dinner", "run"],
+    "fixed_ids": []
+  }
+]

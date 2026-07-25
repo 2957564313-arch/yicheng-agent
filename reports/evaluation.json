@@ -1,9 +1,9 @@
 {
   "summary": {
-    "generated_at": "2026-07-24T09:01:06.768092+00:00",
+    "generated_at": "2026-07-25T04:46:50.990486+00:00",
     "suite": "offline_mvp",
-    "total": 60,
-    "passed": 60,
+    "total": 70,
+    "passed": 70,
     "pass_rate": 1.0,
     "categories": {
       "clarification": {
@@ -24,6 +24,11 @@
       "demo": {
         "total": 5,
         "passed": 5,
+        "pass_rate": 1.0
+      },
+      "hdu_constraints": {
+        "total": 10,
+        "passed": 10,
         "pass_rate": 1.0
       },
       "normal": {
@@ -631,6 +636,106 @@
       "failures": [],
       "metrics": {
         "task_count": 3,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "hdu_complex_course_courier_run",
+      "category": "hdu_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 4,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "hdu_clinic_and_hot_water",
+      "category": "hdu_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "hdu_weekend_badminton_closed",
+      "category": "hdu_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 1
+      }
+    },
+    {
+      "case_id": "hdu_library_floor_closing",
+      "category": "hdu_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 1
+      }
+    },
+    {
+      "case_id": "hdu_sf_after_closing",
+      "category": "hdu_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 1
+      }
+    },
+    {
+      "case_id": "hdu_northwest_sun_run_window",
+      "category": "hdu_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "hdu_sunday_dorm_gate",
+      "category": "hdu_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 1
+      }
+    },
+    {
+      "case_id": "hdu_weekend_clinic_closing",
+      "category": "hdu_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 0,
+        "hard_violation_count": 1
+      }
+    },
+    {
+      "case_id": "hdu_weekday_badminton",
+      "category": "hdu_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "hdu_hdu_multi_constraint",
+      "category": "hdu_constraints",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 4,
         "hard_violation_count": 0
       }
     }

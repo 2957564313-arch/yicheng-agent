@@ -10,6 +10,22 @@ from app.schemas.context import TravelEstimate
 
 
 class StaticRouteProvider:
+    # These are physical-area anchors inside HDU. They are used only when a
+    # venue has a verified name/rule but no cached unique coordinate yet.
+    # Live mode still asks AMap first.
+    _HDU_ROUTE_ANCHORS = {
+        "library_floor_6_12": "library",
+        "library_floor_7_11": "library",
+        "sf_express": "parcel_station",
+        "jd_express": "parcel_station",
+        "student_dormitory": "parcel_station",
+        "campus_hospital": "parcel_station",
+        "gym_main": "track",
+        "gym_comprehensive": "track",
+        "northwest_track": "track",
+        "gym_south_track": "track",
+    }
+
     def __init__(
         self,
         path: Path,
@@ -54,6 +70,17 @@ class StaticRouteProvider:
                 confidence=1,
             )
 
+        origin_location = self.locations.get(origin_id)
+        destination_location = self.locations.get(destination_id)
+        if (
+            origin_location is None
+            or destination_location is None
+            or origin_location.campus_id != destination_location.campus_id
+        ):
+            raise LookupError(
+                "route endpoints are unknown or belong to different campuses"
+            )
+
         pair = self._pairs.get((origin_id, destination_id))
         if pair:
             duration_min = self._duration_for_mode(
@@ -91,6 +118,53 @@ class StaticRouteProvider:
                     else pair.get("confidence", 0.8)
                 ),
                 warning=warning,
+            )
+
+        anchor_origin = self._HDU_ROUTE_ANCHORS.get(origin_id, origin_id)
+        anchor_destination = self._HDU_ROUTE_ANCHORS.get(
+            destination_id,
+            destination_id,
+        )
+        if anchor_origin == anchor_destination:
+            return TravelEstimate(
+                origin_id=origin_id,
+                destination_id=destination_id,
+                mode=mode,
+                distance_m=50,
+                duration_min=1,
+                base_duration_min=1,
+                source=DataSource.ESTIMATED,
+                confidence=0.5,
+                warning=(
+                    "实时路线不可用，当前按杭电同一场所内的保守步行"
+                    "时间估算；联网时将优先使用高德路线"
+                ),
+            )
+        anchor_pair = self._pairs.get(
+            (anchor_origin, anchor_destination)
+        )
+        if anchor_pair:
+            duration_min = self._duration_for_mode(
+                mode=mode,
+                walking_duration_min=int(anchor_pair["duration_min"]),
+                distance_m=anchor_pair.get("distance_m"),
+            )
+            return TravelEstimate(
+                origin_id=origin_id,
+                destination_id=destination_id,
+                mode=mode,
+                distance_m=anchor_pair.get("distance_m"),
+                duration_min=duration_min,
+                base_duration_min=duration_min,
+                source=DataSource.ESTIMATED,
+                confidence=min(
+                    float(anchor_pair.get("confidence", 0.8)),
+                    0.55,
+                ),
+                warning=(
+                    "实时路线不可用，当前按杭电同区域已缓存路线保守"
+                    "估算；联网时将优先使用高德对应出行方式"
+                ),
             )
 
         estimated = self._estimate_from_coordinates(

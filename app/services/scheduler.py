@@ -30,12 +30,20 @@ class PlanningContext:
     opening_windows: dict[
         str, list[tuple[datetime, datetime]]
     ] = field(default_factory=dict)
+    task_windows: dict[
+        str, list[tuple[datetime, datetime]]
+    ] = field(default_factory=dict)
     weather: list[WeatherContext] = field(default_factory=list)
     outdoor_location_ids: set[str] = field(default_factory=set)
     enforce_weather: bool = False
     day_start: time = time(8, 0)
-    day_end: time = time(22, 0)
+    # `00:00` represents the end of the target calendar day.  Venue
+    # opening windows and task deadlines remain the real hard constraints;
+    # the scheduler must not silently impose an older 22:00 product cutoff.
+    day_end: time = time(0, 0)
     old_plan: Plan | None = None
+    initial_location_id: str | None = None
+    initial_departure_at: datetime | None = None
 
     def travel_minutes(
         self,
@@ -141,6 +149,10 @@ class Scheduler:
         old_starts = self._old_task_starts(context.old_plan)
 
         for task in movable:
+            has_dependents = any(
+                task.id in candidate.depends_on
+                for candidate in movable
+            )
             candidates = list(
                 self._candidate_intervals(
                     task=task,
@@ -168,6 +180,27 @@ class Scheduler:
                             travel_minutes=travel_minutes,
                             preference_penalty=preference_penalty,
                             shift_minutes=shift_minutes,
+                            scheduling_delay_minutes=(
+                                max(
+                                    0,
+                                    int(
+                                        (
+                                            start_at
+                                            - (
+                                                task.earliest_start
+                                                or datetime.combine(
+                                                    context.target_date,
+                                                    context.day_start,
+                                                    context.timezone,
+                                                )
+                                            )
+                                        ).total_seconds()
+                                        // 60
+                                    ),
+                                )
+                                if has_dependents
+                                else 0
+                            ),
                         ),
                         start_at,
                         end_at,
@@ -191,6 +224,7 @@ class Scheduler:
             task_items,
             context,
             missing_route_pairs,
+            preferences,
         )
         metrics = PlanMetrics(
             scheduled_task_count=len(task_items),
@@ -276,6 +310,8 @@ class Scheduler:
             context.day_end,
             context.timezone,
         )
+        if context.day_end <= context.day_start:
+            day_end += timedelta(days=1)
         if context.target_date == context.now.date():
             day_start = max(
                 day_start,
@@ -293,7 +329,10 @@ class Scheduler:
             context.target_date,
             context.timezone,
         )
-        if period_window:
+        soft_period_preference = (
+            "memory_period_preference" in task.tags
+        )
+        if period_window and not soft_period_preference:
             search_start = max(search_start, period_window[0])
             search_end = min(search_end, period_window[1])
 
@@ -302,6 +341,7 @@ class Scheduler:
         while cursor + duration <= search_end:
             end_at = cursor + duration
             if not self._inside_opening_hours(
+                task.id,
                 task.location_id,
                 cursor,
                 end_at,
@@ -318,12 +358,31 @@ class Scheduler:
                 cursor += timedelta(minutes=5)
                 continue
 
+            use_initial_origin = bool(
+                context.initial_location_id
+                and context.initial_departure_at
+                and cursor >= context.initial_departure_at
+                and (
+                    previous is None
+                    or previous.end_at <= context.initial_departure_at
+                )
+            )
+            before_origin_id = (
+                context.initial_location_id
+                if use_initial_origin
+                else (previous.location_id if previous else None)
+            )
+            before_departure_at = (
+                context.initial_departure_at
+                if use_initial_origin
+                else (previous.end_at if previous else None)
+            )
             before_travel, before_delay = self._required_travel(
-                previous.location_id if previous else None,
+                before_origin_id,
                 task.location_id,
                 context,
                 missing_route_pairs,
-                departure_at=previous.end_at if previous else None,
+                departure_at=before_departure_at,
             )
             after_travel, after_delay = self._required_travel(
                 task.location_id,
@@ -337,6 +396,15 @@ class Scheduler:
                 continue
 
             buffer_min = preferences.buffer_min
+            if (
+                use_initial_origin
+                and context.initial_departure_at
+                and context.initial_departure_at
+                + timedelta(minutes=before_travel + buffer_min)
+                > cursor
+            ):
+                cursor += timedelta(minutes=5)
+                continue
             if previous and (
                 previous.end_at
                 + timedelta(minutes=before_travel + buffer_min)
@@ -357,15 +425,25 @@ class Scheduler:
                 cursor += timedelta(minutes=5)
                 continue
 
-            preference_penalty = int(
+            congestion_penalty = int(
                 preferences.avoid_congestion
                 and (before_delay > 0 or after_delay > 0)
+            )
+            period_penalty = int(
+                bool(
+                    soft_period_preference
+                    and period_window
+                    and not (
+                        period_window[0] <= cursor
+                        and end_at <= period_window[1]
+                    )
+                )
             )
             yield (
                 cursor,
                 end_at,
                 before_travel + after_travel,
-                preference_penalty,
+                congestion_penalty + period_penalty,
             )
             cursor += timedelta(minutes=5)
 
@@ -434,20 +512,25 @@ class Scheduler:
 
     @staticmethod
     def _inside_opening_hours(
+        task_id: str,
         location_id: str | None,
         start_at: datetime,
         end_at: datetime,
         context: PlanningContext,
     ) -> bool:
-        if not location_id:
-            return True
-        windows = context.opening_windows.get(location_id)
-        if not windows:
-            return True
-        return any(
-            window_start <= start_at and end_at <= window_end
-            for window_start, window_end in windows
+        venue_windows = (
+            context.opening_windows.get(location_id)
+            if location_id
+            else None
         )
+        activity_windows = context.task_windows.get(task_id)
+        for windows in (venue_windows, activity_windows):
+            if windows is not None and not any(
+                window_start <= start_at and end_at <= window_end
+                for window_start, window_end in windows
+            ):
+                return False
+        return True
 
     @staticmethod
     def _preferred_window(
@@ -539,9 +622,83 @@ class Scheduler:
         task_items: list[PlanItem],
         context: PlanningContext,
         missing_route_pairs: set[tuple[str, str]],
+        preferences: UserPreferences,
     ) -> list[PlanItem]:
         ordered = sorted(task_items, key=lambda item: item.start_at)
         result: list[PlanItem] = []
+        if context.initial_location_id and context.initial_departure_at:
+            first_after_departure = next(
+                (
+                    item
+                    for item in ordered
+                    if item.start_at >= context.initial_departure_at
+                ),
+                None,
+            )
+            if (
+                first_after_departure
+                and first_after_departure.location_id
+                and first_after_departure.location_id
+                != context.initial_location_id
+            ):
+                estimate = context.travel.get(
+                    (
+                        context.initial_location_id,
+                        first_after_departure.location_id,
+                    )
+                )
+                if estimate:
+                    duration, congestion_delay = context.travel_details(
+                        context.initial_location_id,
+                        first_after_departure.location_id,
+                        departure_at=context.initial_departure_at,
+                    )
+                    if duration is not None:
+                        base_duration = (
+                            estimate.base_duration_min
+                            if estimate.base_duration_min is not None
+                            else estimate.duration_min
+                        )
+                        mode_label = {
+                            "walk": "步行",
+                            "bicycle": "骑自行车",
+                            "electrobike": "骑电瓶车",
+                        }.get(estimate.mode, "通勤")
+                        result.append(
+                            PlanItem(
+                                id=f"travel_{uuid4().hex}",
+                                item_type="travel",
+                                title=(
+                                    f"{mode_label}前往"
+                                    f"{first_after_departure.title}地点"
+                                ),
+                                start_at=context.initial_departure_at,
+                                end_at=context.initial_departure_at
+                                + timedelta(minutes=duration),
+                                location_id=first_after_departure.location_id,
+                                source=estimate.source,
+                                reason=(
+                                    f"{mode_label}基础时间 "
+                                    f"{base_duration} 分钟"
+                                    + (
+                                        "，校园通行高峰额外预留 "
+                                        f"{congestion_delay} 分钟"
+                                        if congestion_delay
+                                        else ""
+                                    )
+                                ),
+                                travel_mode=estimate.mode,
+                                base_duration_min=base_duration,
+                                congestion_delay_min=congestion_delay,
+                            )
+                        )
+                else:
+                    missing_route_pairs.add(
+                        (
+                            context.initial_location_id,
+                            first_after_departure.location_id,
+                        )
+                    )
         for index, item in enumerate(ordered):
             result.append(item)
             if index == len(ordered) - 1:
@@ -559,25 +716,46 @@ class Scheduler:
                     (item.location_id, following.location_id)
                 )
                 continue
+            base_duration = (
+                estimate.base_duration_min
+                if estimate.base_duration_min is not None
+                else estimate.duration_min
+            )
+            desired_end = following.start_at - timedelta(
+                minutes=preferences.buffer_min
+            )
+            provisional_start = desired_end - timedelta(
+                minutes=base_duration
+            )
             adjusted_duration, congestion_delay = context.travel_details(
                 item.location_id,
                 following.location_id,
-                departure_at=item.end_at,
+                departure_at=provisional_start,
             )
             if adjusted_duration is None:
                 continue
-            travel_end = item.end_at + timedelta(minutes=adjusted_duration)
+            travel_end = desired_end
+            travel_start = travel_end - timedelta(
+                minutes=adjusted_duration
+            )
+            if travel_start < item.end_at:
+                travel_start = item.end_at
+                adjusted_duration, congestion_delay = context.travel_details(
+                    item.location_id,
+                    following.location_id,
+                    departure_at=travel_start,
+                )
+                if adjusted_duration is None:
+                    continue
+                travel_end = travel_start + timedelta(
+                    minutes=adjusted_duration
+                )
             mode_labels = {
                 "walk": "步行",
                 "bicycle": "骑自行车",
                 "electrobike": "骑电瓶车",
             }
             mode_label = mode_labels.get(estimate.mode, "通勤")
-            base_duration = (
-                estimate.base_duration_min
-                if estimate.base_duration_min is not None
-                else estimate.duration_min
-            )
             reason = (
                 f"{mode_label}基础时间 {base_duration} 分钟"
                 + (
@@ -591,7 +769,7 @@ class Scheduler:
                     id=f"travel_{uuid4().hex}",
                     item_type="travel",
                     title=f"{mode_label}前往{following.title}地点",
-                    start_at=item.end_at,
+                    start_at=travel_start,
                     end_at=travel_end,
                     location_id=following.location_id,
                     source=estimate.source,

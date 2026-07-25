@@ -1,0 +1,330 @@
+from __future__ import annotations
+
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from fastapi import APIRouter, Query, Request, Response
+
+from app.errors import AppError
+from app.schemas.agenda import (
+    AgendaResponse,
+    ReminderDueResponse,
+    ReminderSettings,
+    ReminderSettingsResponse,
+)
+
+
+router = APIRouter(prefix="/api/v1/users", tags=["agenda"])
+
+
+def _resolve_range(
+    *,
+    start_date: date | None,
+    end_date: date | None,
+    today: date,
+    default_days: int = 6,
+    max_days: int = 62,
+) -> tuple[date, date]:
+    start = start_date or today
+    end = end_date or (start + timedelta(days=default_days))
+    if end < start:
+        raise AppError(
+            "INVALID_AGENDA_RANGE",
+            "日程结束日期不能早于开始日期。",
+            status_code=422,
+        )
+    if (end - start).days > max_days:
+        raise AppError(
+            "AGENDA_RANGE_TOO_LARGE",
+            f"一次最多查看{max_days + 1}天日程，请缩短日期范围。",
+            status_code=422,
+        )
+    return start, end
+
+
+def _agenda_response(
+    *,
+    user_id: str,
+    start_date: date,
+    end_date: date,
+    request: Request,
+    now: datetime,
+) -> AgendaResponse:
+    container = request.app.state.container
+    items = container.agenda.list_items(
+        user_id=user_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    reminder_settings, _ = container.reminders.get(user_id)
+    return AgendaResponse(
+        user_id=user_id,
+        start_date=start_date,
+        end_date=end_date,
+        timezone=container.settings.app_timezone,
+        items=items,
+        reminders=container.agenda.build_reminders(
+            items=items,
+            settings=reminder_settings,
+            user_id=user_id,
+            start_date=start_date,
+            end_date=end_date,
+        ),
+        care_suggestions=container.agenda.care_suggestions(
+            items=items,
+            start_date=start_date,
+            end_date=end_date,
+            now=now,
+        ),
+        summary=container.agenda.summarize(items),
+        generated_at=now,
+    )
+
+
+@router.get("/{user_id}/agenda", response_model=AgendaResponse)
+def get_agenda(
+    user_id: str,
+    request: Request,
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+) -> AgendaResponse:
+    container = request.app.state.container
+    timezone = ZoneInfo(container.settings.app_timezone)
+    now = datetime.now(timezone)
+    start, end = _resolve_range(
+        start_date=start_date,
+        end_date=end_date,
+        today=now.date(),
+    )
+    return _agenda_response(
+        user_id=user_id,
+        start_date=start,
+        end_date=end,
+        request=request,
+        now=now,
+    )
+
+
+@router.get(
+    "/{user_id}/reminders/settings",
+    response_model=ReminderSettingsResponse,
+)
+def get_reminder_settings(
+    user_id: str,
+    request: Request,
+) -> ReminderSettingsResponse:
+    settings, updated_at = request.app.state.container.reminders.get(user_id)
+    return ReminderSettingsResponse(
+        user_id=user_id,
+        settings=settings,
+        updated_at=updated_at,
+    )
+
+
+@router.put(
+    "/{user_id}/reminders/settings",
+    response_model=ReminderSettingsResponse,
+)
+def save_reminder_settings(
+    user_id: str,
+    payload: ReminderSettings,
+    request: Request,
+) -> ReminderSettingsResponse:
+    container = request.app.state.container
+    now = datetime.now(ZoneInfo(container.settings.app_timezone))
+    settings, updated_at = container.reminders.save(
+        user_id=user_id,
+        settings=payload,
+        now=now,
+    )
+    return ReminderSettingsResponse(
+        user_id=user_id,
+        settings=settings,
+        updated_at=updated_at,
+    )
+
+
+@router.get(
+    "/{user_id}/reminders/due",
+    response_model=ReminderDueResponse,
+)
+def get_due_reminders(
+    user_id: str,
+    request: Request,
+    now: datetime | None = Query(default=None),
+    window_min: int = Query(default=2, ge=1, le=15),
+) -> ReminderDueResponse:
+    container = request.app.state.container
+    timezone = ZoneInfo(container.settings.app_timezone)
+    effective_now = now or datetime.now(timezone)
+    if effective_now.tzinfo is None:
+        raise AppError(
+            "INVALID_REMINDER_TIME",
+            "提醒查询时间必须包含时区。",
+            status_code=422,
+        )
+    effective_now = effective_now.astimezone(timezone)
+    window_end = effective_now + timedelta(minutes=window_min)
+    items = container.agenda.list_items(
+        user_id=user_id,
+        start_date=effective_now.date(),
+        end_date=window_end.date(),
+    )
+    settings, _ = container.reminders.get(user_id)
+    reminders = [
+        item
+        for item in container.agenda.build_reminders(
+            items=items,
+            settings=settings,
+            user_id=user_id,
+            start_date=effective_now.date(),
+            end_date=window_end.date(),
+        )
+        if effective_now <= item.notify_at < window_end
+    ]
+    return ReminderDueResponse(
+        now=effective_now,
+        window_end=window_end,
+        reminders=reminders,
+    )
+
+
+def _ical_escape(value: str) -> str:
+    return (
+        value.replace("\\", "\\\\")
+        .replace("\n", "\\n")
+        .replace(",", "\\,")
+        .replace(";", "\\;")
+    )
+
+
+def _ical_datetime(value: datetime) -> str:
+    return value.strftime("%Y%m%dT%H%M%S")
+
+
+@router.get("/{user_id}/agenda.ics")
+def export_agenda_ics(
+    user_id: str,
+    request: Request,
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+) -> Response:
+    container = request.app.state.container
+    timezone = ZoneInfo(container.settings.app_timezone)
+    now = datetime.now(timezone)
+    start, end = _resolve_range(
+        start_date=start_date,
+        end_date=end_date,
+        today=now.date(),
+        default_days=90,
+        max_days=183,
+    )
+    data = _agenda_response(
+        user_id=user_id,
+        start_date=start,
+        end_date=end,
+        request=request,
+        now=now,
+    )
+    reminders_by_item: dict[str, list] = {}
+    for reminder in data.reminders:
+        reminders_by_item.setdefault(reminder.agenda_item_id, []).append(
+            reminder
+        )
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//易程智策//HDU Personal Agenda//ZH-CN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "X-WR-CALNAME:易程智策个人日程",
+        "X-WR-TIMEZONE:Asia/Shanghai",
+    ]
+    for item in data.items:
+        lines.extend(
+            [
+                "BEGIN:VEVENT",
+                f"UID:{_ical_escape(item.id)}@yicheng",
+                f"DTSTAMP:{now.astimezone(ZoneInfo('UTC')).strftime('%Y%m%dT%H%M%SZ')}",
+                (
+                    "DTSTART;TZID=Asia/Shanghai:"
+                    f"{_ical_datetime(item.start_at)}"
+                ),
+                (
+                    "DTEND;TZID=Asia/Shanghai:"
+                    f"{_ical_datetime(item.end_at)}"
+                ),
+                f"SUMMARY:{_ical_escape(item.title)}",
+            ]
+        )
+        if item.location_name:
+            lines.append(
+                f"LOCATION:{_ical_escape(item.location_name)}"
+            )
+        if item.notes:
+            lines.append(f"DESCRIPTION:{_ical_escape(item.notes)}")
+        for reminder in reminders_by_item.get(item.id, []):
+            lead_min = max(
+                0,
+                int(
+                    (
+                        item.start_at - reminder.notify_at
+                    ).total_seconds()
+                    // 60
+                ),
+            )
+            lines.extend(
+                [
+                    "BEGIN:VALARM",
+                    f"TRIGGER:-PT{lead_min}M",
+                    "ACTION:DISPLAY",
+                    f"DESCRIPTION:{_ical_escape(reminder.title)}",
+                    "END:VALARM",
+                ]
+            )
+        lines.append("END:VEVENT")
+    for reminder in (
+        item for item in data.reminders if item.kind == "bedtime"
+    ):
+        lead_min = max(
+            0,
+            int(
+                (
+                    reminder.event_start_at - reminder.notify_at
+                ).total_seconds()
+                // 60
+            ),
+        )
+        lines.extend(
+            [
+                "BEGIN:VEVENT",
+                f"UID:{_ical_escape(reminder.id)}@yicheng",
+                f"DTSTAMP:{now.astimezone(ZoneInfo('UTC')).strftime('%Y%m%dT%H%M%SZ')}",
+                (
+                    "DTSTART;TZID=Asia/Shanghai:"
+                    f"{_ical_datetime(reminder.event_start_at)}"
+                ),
+                (
+                    "DTEND;TZID=Asia/Shanghai:"
+                    f"{_ical_datetime(reminder.event_end_at)}"
+                ),
+                "SUMMARY:准备休息",
+                f"DESCRIPTION:{_ical_escape(reminder.body)}",
+                "BEGIN:VALARM",
+                f"TRIGGER:-PT{lead_min}M",
+                "ACTION:DISPLAY",
+                f"DESCRIPTION:{_ical_escape(reminder.title)}",
+                "END:VALARM",
+                "END:VEVENT",
+            ]
+        )
+    lines.append("END:VCALENDAR")
+    return Response(
+        content="\r\n".join(lines) + "\r\n",
+        media_type="text/calendar; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="yicheng-agenda.ics"'
+            )
+        },
+    )

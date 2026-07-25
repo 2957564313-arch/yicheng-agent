@@ -1,0 +1,375 @@
+[
+  {
+    "id": "weekly_demo_01_sprint",
+    "title": "案例四 · 多目标周规划",
+    "description": "课程设计、论文汇报和两次运动同时存在，检验阶段依赖、截止时间与跨日分块。",
+    "request": {
+      "user_id": "weekly_demo_user",
+      "campus_id": "hdu_xiasha",
+      "week_start": "2026-07-27",
+      "timezone": "Asia/Shanghai",
+      "goals": [
+        {
+          "title": "完成课程设计",
+          "description": "编码完成后才能测试，最后整理报告。",
+          "deadline": "2026-07-31T22:00:00+08:00",
+          "total_duration_min": 480,
+          "min_chunk_min": 60,
+          "max_chunk_min": 120,
+          "max_chunks_per_day": 2,
+          "importance": 5,
+          "hard_deadline": true,
+          "preferred_periods": ["evening"],
+          "energy_level": "high",
+          "stages": [
+            {
+              "id": "coding",
+              "title": "编码",
+              "sequence": 1,
+              "duration_min": 240,
+              "min_chunk_min": 60,
+              "completion_criteria": "主要功能能够完整运行"
+            },
+            {
+              "id": "testing",
+              "title": "测试",
+              "sequence": 2,
+              "duration_min": 120,
+              "min_chunk_min": 60,
+              "depends_on_stage_ids": ["coding"],
+              "completion_criteria": "关键场景均通过"
+            },
+            {
+              "id": "report",
+              "title": "报告",
+              "sequence": 3,
+              "duration_min": 120,
+              "min_chunk_min": 60,
+              "depends_on_stage_ids": ["testing"],
+              "completion_criteria": "报告内容完整并完成自查"
+            }
+          ]
+        },
+        {
+          "title": "读完论文并准备汇报",
+          "deadline": "2026-07-29T22:00:00+08:00",
+          "total_duration_min": 180,
+          "min_chunk_min": 60,
+          "max_chunk_min": 120,
+          "importance": 4,
+          "hard_deadline": true,
+          "energy_level": "high"
+        },
+        {
+          "title": "完成两次阳光长跑",
+          "deadline": "2026-08-02T21:00:00+08:00",
+          "total_duration_min": 80,
+          "min_chunk_min": 40,
+          "max_chunk_min": 40,
+          "max_chunks_per_day": 1,
+          "importance": 2,
+          "hard_deadline": false,
+          "preferred_periods": ["evening"],
+          "preferred_locations": ["东操场"],
+          "energy_level": "medium"
+        }
+      ],
+      "capacities": [
+        {
+          "date": "2026-07-27",
+          "windows": [
+            {
+              "start_at": "2026-07-27T18:30:00+08:00",
+              "end_at": "2026-07-27T21:30:00+08:00",
+              "energy_level": "high",
+              "location_id": "library"
+            }
+          ]
+        },
+        {
+          "date": "2026-07-28",
+          "windows": [
+            {
+              "start_at": "2026-07-28T19:30:00+08:00",
+              "end_at": "2026-07-28T21:30:00+08:00",
+              "energy_level": "medium"
+            }
+          ],
+          "notes": ["晚上有社团会议，可用时间较少"]
+        },
+        {
+          "date": "2026-07-29",
+          "windows": [
+            {
+              "start_at": "2026-07-29T18:00:00+08:00",
+              "end_at": "2026-07-29T22:00:00+08:00",
+              "energy_level": "high"
+            }
+          ]
+        },
+        {
+          "date": "2026-07-30",
+          "windows": [
+            {
+              "start_at": "2026-07-30T19:00:00+08:00",
+              "end_at": "2026-07-30T22:00:00+08:00",
+              "energy_level": "medium"
+            }
+          ],
+          "reserved_min": 60,
+          "notes": ["实验可能延长一小时，预留风险缓冲"]
+        },
+        {
+          "date": "2026-07-31",
+          "windows": [
+            {
+              "start_at": "2026-07-31T18:00:00+08:00",
+              "end_at": "2026-07-31T22:00:00+08:00",
+              "energy_level": "high"
+            }
+          ]
+        },
+        {
+          "date": "2026-08-01",
+          "windows": [
+            {
+              "start_at": "2026-08-01T15:00:00+08:00",
+              "end_at": "2026-08-01T20:00:00+08:00",
+              "energy_level": "medium"
+            }
+          ]
+        },
+        {
+          "date": "2026-08-02",
+          "windows": [
+            {
+              "start_at": "2026-08-02T16:00:00+08:00",
+              "end_at": "2026-08-02T21:00:00+08:00",
+              "energy_level": "medium"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "weekly_demo_02_overload",
+    "title": "案例五 · 容量冲突识别",
+    "description": "硬截止任务超过本周剩余容量，检验系统是否诚实报告缺口，而不是漏任务或压缩时长。",
+    "request": {
+      "user_id": "weekly_demo_user",
+      "campus_id": "hdu_xiasha",
+      "week_start": "2026-07-27",
+      "timezone": "Asia/Shanghai",
+      "goals": [
+        {
+          "title": "周四前完成竞赛报告",
+          "deadline": "2026-07-30T22:00:00+08:00",
+          "total_duration_min": 600,
+          "min_chunk_min": 60,
+          "max_chunk_min": 120,
+          "max_chunks_per_day": 2,
+          "importance": 5,
+          "hard_deadline": true,
+          "energy_level": "high"
+        }
+      ],
+      "capacities": [
+        {
+          "date": "2026-07-27",
+          "windows": [
+            {
+              "start_at": "2026-07-27T19:00:00+08:00",
+              "end_at": "2026-07-27T21:00:00+08:00"
+            }
+          ]
+        },
+        {
+          "date": "2026-07-28",
+          "windows": [
+            {
+              "start_at": "2026-07-28T19:00:00+08:00",
+              "end_at": "2026-07-28T21:00:00+08:00"
+            }
+          ]
+        },
+        {
+          "date": "2026-07-29",
+          "windows": [
+            {
+              "start_at": "2026-07-29T19:00:00+08:00",
+              "end_at": "2026-07-29T21:00:00+08:00"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "weekly_demo_03_portable",
+    "title": "案例六 · 课表与个性化",
+    "description": "使用已导入课表扣除固定课程，并结合晨间高效、常用实验室和运动习惯生成个性化周计划。",
+    "setup": {
+      "timetable": {
+        "name": "杭电个人课表演示",
+        "term_start": "2026-07-27",
+        "term_end": "2026-08-02",
+        "entries": [
+          {
+            "course_name": "概率论",
+            "weekday": 1,
+            "start_period": 1,
+            "end_period": 2,
+            "location": "第六教学楼",
+            "weeks": [1]
+          },
+          {
+            "course_name": "大学英语",
+            "weekday": 3,
+            "start_period": 3,
+            "end_period": 4,
+            "location": "第六教学楼",
+            "weeks": [1]
+          },
+          {
+            "course_name": "创新实践",
+            "weekday": 4,
+            "start_period": 10,
+            "end_period": 11,
+            "location": "实验室",
+            "weeks": [1]
+          },
+          {
+            "course_name": "专业课",
+            "weekday": 5,
+            "start_period": 6,
+            "end_period": 9,
+            "location": "第六教学楼",
+            "weeks": [1]
+          }
+        ]
+      },
+      "memories": [
+        {
+          "category": "habit",
+          "key": "preferred_study_period",
+          "label": "上午学习状态更好",
+          "value": "morning",
+          "enabled": true
+        },
+        {
+          "category": "preference",
+          "key": "preferred_study_location",
+          "label": "常用自习地点",
+          "value": "图书馆",
+          "enabled": true
+        }
+      ]
+    },
+    "request": {
+      "user_id": "weekly_demo_user",
+      "campus_id": "hdu_xiasha",
+      "week_start": "2026-07-27",
+      "timezone": "Asia/Shanghai",
+      "goals": [
+        {
+          "title": "准备概率论考试",
+          "deadline": "2026-08-01T20:00:00+08:00",
+          "total_duration_min": 360,
+          "min_chunk_min": 60,
+          "max_chunk_min": 120,
+          "max_chunks_per_day": 2,
+          "importance": 5,
+          "hard_deadline": true,
+          "preferred_periods": ["morning"],
+          "energy_level": "high"
+        },
+        {
+          "title": "完成实验数据整理",
+          "deadline": "2026-07-31T18:00:00+08:00",
+          "total_duration_min": 180,
+          "min_chunk_min": 60,
+          "max_chunk_min": 90,
+          "importance": 4,
+          "hard_deadline": true,
+          "preferred_locations": ["实验室"]
+        },
+        {
+          "title": "本周运动两次",
+          "deadline": "2026-08-02T21:00:00+08:00",
+          "total_duration_min": 90,
+          "min_chunk_min": 45,
+          "max_chunk_min": 45,
+          "max_chunks_per_day": 1,
+          "importance": 2,
+          "hard_deadline": false,
+          "preferred_periods": ["evening"],
+          "preferred_locations": ["东操场"]
+        }
+      ],
+      "availability": {
+        "use_timetable": true,
+        "use_calendar": true,
+        "use_memories": true,
+        "days": [
+          {
+            "weekday": 1,
+            "windows": [
+              {"start": "07:00", "end": "12:00", "energy_level": "high"},
+              {"start": "14:00", "end": "17:30", "energy_level": "medium"},
+              {"start": "18:30", "end": "21:30", "energy_level": "medium"}
+            ]
+          },
+          {
+            "weekday": 2,
+            "windows": [
+              {"start": "07:00", "end": "12:00", "energy_level": "high"},
+              {"start": "14:00", "end": "17:30", "energy_level": "medium"},
+              {"start": "18:30", "end": "21:30", "energy_level": "medium"}
+            ]
+          },
+          {
+            "weekday": 3,
+            "windows": [
+              {"start": "07:00", "end": "12:00", "energy_level": "high"},
+              {"start": "14:00", "end": "17:30", "energy_level": "medium"},
+              {"start": "18:30", "end": "21:30", "energy_level": "medium"}
+            ]
+          },
+          {
+            "weekday": 4,
+            "windows": [
+              {"start": "07:00", "end": "12:00", "energy_level": "high"},
+              {"start": "14:00", "end": "17:30", "energy_level": "medium"},
+              {"start": "18:30", "end": "21:30", "energy_level": "medium"}
+            ]
+          },
+          {
+            "weekday": 5,
+            "windows": [
+              {"start": "07:00", "end": "12:00", "energy_level": "high"},
+              {"start": "14:00", "end": "17:30", "energy_level": "medium"},
+              {"start": "18:30", "end": "21:30", "energy_level": "medium"}
+            ]
+          },
+          {
+            "weekday": 6,
+            "windows": [
+              {"start": "09:00", "end": "12:00", "energy_level": "high"},
+              {"start": "14:00", "end": "18:00", "energy_level": "medium"},
+              {"start": "19:00", "end": "21:30", "energy_level": "medium"}
+            ]
+          },
+          {
+            "weekday": 7,
+            "windows": [
+              {"start": "09:00", "end": "12:00", "energy_level": "high"},
+              {"start": "14:00", "end": "18:00", "energy_level": "medium"},
+              {"start": "19:00", "end": "21:30", "energy_level": "medium"}
+            ]
+          }
+        ]
+      }
+    }
+  }
+]

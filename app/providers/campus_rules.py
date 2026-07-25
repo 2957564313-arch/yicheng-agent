@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -33,6 +33,7 @@ class CampusRulesRepository:
             campus_rules_path.read_text(encoding="utf-8")
         )
         self._rules = rules_payload.get("rules", [])
+        self._activity_rules = rules_payload.get("activity_rules", [])
         class_payload = json.loads(
             class_periods_path.read_text(encoding="utf-8")
         )
@@ -45,9 +46,24 @@ class CampusRulesRepository:
         self,
         location_id: str,
         target_date: date,
+        *,
+        is_national_holiday: bool = False,
     ) -> list[tuple[datetime, datetime]]:
         rule = self._opening_rules.get(location_id)
         if not rule:
+            return []
+        if is_national_holiday and "holiday" in rule:
+            return [
+                (
+                    self._clock_datetime(target_date, start),
+                    self._clock_datetime(target_date, end, is_end=True),
+                )
+                for start, end in rule.get("holiday", [])
+            ]
+        if (
+            is_national_holiday
+            and rule.get("closed_on_national_holidays", False)
+        ):
             return []
         effective_from = date.fromisoformat(rule["effective_from"])
         effective_to = (
@@ -64,19 +80,87 @@ class CampusRulesRepository:
         raw_windows = rule.get("weekly", {}).get(key, [])
         return [
             (
-                datetime.combine(
-                    target_date,
-                    time.fromisoformat(start),
-                    self.timezone,
-                ),
-                datetime.combine(
-                    target_date,
-                    time.fromisoformat(end),
-                    self.timezone,
-                ),
+                self._clock_datetime(target_date, start),
+                self._clock_datetime(target_date, end, is_end=True),
             )
             for start, end in raw_windows
         ]
+
+    def has_opening_rule(self, location_id: str) -> bool:
+        return location_id in self._opening_rules
+
+    def has_applicable_opening_rule(
+        self,
+        location_id: str,
+        target_date: date,
+    ) -> bool:
+        rule = self._opening_rules.get(location_id)
+        if not rule:
+            return False
+        effective_from = date.fromisoformat(rule["effective_from"])
+        effective_to = (
+            date.fromisoformat(rule["effective_to"])
+            if rule.get("effective_to")
+            else None
+        )
+        return target_date >= effective_from and (
+            effective_to is None or target_date <= effective_to
+        )
+
+    def closes_on_national_holidays(self, location_id: str) -> bool:
+        return bool(
+            self._opening_rules.get(location_id, {}).get(
+                "closed_on_national_holidays",
+                False,
+            )
+        )
+
+    def task_windows(
+        self,
+        *,
+        task_title: str,
+        location_id: str | None,
+        target_date: date,
+    ) -> list[tuple[datetime, datetime]]:
+        if not location_id:
+            return []
+        key = WEEKDAY_KEYS[target_date.weekday()]
+        for rule in self._activity_rules:
+            if location_id not in set(rule.get("location_ids", [])):
+                continue
+            if not any(
+                keyword in task_title
+                for keyword in rule.get("title_keywords", [])
+            ):
+                continue
+            return [
+                (
+                    self._clock_datetime(target_date, start),
+                    self._clock_datetime(target_date, end, is_end=True),
+                )
+                for start, end in rule.get("weekly", {}).get(key, [])
+            ]
+        return []
+
+    def _clock_datetime(
+        self,
+        target_date: date,
+        value: str,
+        *,
+        is_end: bool = False,
+    ) -> datetime:
+        """Parse campus clock values, including the conventional 24:00."""
+        if value == "24:00":
+            return datetime.combine(
+                target_date + timedelta(days=1),
+                time(0, 0),
+                self.timezone,
+            )
+        parsed = time.fromisoformat(value)
+        result = datetime.combine(target_date, parsed, self.timezone)
+        if is_end and parsed == time(0, 0):
+            result += timedelta(days=1)
+        return result
 
     def facts_for_locations(
         self,

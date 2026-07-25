@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import os
 from pathlib import Path
 
 from pydantic import Field
@@ -8,6 +9,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _runtime_dir() -> Path:
+    """Return a writable runtime directory for local and Vercel execution."""
+    if os.getenv("VERCEL"):
+        return Path("/tmp") / "yicheng-agent"
+    return BASE_DIR / "runtime"
+
+
+def _app_database_path() -> Path:
+    return _runtime_dir() / "app.db"
+
+
+def _checkpoint_database_path() -> Path:
+    return _runtime_dir() / "checkpoints.db"
 
 
 class Settings(BaseSettings):
@@ -19,19 +35,28 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     app_timezone: str = "Asia/Shanghai"
-    app_database_path: Path = BASE_DIR / "runtime" / "app.db"
-    app_checkpoint_database_path: Path = (
-        BASE_DIR / "runtime" / "checkpoints.db"
+    app_database_path: Path = Field(default_factory=_app_database_path)
+    app_checkpoint_database_path: Path = Field(
+        default_factory=_checkpoint_database_path
     )
     app_data_dir: Path = BASE_DIR / "data"
     app_demo_dir: Path = BASE_DIR / "fixtures"
+    app_access_enabled: bool = False
+    app_test_username: str = ""
+    app_test_password: str = Field(default="", repr=False)
+    app_auth_secret: str = Field(default="", repr=False)
+    app_access_hours: int = Field(default=8, ge=1, le=72)
 
     llm_enabled: bool = False
-    llm_model: str = "qwen3.6-flash"
+    llm_model: str = "qwen3.7-plus"
+    llm_fallback_models: str = (
+        "qwen-plus-2025-07-28,glm-5"
+    )
     llm_base_url: str = ""
     llm_api_key: str = Field(default="", repr=False)
     llm_enable_thinking: bool = False
     llm_render_enabled: bool = True
+    llm_plan_render_enabled: bool = False
     llm_timeout_seconds: float = Field(default=20, ge=1, le=120)
 
     live_route_enabled: bool = False
@@ -44,6 +69,19 @@ class Settings(BaseSettings):
     weather_api_key: str = Field(default="", repr=False)
     weather_timeout_seconds: float = Field(default=3, ge=0.5, le=30)
     weather_city_adcode: str = ""
+
+    @property
+    def llm_models(self) -> list[str]:
+        """Return the configured model chain without duplicate names."""
+        models: list[str] = []
+        for raw_name in (
+            self.llm_model,
+            *self.llm_fallback_models.split(","),
+        ):
+            name = raw_name.strip()
+            if name and name not in models:
+                models.append(name)
+        return models
 
     def ensure_runtime_dirs(self) -> None:
         self.app_database_path.parent.mkdir(parents=True, exist_ok=True)

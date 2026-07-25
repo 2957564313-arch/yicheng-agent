@@ -28,8 +28,18 @@ def health(request: Request) -> dict:
         "live_map_enabled": container.settings.live_route_enabled,
         "live_weather_enabled": container.settings.live_weather_enabled,
         "knowledge_chunks": container.rag.chunk_count,
-        "knowledge_retrieval": "enhanced_lexical_rerank",
+        "knowledge_retrieval": "scoped_lexical_rerank",
         "memory_store": "sqlite",
+        "campus_profile": {
+            "campus_id": (
+                container.campus_profile.get("profile_id")
+                or container.locations.campus_id
+            ),
+            "display_name": (
+                container.campus_profile.get("display_name")
+                or container.locations.campus_id
+            ),
+        },
         "server_time": server_time.isoformat(),
         "timezone": timezone_name,
     }

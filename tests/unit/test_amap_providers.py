@@ -6,9 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from app.providers.amap import AmapRouteProvider, AmapWeatherProvider
+from app.providers.amap import (
+    AmapCampusDiscoveryProvider,
+    AmapGeocodingProvider,
+    AmapRouteProvider,
+    AmapWeatherProvider,
+)
 from app.providers.location_repository import LocationRepository
 from app.schemas.common import DataSource
+from app.schemas.context import CampusLocation, SourceMetadata
 
 
 class FakeResponse:
@@ -81,6 +87,155 @@ def build_locations(tmp_path: Path, *, with_coordinates: bool = True):
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
     return LocationRepository(path)
+
+
+@pytest.mark.asyncio
+async def test_amap_geocoder_registers_unknown_campus_building(
+    monkeypatch,
+    tmp_path: Path,
+):
+    fake = type("GeocodingClient", (FakeAsyncClient,), {})
+    fake.payload = {
+        "status": "1",
+        "pois": [
+            {
+                "name": "杭州电子科技大学下沙校区第七教学科研楼",
+                "address": "高教园区杭州电子科技大学高教园校区",
+                "location": "120.343791,30.314490",
+            }
+        ],
+    }
+    fake.calls = []
+    monkeypatch.setattr("app.providers.amap.httpx.AsyncClient", fake)
+    locations = build_locations(tmp_path)
+    provider = AmapGeocodingProvider(
+        locations=locations,
+        api_key="test-key",
+        campus_query="杭州电子科技大学下沙校区",
+        search_city="杭州",
+    )
+
+    result = await provider.resolve("第七教学楼")
+
+    assert result is not None
+    assert result.name == "第七教学楼"
+    assert result.longitude == 120.343791
+    assert locations.resolve("第七教学楼") is not None
+    url, params = fake.calls[0]
+    assert url.endswith("/v3/place/text")
+    assert params["keywords"] == "杭州电子科技大学下沙校区 第七教学楼"
+    assert params["city"] == "杭州"
+    assert params["citylimit"] == "true"
+    assert params["key"] == "test-key"
+    cached = await provider.resolve("第七教学楼")
+    assert cached is not None
+    assert len(fake.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_amap_geocoder_retries_after_transient_qps_limit(
+    monkeypatch,
+    tmp_path: Path,
+):
+    fake = type("GeocoderRetryClient", (SequencedFakeAsyncClient,), {})
+    fake.payloads = [
+        {
+            "status": "0",
+            "info": "CUQPS_HAS_EXCEEDED_THE_LIMIT",
+        },
+        {
+            "status": "1",
+            "pois": [
+                {
+                    "name": "杭州电子科技大学下沙校区第七教学科研楼",
+                    "address": "杭州电子科技大学下沙校区",
+                    "location": "120.343791,30.314490",
+                }
+            ],
+        },
+    ]
+    fake.calls = []
+
+    async def no_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.providers.amap.httpx.AsyncClient", fake)
+    monkeypatch.setattr("app.providers.amap.asyncio.sleep", no_sleep)
+    provider = AmapGeocodingProvider(
+        locations=build_locations(tmp_path),
+        api_key="test-key",
+        campus_query="杭州电子科技大学下沙校区",
+        search_city="杭州",
+    )
+
+    result = await provider.resolve("第七教学楼")
+
+    assert result is not None
+    assert result.longitude == 120.343791
+    assert len(fake.calls) == 2
+
+
+def test_runtime_location_upgrades_verified_name_with_live_coordinates(
+    tmp_path: Path,
+):
+    locations = build_locations(tmp_path, with_coordinates=False)
+
+    upgraded = locations.register_runtime(
+        CampusLocation(
+            id="amap_dynamic_a",
+            campus_id="test",
+            name="a",
+            aliases=["测试A点"],
+            category="test",
+            longitude=120.123,
+            latitude=30.456,
+            source=SourceMetadata(
+                type="amap_poi",
+                reference="live test",
+            ),
+        )
+    )
+
+    assert upgraded.id == "a"
+    assert upgraded.longitude == 120.123
+    assert upgraded.latitude == 30.456
+    assert locations.resolve("测试A点").id == "a"
+
+
+@pytest.mark.asyncio
+async def test_amap_geocoder_falls_back_when_place_search_is_empty(
+    monkeypatch,
+    tmp_path: Path,
+):
+    fake = type("FallbackGeocodingClient", (SequencedFakeAsyncClient,), {})
+    fake.payloads = [
+        {"status": "1", "pois": []},
+        {
+            "status": "1",
+            "geocodes": [
+                {
+                    "formatted_address": "浙江省杭州市钱塘区测试楼",
+                    "location": "120.350123,30.318456",
+                }
+            ],
+        },
+    ]
+    fake.calls = []
+    monkeypatch.setattr("app.providers.amap.httpx.AsyncClient", fake)
+    provider = AmapGeocodingProvider(
+        locations=build_locations(tmp_path),
+        api_key="test-key",
+        campus_query="杭州电子科技大学下沙校区",
+        search_city="杭州",
+    )
+
+    result = await provider.resolve("测试楼")
+
+    assert result is not None
+    assert result.source.type == "amap_geocode"
+    assert len(fake.calls) == 2
+    assert fake.calls[0][0].endswith("/v3/place/text")
+    assert fake.calls[1][0].endswith("/v3/geocode/geo")
 
 
 @pytest.mark.asyncio
@@ -177,6 +332,109 @@ async def test_amap_route_requires_verified_coordinates(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_amap_route_rejects_different_campuses(tmp_path: Path):
+    locations = build_locations(tmp_path)
+    original = locations.get("b")
+    locations._locations["b"] = original.model_copy(  # noqa: SLF001
+        update={"campus_id": "another_campus"}
+    )
+    provider = AmapRouteProvider(
+        locations=locations,
+        api_key="test-key",
+    )
+
+    with pytest.raises(LookupError, match="different campuses"):
+        await provider.get_route("a", "b")
+
+
+@pytest.mark.asyncio
+async def test_campus_discovery_builds_campus_scoped_directory(
+    monkeypatch,
+    tmp_path: Path,
+):
+    fake = type(
+        "CampusDiscoveryClient",
+        (SequencedFakeAsyncClient,),
+        {},
+    )
+    fake.payloads = [
+        {
+            "status": "1",
+            "pois": [
+                {
+                    "id": "school-1",
+                    "name": "测试大学中心校区",
+                    "location": "120.000000,30.000000",
+                    "adcode": "330100",
+                }
+            ],
+        },
+        {
+            "status": "1",
+            "pois": [
+                {
+                    "id": "teach-1",
+                    "name": "第一教学楼",
+                    "location": "120.001000,30.001000",
+                }
+            ],
+        },
+        {
+            "status": "1",
+            "pois": [
+                {
+                    "id": "library-1",
+                    "name": "测试大学图书馆",
+                    "location": "120.002000,30.001000",
+                }
+            ],
+        },
+        {"status": "1", "pois": []},
+        {"status": "1", "pois": []},
+        {"status": "1", "pois": []},
+        {
+            "status": "1",
+            "pois": [
+                {
+                    "id": "hospital-1",
+                    "name": "测试大学校医院",
+                    "location": "120.001000,30.002000",
+                }
+            ],
+        },
+    ]
+    fake.calls = []
+    monkeypatch.setattr("app.providers.amap.httpx.AsyncClient", fake)
+    locations = build_locations(tmp_path)
+    provider = AmapCampusDiscoveryProvider(
+        locations=locations,
+        api_key="test-key",
+    )
+
+    result = await provider.discover(
+        school_name="测试大学中心校区",
+        city="杭州",
+    )
+
+    assert result.campus.display_name == "测试大学中心校区"
+    assert result.campus.weather_adcode == "330100"
+    assert len(result.campus.locations) == 4
+    assert all(
+        location.campus_id == result.campus.campus_id
+        for location in result.campus.locations
+    )
+    assert (
+        locations.resolve(
+            "测试大学图书馆",
+            campus_id=result.campus.campus_id,
+        )
+        is not None
+    )
+    assert locations.resolve("测试大学图书馆") is None
+    assert len(fake.calls) == 7
+
+
+@pytest.mark.asyncio
 async def test_amap_route_retries_after_qps_limit(monkeypatch, tmp_path: Path):
     fake = type("RouteRetryClient", (SequencedFakeAsyncClient,), {})
     fake.payloads = [
@@ -264,6 +522,52 @@ async def test_amap_weather_request_and_response(monkeypatch):
     )
     assert len(second) == 2
     assert len(fake.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_amap_weather_retries_after_transient_qps_limit(monkeypatch):
+    fake = type("WeatherRetryClient", (SequencedFakeAsyncClient,), {})
+    fake.payloads = [
+        {
+            "status": "0",
+            "info": "CUQPS_HAS_EXCEEDED_THE_LIMIT",
+        },
+        {
+            "status": "1",
+            "forecasts": [
+                {
+                    "casts": [
+                        {
+                            "date": "2026-07-24",
+                            "dayweather": "多云",
+                            "daytemp": "31",
+                            "nightweather": "小雨",
+                            "nighttemp": "26",
+                        }
+                    ]
+                }
+            ],
+        },
+    ]
+    fake.calls = []
+
+    async def no_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.providers.amap.httpx.AsyncClient", fake)
+    monkeypatch.setattr("app.providers.amap.asyncio.sleep", no_sleep)
+    provider = AmapWeatherProvider(
+        api_key="test-key",
+        city_adcode="330114",
+    )
+
+    result = await provider.get_forecast(
+        date(2026, 7, 24),
+        "campus_main",
+    )
+
+    assert all(item.source == DataSource.LIVE_API for item in result)
+    assert len(fake.calls) == 2
 
 
 @pytest.mark.asyncio

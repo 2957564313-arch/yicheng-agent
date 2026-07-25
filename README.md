@@ -9,18 +9,32 @@
 
 ## 当前状态
 
-- 主模型：`qwen3.6-flash`；
+- 模型容错链：主模型不可用或额度耗尽时自动切换备用千问模型，
+  全部在线模型不可用时继续使用本地确定性解析；
 - 高德路线与天气：已真实联调；
 - 校园知识库：206 页学生手册 + 已核验校园服务时间知识；
-- 校园知识分块：约 97 个；
-- 检索：查询扩展 + 来源分级 + 二阶段重排去重；
+- 校园知识分块：111 个，分块边界保留上下文重叠，避免 PDF 条款被截断；
+- 检索：按规划/制度问答分域 + 查询扩展 + 来源分级 + 二阶段重排去重；
 - 长期记忆：SQLite 持久化，支持前端增改、启停和删除；
-- 课程节次：用户声明后按已核验作息锁定为硬约束；
-- 自动化测试：60 项通过；
-- 离线评估：60/60 通过；
+- 个人课表：每位用户可导入自己的杭电课表 PDF，也可使用 Excel、CSV、JSON；
+- 学期映射：按第一教学周周一换算周次、单双周和真实上课日期；
+- 校历约束：法定节假日、调休工作日与学校补课/停课分层处理；
+- 课程节次：个人课表和用户语言描述都会按已核验作息锁定为硬约束；
+- 本校知识底座：深入使用杭电节次、场馆、门禁、快递、长跑、医院、拥堵和学生手册；
+- 个性化数据：个人课表、长期偏好、常用地点和完成反馈由用户独立管理；
+- 个性化建议：用户主动开启后才识别重复行为，只征求确认、不自动加任务，
+  支持忽略冷却、重复拒绝降频和手动重置；
+- 作息关怀：按用户维护的就寝、起床时间与睡眠目标生成提醒，结合次日早课
+  和晚间安排提示作息冲突，并支持单独关闭；
+- 提醒落地：网页打开时可使用浏览器通知；导出的 90 天系统日历包含课程、
+  会议、学习和就寝闹钟，关闭网页后由手机或电脑系统日历继续提醒；
+- 测试入口保护：可选固定测试账号登录，高成本接口使用短期签名凭证；
+- 自动化测试：183 项通过；
+- 离线评估：70/70 通过；
+- 端到端场景：25/25 通过；
+- 连续状态场景：14/14 通过；
 - 三个固定 Demo：全部通过；
-- 真实端到端响应：7.17 秒、0 个硬约束错误、0 个告警；
-- 运行范围：当前按要求冻结在 localhost，不进行公网部署。
+- 运行范围：本地版本与 Vercel 公网版本均可直接运行。
 
 ## 本地启动
 
@@ -33,7 +47,6 @@
 或执行：
 
 ```bash
-cd /Users/xuwenhang/Desktop/易程智策项目
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -50,18 +63,27 @@ cd /Users/xuwenhang/Desktop/易程智策项目
 密钥仅保存在 `.env`，禁止提交或截图。当前推荐配置：
 
 ```dotenv
+APP_ACCESS_ENABLED=false
+APP_TEST_USERNAME=
+APP_TEST_PASSWORD=
+APP_AUTH_SECRET=
+APP_ACCESS_HOURS=8
+
 LLM_ENABLED=true
-LLM_MODEL=qwen3.6-flash
+LLM_MODEL=qwen3.7-plus
+LLM_FALLBACK_MODELS=qwen-plus-2025-07-28,glm-5
 LLM_ENABLE_THINKING=false
 LLM_RENDER_ENABLED=true
+LLM_PLAN_RENDER_ENABLED=false
 LLM_TIMEOUT_SECONDS=10
 
 LIVE_ROUTE_ENABLED=true
 LIVE_WEATHER_ENABLED=true
 ```
 
-高德天气城市编码默认从 `data/campus_profile.json` 读取。模型、路线或天气
-失败时，系统会自动使用本地解析和静态数据，不阻断核心规划。
+高德天气城市编码默认从当前校园配置读取。模型不可用时依次切换备用模型
+和本地解析；路线接口失败时，只能根据当前学校已发现并缓存的地点坐标保守
+估算，且不会采用校园范围外的同名地点；天气没有可靠来源时明确标记未知。
 
 ## 验收
 
@@ -70,6 +92,8 @@ LIVE_WEATHER_ENABLED=true
 .venv/bin/pytest -q
 .venv/bin/python scripts/run_evaluation.py
 .venv/bin/python scripts/demo_smoke.py
+node scripts/public_acceptance.mjs
+node scripts/public_stateful_acceptance.mjs
 ```
 
 真实接口检查：
@@ -82,7 +106,7 @@ LIVE_WEATHER_ENABLED=true
 
 这些脚本不会打印 API Key。
 
-## 可替换校园配置
+## 杭电知识配置
 
 学校差异集中在 `data/`：
 
@@ -96,15 +120,17 @@ class_periods.json
 knowledge/
 ```
 
-切换其他高校时，通过 `APP_DATA_DIR` 指向另一套 Campus Profile。只替换
-学生手册可迁移制度问答；完整时空规划还需要该校地点、开放时间、节次和
-路线数据。
+当前公开页面固定使用杭州电子科技大学下沙校区知识库，并据此查询路线和
+天气。上述文件共同提供本校地点、课程节次、开放时间、活动有效时段、
+校园拥堵和学生手册依据。个人课表、长期偏好和完成记录则按用户分别保存，
+不会写入学校公共知识。
 
 ## 文档
 
-- 当前交付状态：[`易程智策_项目交付清单与待办.md`](易程智策_项目交付清单与待办.md)
-- 完整工程方案：[`易程智策_新版工程执行计划.md`](易程智策_新版工程执行计划.md)
-- 校园配置：[`docs/CAMPUS_PROFILE.md`](docs/CAMPUS_PROFILE.md)
+- 当前交付状态：[`docs/plans/项目交付清单与待办.md`](docs/plans/项目交付清单与待办.md)
+- 完整工程方案：[`docs/plans/新版工程执行计划.md`](docs/plans/新版工程执行计划.md)
+- 周规划与滚动重排：[`docs/WEEKLY_PLANNING.md`](docs/WEEKLY_PLANNING.md)
+- 本校知识底座：[`docs/CAMPUS_PROFILE.md`](docs/CAMPUS_PROFILE.md)
 - 环境：[`docs/environment.md`](docs/environment.md)
 - API：[`docs/api.md`](docs/api.md)
 - 演示：[`docs/demo_script.md`](docs/demo_script.md)

@@ -29,6 +29,8 @@ class WeatherProvider(Protocol):
         self,
         target_date: date,
         location_id: str,
+        *,
+        city_adcode: str | None = None,
     ) -> list[WeatherContext]: ...
 
 
@@ -38,5 +40,5 @@ class RagProvider(Protocol):
         queries: list[str],
         *,
         top_k: int = 3,
+        purpose: str = "auto",
     ) -> list[RetrievedFact]: ...
-

@@ -54,20 +54,6 @@ class Task(BaseModel):
                     "duration_min must match fixed_start/fixed_end duration"
                 )
 
-        if (
-            self.earliest_start is not None
-            and self.latest_end is not None
-            and self.latest_end <= self.earliest_start
-        ):
-            raise ValueError("latest_end must be after earliest_start")
-
-        if (
-            self.deadline is not None
-            and self.earliest_start is not None
-            and self.deadline <= self.earliest_start
-        ):
-            raise ValueError("deadline must be after earliest_start")
-
         aware_values = [
             value
             for value in (

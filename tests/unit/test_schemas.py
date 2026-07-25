@@ -41,3 +41,16 @@ def test_datetimes_must_be_timezone_aware():
             earliest_start=datetime(2026, 7, 24, 14, 0),
         )
 
+
+def test_contradictory_user_windows_remain_explainable(tz):
+    task = Task(
+        id="parcel",
+        title="取顺丰快递",
+        date=date(2026, 7, 24),
+        duration_min=30,
+        earliest_start=datetime(2026, 7, 24, 19, 0, tzinfo=tz),
+        latest_end=datetime(2026, 7, 24, 18, 0, tzinfo=tz),
+        deadline=datetime(2026, 7, 24, 18, 0, tzinfo=tz),
+    )
+
+    assert task.latest_end < task.earliest_start

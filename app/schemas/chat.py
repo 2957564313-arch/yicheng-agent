@@ -1,17 +1,64 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.common import Issue
+from app.schemas.calendar import CalendarOverrideCreate
+from app.schemas.campus import CampusSelection
+from app.schemas.memory import MemoryCreate
 from app.schemas.plan import DataFreshness, Plan
+from app.schemas.timetable import CourseSessionCreate
+
+
+class ClientTimetableSnapshot(BaseModel):
+    name: str = Field(default="我的课表", min_length=1, max_length=80)
+    term_start: date | None = None
+    term_end: date | None = None
+    enabled: bool = True
+    entries: list[CourseSessionCreate] = Field(
+        default_factory=list,
+        max_length=200,
+    )
+
+
+class ClientBehaviorPattern(BaseModel):
+    key: str = Field(min_length=1, max_length=100)
+    task_title: str = Field(min_length=1, max_length=100)
+    typical_start: time
+    duration_min: int = Field(ge=5, le=480)
+    location_name: str | None = Field(default=None, max_length=120)
+    campus_id: str | None = Field(default=None, max_length=100)
+    occurrences: int = Field(ge=3, le=1000)
+    dismissed_count: int = Field(default=0, ge=0, le=1000)
+    last_dismissed_at: datetime | None = None
+    last_suggested_at: datetime | None = None
+
+
+class ClientPersonalization(BaseModel):
+    enabled: bool = False
+    behavior_patterns: list[ClientBehaviorPattern] = Field(
+        default_factory=list,
+        max_length=20,
+    )
 
 
 class ClientContext(BaseModel):
     current_location_id: str | None = Field(default=None, max_length=100)
     now: datetime | None = None
+    memories: list[MemoryCreate] = Field(default_factory=list, max_length=30)
+    timetable: ClientTimetableSnapshot | None = None
+    calendar_overrides: list[CalendarOverrideCreate] = Field(
+        default_factory=list,
+        max_length=60,
+    )
+    previous_plan: Plan | None = None
+    campus: CampusSelection | None = None
+    personalization: ClientPersonalization = Field(
+        default_factory=ClientPersonalization,
+    )
 
     @model_validator(mode="after")
     def validate_now(self) -> "ClientContext":
@@ -82,6 +129,8 @@ class SuggestedAction(BaseModel):
     label: str
     description: str
     query: str
+    kind: Literal["plan_adjustment", "habit_suggestion"] = "plan_adjustment"
+    dismissible: bool = False
 
 
 class PlanningInsight(BaseModel):

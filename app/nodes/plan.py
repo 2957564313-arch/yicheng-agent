@@ -37,10 +37,24 @@ def make_plan_node(container: AppContainer):
                 "opening_windows", {}
             ).items()
         }
+        task_windows = {
+            task_id: [
+                (
+                    datetime.fromisoformat(start),
+                    datetime.fromisoformat(end),
+                )
+                for start, end in windows
+            ]
+            for task_id, windows in state.get("task_windows", {}).items()
+        }
         old_plan = (
-            container.plans.get(state["old_plan_id"])
-            if state.get("old_plan_id")
-            else None
+            Plan.model_validate(state["old_plan"])
+            if state.get("old_plan")
+            else (
+                container.plans.get(state["old_plan_id"])
+                if state.get("old_plan_id")
+                else None
+            )
         )
         weather = [
             WeatherContext.model_validate(raw)
@@ -59,8 +73,17 @@ def make_plan_node(container: AppContainer):
                     "normalized_locations", {}
                 ),
             )
+        target_date = (
+            tasks[0].date
+            if tasks
+            else (
+                old_plan.date
+                if old_plan is not None
+                else datetime.fromisoformat(state["now_iso"]).date()
+            )
+        )
         context = PlanningContext(
-            target_date=tasks[0].date,
+            target_date=target_date,
             timezone=ZoneInfo(state["timezone"]),
             now=datetime.fromisoformat(state["now_iso"]),
             travel=route_map,
@@ -69,6 +92,7 @@ def make_plan_node(container: AppContainer):
                 for raw in state.get("congestion_windows", [])
             ],
             opening_windows=opening_windows,
+            task_windows=task_windows,
             weather=weather,
             outdoor_location_ids={
                 location_id
@@ -79,6 +103,12 @@ def make_plan_node(container: AppContainer):
             },
             enforce_weather=enforce_weather,
             old_plan=old_plan,
+            initial_location_id=state.get("initial_location_id"),
+            initial_departure_at=(
+                datetime.fromisoformat(state["initial_departure_at"])
+                if state.get("initial_departure_at")
+                else None
+            ),
         )
 
         if state["intent"] in {"replan", "weather_check"} and old_plan:

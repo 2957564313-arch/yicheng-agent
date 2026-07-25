@@ -214,6 +214,54 @@ def test_manual_adjustment_resolves_latest_plan_from_thread(tmp_path):
         assert response.json()["plan_diff"]
 
 
+def test_browser_plan_snapshot_supports_replan_after_cold_start(tmp_path):
+    first_app = build_test_app(tmp_path / "first_instance")
+    with TestClient(first_app) as client:
+        first = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "snapshot_user",
+                "thread_id": "snapshot_thread",
+                "query": (
+                    "今天14点后去图书馆自习1小时，再去取快递，"
+                    "18点前结束。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00"
+                },
+            },
+        )
+        assert first.status_code == 200, first.text
+        previous_plan = first.json()["plan"]
+
+    second_app = build_test_app(tmp_path / "second_instance")
+    with TestClient(second_app) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "snapshot_user",
+                "thread_id": "snapshot_thread",
+                "query": (
+                    "把图书馆自习延长30分钟，其他任务保持不变，"
+                    "还是18点前结束。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:05:00+08:00",
+                    "previous_plan": previous_plan,
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["previous_plan"]["id"] == previous_plan["id"]
+        assert payload["plan"]["version"] == previous_plan["version"] + 1
+        assert payload["plan_diff"]
+        assert payload["current_plan_saved"] is True
+
+
 def test_invalid_request_has_stable_error_shape(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         response = client.post(
@@ -249,6 +297,189 @@ def test_offline_knowledge_query_uses_local_campus_facts(tmp_path):
             "structured",
             "rag",
         }
+        visible_knowledge = [
+            item
+            for item in payload["insights"]
+            if item["title"] != "规划时间基准"
+        ]
+        assert len(visible_knowledge) == 1
+        assert "图书馆" in visible_knowledge[0]["content"]
+        assert "上课时间" not in visible_knowledge[0]["content"]
+        assert "阳光长跑" not in visible_knowledge[0]["content"]
+
+
+def test_late_library_plan_names_the_floor_specific_boundary(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "late_library_user",
+                "thread_id": "late_library_thread",
+                "query": "今天22点去图书馆自习30分钟，可以吗？",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:05:00+08:00"
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["status"] == "completed"
+        assert "不同楼层开放时间不同" in payload["answer"]
+        assert "21:30以后只能选择" in payload["answer"]
+        assert "六层或十二层" in payload["answer"]
+
+
+def test_student_handbook_questions_keep_the_direct_rule_in_answer(tmp_path):
+    cases = [
+        ("迟到早退按旷课多少学时计算？", ("0.5学时",)),
+        ("旷课累计超过课程教学时数多少不能参加考核？", ("三分之一",)),
+        ("学生对处分决定不服，申诉期限是多少天？", ("10日",)),
+        ("图书馆七层晚上几点关闭？", ("21:30",)),
+        ("晚上宿舍什么时候有热水？", ("16:30", "24:00")),
+        (
+            "不能按期注册又没办请假，旷课每天按几节课计算？",
+            ("每天按6节课计",),
+        ),
+        ("学生最长可以请假多久？", ("不能超过四周",)),
+        (
+            "普通休学一般按多久办理，累计最多能休学几年？",
+            ("一学期或者一学年", "累计不得超过两年"),
+        ),
+        (
+            "休学期满后，应当在什么时候提交复学申请？",
+            ("开学两周内",),
+        ),
+        (
+            "创业休学的四年制本科生最长修业年限是几年？",
+            ("最长修业年限为8年",),
+        ),
+        (
+            "实际在校超过几个学期就不能申请普通类转专业？",
+            ("超过四学期", "不得申请普通类转专业"),
+        ),
+        (
+            "学校收到学生书面申诉后，一般多久作出处理决定？",
+            ("15日内",),
+        ),
+        (
+            "对学校申诉处理决定还有异议，多久内可以向浙江省教育厅"
+            "提出书面申诉？",
+            ("15日内", "浙江省教育厅"),
+        ),
+        (
+            "休学期间还能享受奖学金和助学金吗？",
+            ("不享受在校生待遇", "奖学金、助学金和补贴停发"),
+        ),
+    ]
+    with TestClient(build_test_app(tmp_path)) as client:
+        for index, (query, expected_markers) in enumerate(cases):
+            response = client.post(
+                "/api/v1/chat",
+                json={
+                    "user_id": f"handbook_user_{index}",
+                    "query": query,
+                    "mode": "offline",
+                    "client_context": {
+                        "now": "2026-07-24T13:05:00+08:00"
+                    },
+                },
+            )
+
+            assert response.status_code == 200, response.text
+            payload = response.json()
+            assert payload["status"] == "completed"
+            assert payload["plan"] is None
+            for expected in expected_markers:
+                assert expected in payload["answer"], (
+                    f"{query=}; {expected=}; answer={payload['answer']}"
+                )
+            assert "依据来源" in payload["answer"]
+
+
+def test_opt_in_habit_suggestion_never_auto_inserts_task(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "habit_user",
+                "thread_id": "habit_thread",
+                "query": "今天14点去菜鸟驿站取快递，18点前结束。",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "personalization": {
+                        "enabled": True,
+                        "behavior_patterns": [
+                            {
+                                "key": "hdu|study|20:00|图书馆",
+                                "task_title": "自习",
+                                "typical_start": "20:00",
+                                "duration_min": 60,
+                                "location_name": "图书馆",
+                                "campus_id": "hdu_xiasha",
+                                "occurrences": 4,
+                            }
+                        ],
+                    },
+                },
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    habit = next(
+        item
+        for item in payload["suggested_actions"]
+        if item["kind"] == "habit_suggestion"
+    )
+    assert habit["dismissible"] is True
+    assert "近 4 次" in habit["description"]
+    assert "只有你确认后" in habit["description"]
+    assert "自习" in payload["answer"]
+    assert all(
+        "自习" not in item["title"]
+        for item in payload["plan"]["items"]
+        if item["item_type"] == "task"
+    )
+
+
+def test_repeatedly_dismissed_habit_is_suppressed(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "habit_suppressed_user",
+                "thread_id": "habit_suppressed_thread",
+                "query": "今天14点去菜鸟驿站取快递，18点前结束。",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "personalization": {
+                        "enabled": True,
+                        "behavior_patterns": [
+                            {
+                                "key": "hdu|study|20:00|图书馆",
+                                "task_title": "自习",
+                                "typical_start": "20:00",
+                                "duration_min": 60,
+                                "location_name": "图书馆",
+                                "campus_id": "hdu_xiasha",
+                                "occurrences": 8,
+                                "dismissed_count": 2,
+                            }
+                        ],
+                    },
+                },
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    assert all(
+        item["kind"] != "habit_suggestion"
+        for item in response.json()["suggested_actions"]
+    )
 
 
 def test_class_periods_are_scheduled_as_immutable_time_blocks(tmp_path):
@@ -637,3 +868,459 @@ def test_user_reported_rain_moves_run_before_risk_and_keeps_all_tasks(
             for warning in payload["warnings"]
         )
         assert "安全" in payload["answer"]
+
+
+def test_departure_time_and_origin_create_first_travel_leg(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "departure_user",
+                "thread_id": "departure_thread",
+                "query": (
+                    "今天下午4点从第六教学楼出发，"
+                    "去图书馆学习90分钟，之后去东操场跑步30分钟，"
+                    "校内骑电瓶车。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00"
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["status"] == "completed"
+        items = payload["plan"]["items"]
+        first_travel = next(
+            item
+            for item in items
+            if item["item_type"] == "travel"
+        )
+        study = task_items(payload)["study"]
+        assert first_travel["start_at"] == "2026-07-24T16:00:00+08:00"
+        assert first_travel["source"] in {
+            "structured",
+            "estimated",
+            "demo_fixture",
+        }
+        tasks = task_items(payload)
+        assert set(tasks) == {"study", "run"}
+        assert first_travel["location_id"] == "library"
+        assert study["start_at"] >= first_travel["end_at"]
+        assert tasks["run"]["start_at"] >= study["end_at"]
+
+
+def test_specific_courier_closing_time_blocks_late_pickup(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "courier_user",
+                "thread_id": "courier_thread",
+                "query": "今天19点去顺丰快递取件，帮我看看能不能安排。",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00"
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["status"] == "partial"
+        assert not task_items(payload)
+        assert "08:00—18:00" in payload["answer"]
+        assert "不会擅自把顺丰改成京东或菜鸟" in payload["answer"]
+        assert any(
+            warning["code"] == "TASK_UNSCHEDULED"
+            for warning in payload["warnings"]
+        )
+        assert any(
+            warning["code"] == "OUTSIDE_OPENING_HOURS"
+            for warning in payload["warnings"]
+        )
+        assert next(
+            item
+            for item in payload["constraint_checks"]
+            if item["key"] == "opening"
+        )["passed"] is False
+        assert payload["suggested_actions"][0]["label"] == "改到 18:00 前"
+
+
+def test_complex_hdu_request_preserves_every_task_and_verified_time_rule(
+    tmp_path,
+):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "complex_hdu_user",
+                "thread_id": "complex_hdu_thread",
+                "query": (
+                    "明天第3到4节有课，下课后去图书馆七楼自习2小时，"
+                    "18点前取顺丰，晚上去西北田径场完成40分钟"
+                    "阳光长跑，请帮我安排并提醒注意事项。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-23T08:00:00+08:00"
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        statuses = {
+            status["task_id"]: status
+            for status in payload["task_statuses"]
+        }
+        assert set(statuses) == {"course_3_4", "study", "parcel", "run"}
+        assert statuses["parcel"]["title"] == "取顺丰快递"
+        assert statuses["run"]["title"] == "阳光长跑"
+        assert payload["location_names"]["library_floor_7_11"] == (
+            "图书馆七至十一层"
+        )
+        assert payload["location_names"]["sf_express"] == "顺丰快递点"
+        assert payload["location_names"]["northwest_track"] == "西北田径场"
+
+        scheduled = task_items(payload)
+        if "run" in scheduled:
+            assert scheduled["run"]["start_at"] >= (
+                "2026-07-24T18:30:00+08:00"
+            )
+            assert scheduled["run"]["end_at"] <= (
+                "2026-07-24T21:00:00+08:00"
+            )
+        if "parcel" in scheduled:
+            assert scheduled["parcel"]["end_at"] <= (
+                "2026-07-24T18:00:00+08:00"
+            )
+        assert all(
+            status["status"] in {"scheduled", "needs_adjustment"}
+            for status in statuses.values()
+        )
+        assert all(status["message"] for status in statuses.values())
+
+
+def test_hdu_weekend_venue_rule_blocks_indoor_sport_without_hiding_it(
+    tmp_path,
+):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "weekend_rules_user",
+                "thread_id": "weekend_rules_thread",
+                "query": (
+                    "今天下午去校医院就诊30分钟，再打羽毛球1小时，"
+                    "晚上回宿舍洗澡30分钟，请把注意事项也告诉我。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-25T08:00:00+08:00"
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        statuses = {
+            status["task_id"]: status
+            for status in payload["task_statuses"]
+        }
+        assert set(statuses) == {"clinic", "badminton", "bath"}
+        assert statuses["badminton"]["status"] == "needs_adjustment"
+        assert "周末" in payload["answer"]
+        assert "不开放" in payload["answer"]
+        assert "改到宿舍" not in payload["answer"]
+        assert any(
+            issue["code"] == "TASK_UNSCHEDULED"
+            and issue["task_ids"] == ["badminton"]
+            for issue in payload["warnings"]
+        )
+
+
+def test_browser_memory_snapshot_survives_without_server_record(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "snapshot_memory_user",
+                "thread_id": "snapshot_memory_thread",
+                "query": (
+                    "今天14点后去图书馆自习1小时，再去取快递，"
+                    "18点前结束。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "memories": [
+                        {
+                            "category": "preference",
+                            "key": "buffer_min",
+                            "label": "日程缓冲时间",
+                            "value": 20,
+                            "enabled": True,
+                        }
+                    ],
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        ordered = sorted(
+            payload["plan"]["items"],
+            key=lambda item: item["start_at"],
+        )
+        travel = next(item for item in ordered if item["item_type"] == "travel")
+        parcel = next(
+            item for item in ordered if item.get("task_id") == "parcel"
+        )
+        assert (
+            datetime.fromisoformat(parcel["start_at"])
+            - datetime.fromisoformat(travel["end_at"])
+        ).total_seconds() >= 20 * 60
+        assert any(
+            item["source_label"] == "个人记忆库"
+            for item in payload["insights"]
+        )
+
+
+def test_saved_walking_pace_personalizes_travel_time(tmp_path):
+    def request(client, user_id, memories):
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": user_id,
+                "thread_id": f"{user_id}_thread",
+                "query": (
+                    "今天14点从第六教学楼出发，"
+                    "步行去图书馆自习1小时。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "memories": memories,
+                },
+            },
+        )
+        assert response.status_code == 200, response.text
+        return next(
+            item
+            for item in response.json()["plan"]["items"]
+            if item["item_type"] == "travel"
+        )
+
+    with TestClient(build_test_app(tmp_path)) as client:
+        normal = request(client, "normal_walk_user", [])
+        slow = request(
+            client,
+            "slow_walk_user",
+            [
+                {
+                    "category": "preference",
+                    "key": "walking_speed",
+                    "label": "步行节奏",
+                    "value": "slow",
+                    "enabled": True,
+                }
+            ],
+        )
+
+    assert slow["base_duration_min"] > normal["base_duration_min"]
+    assert slow["end_at"] > normal["end_at"]
+
+
+def test_saved_preferred_place_applies_when_request_has_no_place(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "preferred_place_user",
+                "thread_id": "preferred_place_thread",
+                "query": "今天14点后自习1小时。",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "memories": [
+                        {
+                            "category": "preference",
+                            "key": "preferred_locations",
+                            "label": "常用地点",
+                            "value": ["第六教学楼"],
+                            "enabled": True,
+                        }
+                    ],
+                },
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    study = next(
+        item
+        for item in task_items(response.json()).values()
+        if "自习" in item["title"]
+    )
+    assert study["location_id"] == "teaching_building_6"
+
+
+def test_saved_study_place_applies_to_daily_plan(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "preferred_study_place_user",
+                "thread_id": "preferred_study_place_thread",
+                "query": "今天14点后自习1小时。",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "memories": [
+                        {
+                            "category": "preference",
+                            "key": "preferred_study_location",
+                            "label": "常用自习地点",
+                            "value": "图书馆六层",
+                            "enabled": True,
+                        }
+                    ],
+                },
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    study = next(
+        item
+        for item in task_items(response.json()).values()
+        if "自习" in item["title"]
+    )
+    assert study["location_id"] == "library_floor_6_12"
+
+
+def test_saved_study_period_is_soft_daily_preference(tmp_path):
+    def request(query: str):
+        with TestClient(build_test_app(tmp_path)) as client:
+            response = client.post(
+                "/api/v1/chat",
+                json={
+                    "user_id": "preferred_study_period_user",
+                    "thread_id": "preferred_study_period_thread",
+                    "query": query,
+                    "mode": "offline",
+                    "client_context": {
+                        "now": "2026-07-24T08:00:00+08:00",
+                        "memories": [
+                            {
+                                "category": "habit",
+                                "key": "preferred_study_period",
+                                "label": "高效学习时段",
+                                "value": "evening",
+                                "enabled": True,
+                            }
+                        ],
+                    },
+                },
+            )
+        assert response.status_code == 200, response.text
+        return next(
+            item
+            for item in task_items(response.json()).values()
+            if "自习" in item["title"]
+        )
+
+    preferred = request("今天去图书馆自习1小时。")
+    deadline_override = request("今天去图书馆自习1小时，17点前结束。")
+
+    assert datetime.fromisoformat(preferred["start_at"]).hour >= 18
+    assert datetime.fromisoformat(deadline_override["end_at"]).hour <= 17
+
+
+def test_avoid_tight_schedule_memory_can_be_disabled(tmp_path):
+    def buffer_after_travel(client, user_id, memory_value):
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": user_id,
+                "thread_id": f"{user_id}_thread",
+                "query": (
+                    "今天14点后去图书馆自习1小时，"
+                    "再去菜鸟驿站取快递。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "memories": [
+                        {
+                            "category": "preference",
+                            "key": "avoid_tight_schedule",
+                            "label": "避免行程太紧",
+                            "value": memory_value,
+                            "enabled": True,
+                        }
+                    ],
+                },
+            },
+        )
+        assert response.status_code == 200, response.text
+        items = sorted(
+            response.json()["plan"]["items"],
+            key=lambda item: item["start_at"],
+        )
+        travel = next(item for item in items if item["item_type"] == "travel")
+        parcel = next(
+            item for item in items if item.get("task_id") == "parcel"
+        )
+        return int(
+            (
+                datetime.fromisoformat(parcel["start_at"])
+                - datetime.fromisoformat(travel["end_at"])
+            ).total_seconds()
+            // 60
+        )
+
+    with TestClient(build_test_app(tmp_path)) as client:
+        relaxed = buffer_after_travel(client, "relaxed_user", False)
+        buffered = buffer_after_travel(client, "buffered_user", True)
+
+    assert relaxed == 0
+    assert buffered >= 10
+
+
+def test_browser_timetable_snapshot_is_a_fixed_constraint(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "snapshot_timetable_user",
+                "thread_id": "snapshot_timetable_thread",
+                "query": "今天哪几节有课？",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T07:00:00+08:00",
+                    "timetable": {
+                        "name": "浏览器课表",
+                        "term_start": "2026-07-20",
+                        "enabled": True,
+                        "entries": [
+                            {
+                                "course_name": "高等数学",
+                                "weekday": 5,
+                                "start_period": 1,
+                                "end_period": 2,
+                                "location": "第六教学楼",
+                                "weeks": [1],
+                            }
+                        ],
+                    },
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["status"] == "completed"
+        assert "高等数学" in payload["answer"]
+        assert "第1—2节" in payload["answer"]

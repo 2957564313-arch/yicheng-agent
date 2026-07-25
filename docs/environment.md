@@ -17,14 +17,14 @@ Docker、Conda 和 Node 构建链不是本项目本地开发前置。
 - Codex 内置 Python：3.12.13，仅用于引导安装本地 uv
 - Git：2.50.1
 - SQLite CLI：3.51.0
-- uv：安装在 `.tooling/uv-bootstrap/`，该目录不提交
+- uv：团队成员自行安装，不把安装程序放入项目目录
 
 当前工作区的 Python 3.12 虚拟环境和依赖已经配置完成，可直接使用下面的
 “复现”命令。团队其他电脑仍需先安装 uv，再执行 `uv sync`。
 
 外部能力当前也已完成本地联调：
 
-- 千问：`qwen3.6-flash`；
+- 千问：`qwen3.7-plus`；
 - 高德：地点搜索、步行路线和天气；
 - 校园知识：学生手册与结构化时间规则；
 - `.env`：本机已配置，禁止复制到提交材料或 Git。
@@ -32,12 +32,13 @@ Docker、Conda 和 Node 构建链不是本项目本地开发前置。
 ## 复现
 
 ```bash
-.tooling/uv-bootstrap/bin/uv sync
-.tooling/uv-bootstrap/bin/uv run python --version
-UV_CACHE_DIR=.tooling/uv-cache .tooling/uv-bootstrap/bin/uv run python -m pytest
+uv sync
+uv run python --version
+uv run python -m pytest
 ```
 
-如团队成员已全局安装 uv，可把上述命令中的路径替换为 `uv`。
+完成一次 `uv sync` 后，也可以直接使用 `.venv/bin/python` 和
+`.venv/bin/pytest`，不依赖项目内的临时安装目录。
 
 ## 从零配置
 
@@ -54,14 +55,19 @@ UV_CACHE_DIR=.tooling/uv-cache .tooling/uv-bootstrap/bin/uv run python -m pytest
 
 ```dotenv
 LLM_ENABLED=true
-LLM_MODEL=qwen3.6-flash
+LLM_MODEL=qwen3.7-plus
+LLM_FALLBACK_MODELS=qwen-plus-2025-07-28,glm-5
 LLM_ENABLE_THINKING=false
 LLM_RENDER_ENABLED=true
+LLM_PLAN_RENDER_ENABLED=false
 LLM_TIMEOUT_SECONDS=10
 ```
 
 关闭深度思考是必要配置。规划节点需要快速、稳定的 JSON，而不是长推理
-文本。最终日程由确定性程序渲染，避免第二次模型调用。
+文本。系统按主模型、备用模型顺序调用；额度耗尽、限流、暂时不可用或响应
+结构异常时自动换下一个模型。全部在线模型不可用时，仍由本地规则和确定性
+排程继续完成核心功能。比赛版默认不对已校验计划进行第二次模型润色，
+避免模型改动时间事实并降低端到端响应时间；知识问答仍可使用模型组织语言。
 
 ## 外部能力启用与验收顺序
 
@@ -78,7 +84,7 @@ LLM_TIMEOUT_SECONDS=10
 真实接口验收：
 
 ```bash
-.venv/bin/python scripts/probe_qwen_model.py --model qwen3.6-flash
+.venv/bin/python scripts/probe_qwen_model.py --model qwen3.7-plus
 .venv/bin/python scripts/live_amap_smoke.py
 .venv/bin/python scripts/live_end_to_end_smoke.py
 ```

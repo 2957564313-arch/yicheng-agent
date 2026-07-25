@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 from uuid import uuid4
 
 from app.repositories.database import Database
@@ -138,6 +138,46 @@ class PlanRepository:
         if row is None:
             return None
         return Plan.model_validate(json.loads(row["plan_json"]))
+
+    def latest_for_user_range(
+        self,
+        *,
+        user_id: str,
+        start_date: date,
+        end_date: date,
+    ) -> list[Plan]:
+        """Return the newest valid daily plan for every date in a range."""
+
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT plan_json
+                FROM (
+                    SELECT
+                        plan_json,
+                        plan_date,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY plan_date
+                            ORDER BY created_at DESC, version DESC
+                        ) AS rank_in_date
+                    FROM plans
+                    WHERE user_id = ?
+                      AND plan_date BETWEEN ? AND ?
+                      AND status = 'valid'
+                )
+                WHERE rank_in_date = 1
+                ORDER BY plan_date
+                """,
+                (
+                    user_id,
+                    start_date.isoformat(),
+                    end_date.isoformat(),
+                ),
+            ).fetchall()
+        return [
+            Plan.model_validate(json.loads(row["plan_json"]))
+            for row in rows
+        ]
 
     def reset_user(self, user_id: str) -> None:
         """Reset demo conversations while preserving long-term user memories."""

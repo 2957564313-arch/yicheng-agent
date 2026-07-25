@@ -3,6 +3,7 @@ source_path: "杭电时间知识库.docx"
 verified: true
 project_owner_confirmed: true
 official_verification_required: false
+knowledge_type: operations
 ---
 
 # 杭州电子科技大学校园时间规则
@@ -24,7 +25,9 @@ official_verification_required: false
 ## 图书馆
 
 法定节假日除外，图书馆周一至周日07:00—22:30开放。
-六层、十二层07:00—22:30；七至十一层08:00—21:30。
+不同楼层开放时间不同：六层、十二层07:00—22:30；七至十一层
+08:00—21:30。21:30以后只能选择仍开放的六层或十二层，不能把
+22:30视为所有楼层的统一闭馆时间。
 
 ## 快递点
 

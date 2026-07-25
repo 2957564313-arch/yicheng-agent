@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from time import perf_counter
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -30,20 +30,152 @@ router = APIRouter(prefix="/api/v1", tags=["chat"])
 _CURRENT_PLAN_KEYWORDS = (
     "延长",
     "增加",
+    "新增",
+    "再加",
+    "加一个",
+    "加入",
+    "补充",
+    "另外",
+    "还有",
+    "别忘了",
+    "取消",
+    "删除",
+    "去掉",
+    "移除",
+    "不去了",
+    "不用安排",
+    "别安排",
     "缩短",
     "调整",
     "重新",
     "保持",
     "不要动",
-    "天气",
-    "下雨",
-    "降雨",
     "当前计划",
 )
 
 
 def _requires_current_plan(query: str) -> bool:
-    return any(keyword in query for keyword in _CURRENT_PLAN_KEYWORDS)
+    if any(keyword in query for keyword in _CURRENT_PLAN_KEYWORDS):
+        return True
+    weather_words = ("天气", "下雨", "降雨", "有雨")
+    weather_adjustment_words = (
+        "检查",
+        "当前",
+        "原计划",
+        "重排",
+        "改一下",
+        "怎么办",
+    )
+    return (
+        any(word in query for word in weather_words)
+        and any(word in query for word in weather_adjustment_words)
+    )
+
+
+def _habit_topic(value: str) -> str:
+    for topic, markers in (
+        ("study", ("自习", "学习", "复习", "阅读")),
+        ("exercise", ("跑步", "运动", "健身", "锻炼")),
+        ("meal", ("吃饭", "用餐", "早餐", "午餐", "晚餐")),
+        ("parcel", ("快递", "取件", "驿站")),
+    ):
+        if any(marker in value for marker in markers):
+            return topic
+    return re.sub(r"\s+", "", value)[:24]
+
+
+def _personalized_habit_actions(
+    *,
+    payload: ChatRequest,
+    result: dict,
+    target_date,
+    now: datetime,
+) -> list[dict]:
+    context = payload.client_context
+    personalization = context.personalization if context else None
+    if (
+        personalization is None
+        or not personalization.enabled
+        or result.get("intent") == "query"
+        or result.get("status") != "completed"
+        or not result.get("final_plan")
+    ):
+        return []
+    active_campus_id = (
+        context.campus.campus_id
+        if context and context.campus
+        else None
+    )
+    current_topics = {
+        _habit_topic(str(task.get("title", "")))
+        for task in result.get("tasks", [])
+    }
+    query_topic = _habit_topic(payload.query)
+    if query_topic:
+        current_topics.add(query_topic)
+    candidates = sorted(
+        personalization.behavior_patterns,
+        key=lambda item: (-item.occurrences, item.key),
+    )
+    for pattern in candidates:
+        if pattern.dismissed_count >= 2:
+            continue
+        if (
+            pattern.campus_id
+            and active_campus_id
+            and pattern.campus_id != active_campus_id
+        ):
+            continue
+        if _habit_topic(pattern.task_title) in current_topics:
+            continue
+        if (
+            pattern.last_dismissed_at is not None
+            and now - pattern.last_dismissed_at < timedelta(days=7)
+        ):
+            continue
+        if (
+            pattern.last_suggested_at is not None
+            and now - pattern.last_suggested_at < timedelta(days=3)
+        ):
+            continue
+        suggested_at = datetime.combine(
+            target_date,
+            pattern.typical_start,
+            tzinfo=now.tzinfo,
+        )
+        if target_date == now.date() and suggested_at <= now + timedelta(
+            minutes=30
+        ):
+            continue
+        time_label = pattern.typical_start.strftime("%H:%M")
+        location_text = (
+            f"去{pattern.location_name}"
+            if pattern.location_name
+            else ""
+        )
+        task_text = (
+            f"{location_text}{pattern.task_title}"
+            f"{pattern.duration_min}分钟"
+        )
+        return [
+            {
+                "id": f"habit:{pattern.key}",
+                "label": f"这次也安排{pattern.task_title}吗？",
+                "description": (
+                    f"你近 {pattern.occurrences} 次常在 {time_label}"
+                    f"{location_text}{pattern.task_title}。这次没有自动加入，"
+                    "只有你确认后我才会调整。"
+                ),
+                "query": (
+                    "保持当前计划和所有固定约束不变，尝试在"
+                    f"{target_date:%Y年%m月%d日} {time_label}"
+                    f"加入{task_text}；如果有冲突，请先说明，不要强行安排。"
+                ),
+                "kind": "habit_suggestion",
+                "dismissible": True,
+            }
+        ]
+    return []
 
 
 def _execution_steps(
@@ -148,7 +280,7 @@ def _constraint_checks(
             "deadline",
             "截止时间满足",
             {"DEADLINE_MISSED"},
-            "全部任务在截止时间前完成",
+            "设置了截止要求的任务均按时完成",
         ),
         (
             "opening",
@@ -211,15 +343,49 @@ def _fact_excerpt(content: str, query: str, limit: int = 180) -> str:
     return compact if len(compact) <= limit else compact[:limit].rstrip() + "…"
 
 
+def _planning_knowledge_topics(value: str) -> set[str]:
+    topics: set[str] = set()
+    for topic, markers in (
+        ("library", ("图书馆", "阅览室", "自习")),
+        ("parcel", ("快递", "驿站", "取件")),
+        ("sun_run", ("阳光长跑", "跑步", "田径场", "操场")),
+        ("gym", ("体育馆", "综合馆", "羽毛球", "乒乓球")),
+        ("meal", ("餐厅", "食堂", "用餐", "吃饭")),
+        ("dormitory", ("宿舍", "公寓楼", "门禁", "熄灯")),
+        ("hot_water", ("热水", "洗澡", "洗漱")),
+        ("clinic", ("校医院", "就诊", "看医生", "医务室")),
+        ("class", ("上课时间", "第1节", "课表", "课程")),
+        ("congestion", ("拥堵", "集中通行", "高峰")),
+    ):
+        if any(marker in value for marker in markers):
+            topics.add(topic)
+    return topics
+
+
 def _planning_insights(
     *,
     result: dict,
     query: str,
     time_context: PlanningTimeContext,
 ) -> list[PlanningInsight]:
-    facts = sorted(
-        result.get("retrieved_facts", []),
-        key=lambda item: (-int(item.get("priority", 0)), item.get("id", "")),
+    source_rank = {
+        DataSource.USER.value: 5,
+        DataSource.STRUCTURED.value: 4,
+        DataSource.LIVE_API.value: 3,
+        DataSource.RAG.value: 2,
+    }
+    raw_facts = list(result.get("retrieved_facts", []))
+    facts = (
+        raw_facts
+        if result.get("intent") == "query"
+        else sorted(
+            raw_facts,
+            key=lambda item: (
+                -source_rank.get(str(item.get("source", "")), 0),
+                -int(item.get("priority", 0)),
+                item.get("id", ""),
+            ),
+        )
     )
     insights: list[PlanningInsight] = [
         PlanningInsight(
@@ -231,7 +397,7 @@ def _planning_insights(
                     else "本次指定北京时间为 "
                 )
                 + f"{time_context.now:%Y年%m月%d日 %H:%M} "
-                f"计算；本次任务和天气查询对应"
+                f"计算；本次规划对应"
                 f"{time_context.target_date:%Y年%m月%d日}"
                 f"（{time_context.weekday}）"
             ),
@@ -251,6 +417,17 @@ def _planning_insights(
         "electrobike": "电瓶车",
     }.get(transport_mode, "步行")
     plan_items = (result.get("final_plan") or {}).get("items", [])
+    planning_context = " ".join(
+        [
+            query,
+            *[
+                str(item.get("title", ""))
+                for item in plan_items
+                if item.get("item_type") == "task"
+            ],
+        ]
+    )
+    active_topics = _planning_knowledge_topics(planning_context)
     travel_items = [
         item for item in plan_items if item.get("item_type") == "travel"
     ]
@@ -284,8 +461,56 @@ def _planning_insights(
             )
         )
     seen_content: set[str] = set()
-    fact_limit = 3 if result.get("intent") == "query" else 2
+    fact_limit = 2 if result.get("intent") == "query" else 4
+    fact_count = 0
+    top_rag_priority = max(
+        (
+            int(fact.get("priority", 0))
+            for fact in facts
+            if fact.get("source") == DataSource.RAG.value
+        ),
+        default=0,
+    )
+    top_rag_source = next(
+        (
+            str(fact.get("source_ref") or "")
+            for fact in facts
+            if fact.get("source") == DataSource.RAG.value
+        ),
+        "",
+    )
+    has_structured_query_fact = (
+        result.get("intent") == "query"
+        and any(
+            fact.get("source") == DataSource.STRUCTURED.value
+            for fact in facts
+        )
+    )
     for fact in facts:
+        if (
+            has_structured_query_fact
+            and fact.get("source") == DataSource.RAG.value
+        ):
+            # The structured rule is already the narrowest verified answer.
+            # Broad RAG chunks can contain unrelated schedules or venue
+            # rules, which are not useful in the visible evidence panel.
+            continue
+        if (
+            fact.get("source") == DataSource.RAG.value
+            and int(fact.get("priority", 0)) < top_rag_priority - 8
+            and str(fact.get("source_ref") or "") != top_rag_source
+        ):
+            continue
+        if (
+            result.get("intent") != "query"
+            and fact.get("source") == DataSource.RAG.value
+            and active_topics
+        ):
+            fact_topics = _planning_knowledge_topics(
+                str(fact.get("content", ""))
+            )
+            if not fact_topics or fact_topics.isdisjoint(active_topics):
+                continue
         content = _fact_excerpt(str(fact.get("content", "")), query)
         fingerprint = content[:80]
         if not content or fingerprint in seen_content:
@@ -297,10 +522,18 @@ def _planning_insights(
             title = "已核对校园规则"
             source_label = "校内结构化规则"
             importance = "required"
+        elif "gov.cn" in source_ref:
+            title = "法定节假日依据"
+            source_label = "国务院办公厅"
+            importance = "required"
         elif "学生手册" in source_ref:
             title = "学生手册依据"
             source_label = "2025年学生手册"
-            importance = "attention"
+            importance = (
+                "reference"
+                if result.get("intent") == "query"
+                else "attention"
+            )
         else:
             title = "校园知识参考"
             source_label = "已核验知识库"
@@ -313,7 +546,8 @@ def _planning_insights(
                 importance=importance,
             )
         )
-        if len(insights) >= fact_limit:
+        fact_count += 1
+        if fact_count >= fact_limit:
             break
 
     weather = result.get("weather_context", [])
@@ -366,13 +600,13 @@ def _planning_insights(
         )
         insights.append(
             PlanningInsight(
-                title="已应用你的长期偏好",
+                title="已读取你的个性化设置",
                 content=labels,
                 source_label="个人记忆库",
                 importance="reference",
             )
         )
-    return insights[:5]
+    return insights[:7]
 
 
 def _task_statuses(
@@ -492,15 +726,40 @@ async def execute_chat(
     request_id = f"req_{uuid4().hex}"
     trace_id = f"trace_{uuid4().hex}"
 
+    needs_current_plan = _requires_current_plan(payload.query)
     effective_old_plan_id = payload.old_plan_id
-    if effective_old_plan_id is None and _requires_current_plan(payload.query):
-        latest_plan = container.plans.latest_for_thread(thread_id)
-        effective_old_plan_id = latest_plan.id if latest_plan else None
     previous_plan = (
         container.plans.get(effective_old_plan_id)
         if effective_old_plan_id
         else None
     )
+    if (
+        previous_plan is None
+        and effective_old_plan_id is None
+        and needs_current_plan
+    ):
+        latest_plan = container.plans.latest_for_thread(thread_id)
+        if latest_plan:
+            previous_plan = latest_plan
+            effective_old_plan_id = latest_plan.id
+    client_previous_plan = (
+        payload.client_context.previous_plan
+        if payload.client_context
+        else None
+    )
+    if (
+        previous_plan is None
+        and needs_current_plan
+        and client_previous_plan is not None
+        and client_previous_plan.user_id == payload.user_id
+        and client_previous_plan.thread_id == thread_id
+        and (
+            effective_old_plan_id is None
+            or client_previous_plan.id == effective_old_plan_id
+        )
+    ):
+        previous_plan = client_previous_plan
+        effective_old_plan_id = client_previous_plan.id
 
     container.plans.ensure_user_and_thread(
         user_id=payload.user_id,
@@ -513,6 +772,9 @@ async def execute_chat(
         content=payload.query,
         created_at=now,
     )
+    reset_llm_usage = getattr(container.llm, "reset_usage", None)
+    if callable(reset_llm_usage):
+        reset_llm_usage()
     run_id = container.runs.start(
         request_id=request_id,
         trace_id=trace_id,
@@ -520,10 +782,28 @@ async def execute_chat(
         input_payload=payload.model_dump(mode="json"),
         created_at=now,
         model_name=(
-            container.settings.llm_model if container.llm.configured else None
+            getattr(
+                container.llm,
+                "model_chain_label",
+                container.settings.llm_model,
+            )
+            if container.llm.configured
+            else None
         ),
     )
     started = perf_counter()
+    active_campus = (
+        payload.client_context.campus
+        if payload.client_context
+        else None
+    )
+    if active_campus is not None:
+        for location in active_campus.locations:
+            container.locations.register_runtime(
+                location.model_copy(
+                    update={"campus_id": active_campus.campus_id}
+                )
+            )
     initial_state = {
         "trace_id": trace_id,
         "user_id": payload.user_id,
@@ -536,9 +816,46 @@ async def execute_chat(
         "intent": "",
         "requested_date": None,
         "old_plan_id": effective_old_plan_id,
+        "old_plan": (
+            previous_plan.model_dump(mode="json")
+            if previous_plan is not None
+            else None
+        ),
         "tasks": [],
         "preferences": {},
+        "client_memories": [
+            item.model_dump(mode="json")
+            for item in (
+                payload.client_context.memories
+                if payload.client_context
+                else []
+            )
+        ],
+        "client_timetable": (
+            payload.client_context.timetable.model_dump(mode="json")
+            if payload.client_context
+            and payload.client_context.timetable is not None
+            else None
+        ),
+        "client_calendar_overrides": [
+            item.model_dump(mode="json")
+            for item in (
+                payload.client_context.calendar_overrides
+                if payload.client_context
+                else []
+            )
+        ],
+        "active_campus": (
+            active_campus.model_dump(mode="json")
+            if active_campus is not None
+            else None
+        ),
         "user_memories": [],
+        "timetable_summary": None,
+        "academic_day_context": None,
+        "initial_location_raw": None,
+        "initial_location_id": None,
+        "initial_departure_at": None,
         "clarifications": [],
         "parse_confidence": 0,
         "normalized_locations": {},
@@ -573,13 +890,42 @@ async def execute_chat(
             if result.get("final_plan")
             else None
         )
+        target_date = (
+            plan.date
+            if plan
+            else (
+                datetime.fromisoformat(result["requested_date"]).date()
+                if result.get("requested_date")
+                else now.date()
+            )
+        )
+        habit_actions = _personalized_habit_actions(
+            payload=payload,
+            result=result,
+            target_date=target_date,
+            now=now,
+        )
+        if habit_actions:
+            habit_note = habit_actions[0]["description"]
+            result["final_answer"] = (
+                result["final_answer"].rstrip()
+                + "\n\n"
+                + habit_note
+                + "需要的话可以点下面的建议；这次不用也可以忽略。"
+            )
         current_plan_saved = bool(
             plan and plan.status == PlanStatus.VALID
         )
         if current_plan_saved and plan:
+            persisted_parent_id = (
+                effective_old_plan_id
+                if effective_old_plan_id
+                and container.plans.get(effective_old_plan_id) is not None
+                else None
+            )
             container.plans.save(
                 plan,
-                parent_plan_id=effective_old_plan_id,
+                parent_plan_id=persisted_parent_id,
             )
         container.plans.add_message(
             thread_id=thread_id,
@@ -604,15 +950,6 @@ async def execute_chat(
             or any(
                 raw.get("source") == DataSource.USER.value
                 for raw in result.get("weather_context", [])
-            )
-        )
-        target_date = (
-            plan.date
-            if plan
-            else (
-                datetime.fromisoformat(result["requested_date"]).date()
-                if result.get("requested_date")
-                else now.date()
             )
         )
         weekdays = (
@@ -666,7 +1003,10 @@ async def execute_chat(
             ),
             suggested_actions=[
                 SuggestedAction.model_validate(raw)
-                for raw in result.get("suggested_actions", [])
+                for raw in [
+                    *result.get("suggested_actions", []),
+                    *habit_actions,
+                ]
             ],
             insights=_planning_insights(
                 result=result,
@@ -685,6 +1025,11 @@ async def execute_chat(
             latency_ms=round((perf_counter() - started) * 1000),
             route_source=freshness.route.value,
             weather_source=freshness.weather.value,
+            model_name=getattr(
+                container.llm,
+                "used_model_label",
+                None,
+            ),
         )
         return response
     except Exception as exc:
@@ -697,6 +1042,11 @@ async def execute_chat(
             completed_at=datetime.now(timezone),
             latency_ms=round((perf_counter() - started) * 1000),
             error_code=error_code,
+            model_name=getattr(
+                container.llm,
+                "used_model_label",
+                None,
+            ),
         )
         raise
 

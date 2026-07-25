@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+import requests
 
 from app.errors import AppError
 from app.services.llm import OpenAICompatibleLLM
@@ -45,6 +46,7 @@ def build_llm(prompt_dir: Path) -> OpenAICompatibleLLM:
     return OpenAICompatibleLLM(
         enabled=True,
         model="qwen-test",
+        fallback_models=[],
         base_url="https://model.example/v1",
         api_key="test-key",
         enable_thinking=False,
@@ -113,3 +115,73 @@ async def test_invalid_model_output_is_retried_then_rejected(
 
     assert error.value.code == "LLM_OUTPUT_INVALID"
     assert len(fake.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_provider_failure_switches_to_fallback_model(
+    monkeypatch,
+    tmp_path: Path,
+):
+    (tmp_path / "respond.md").write_text("respond", encoding="utf-8")
+    llm = OpenAICompatibleLLM(
+        enabled=True,
+        model="qwen-primary",
+        fallback_models=["qwen-backup"],
+        base_url="https://model.example/v1",
+        api_key="test-key",
+        enable_thinking=False,
+        timeout_seconds=5,
+        prompt_dir=tmp_path,
+    )
+    attempted: list[str] = []
+
+    def fake_post(
+        url: str,
+        body: dict,
+        headers: dict,
+        timeout_seconds: float,
+    ) -> dict:
+        attempted.append(body["model"])
+        if body["model"] == "qwen-primary":
+            raise requests.HTTPError("quota exhausted")
+        return {"choices": [{"message": {"content": "备用模型已接管"}}]}
+
+    monkeypatch.setattr(llm, "_post_sync", fake_post)
+
+    answer = await llm.polish_answer(draft="草稿", context={})
+
+    assert answer == "备用模型已接管"
+    assert attempted == ["qwen-primary", "qwen-backup"]
+    assert llm.used_model_label == "qwen-backup"
+
+
+@pytest.mark.asyncio
+async def test_malformed_provider_response_switches_model(
+    monkeypatch,
+    tmp_path: Path,
+):
+    (tmp_path / "respond.md").write_text("respond", encoding="utf-8")
+    llm = OpenAICompatibleLLM(
+        enabled=True,
+        model="qwen-primary",
+        fallback_models=["qwen-backup"],
+        base_url="https://model.example/v1",
+        api_key="test-key",
+        enable_thinking=False,
+        timeout_seconds=5,
+        prompt_dir=tmp_path,
+    )
+    responses = iter(
+        [
+            {"message": "temporarily unavailable"},
+            {"choices": [{"message": {"content": "已恢复"}}]},
+        ]
+    )
+    monkeypatch.setattr(
+        llm,
+        "_post_sync",
+        lambda url, body, headers, timeout_seconds: next(responses),
+    )
+
+    assert await llm.polish_answer(draft="草稿", context={}) == "已恢复"
+    assert llm.used_model_label == "qwen-backup"

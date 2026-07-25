@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import date
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from app.config import get_settings
-from app.container import _profile_weather_adcode
+from app.container import _load_campus_profile, _profile_amap_settings
 from app.providers.amap import AmapRouteProvider, AmapWeatherProvider
 from app.providers.location_repository import LocationRepository
 
@@ -16,9 +17,12 @@ async def main() -> None:
         raise RuntimeError("高德 Key 尚未配置")
 
     locations = LocationRepository(settings.app_data_dir / "locations.json")
+    amap_profile = _profile_amap_settings(
+        _load_campus_profile(settings.app_data_dir)
+    )
     adcode = (
         settings.weather_city_adcode
-        or _profile_weather_adcode(settings.app_data_dir)
+        or amap_profile.get("weather_adcode", "")
     )
     if not adcode:
         raise RuntimeError("天气城市编码尚未配置")
@@ -59,8 +63,9 @@ async def main() -> None:
         )
         for origin_id, destination_id, mode in route_cases
     ]
+    target_date = datetime.now(ZoneInfo("Asia/Shanghai")).date()
     weather = await weather_provider.get_forecast(
-        date.today(),
+        target_date,
         "campus_main",
     )
     print(

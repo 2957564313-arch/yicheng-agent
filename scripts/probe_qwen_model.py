@@ -14,6 +14,7 @@ async def run(model: str, timeout_seconds: float) -> None:
     llm = OpenAICompatibleLLM(
         enabled=True,
         model=model,
+        fallback_models=[],
         base_url=settings.llm_base_url,
         api_key=settings.llm_api_key,
         enable_thinking=False,

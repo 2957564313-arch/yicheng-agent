@@ -4,11 +4,25 @@
 
 - 单实例 FastAPI；
 - Python 3.12；
-- SQLite 位于持久化磁盘；
+- 正式版数据库使用持久化存储；
 - HTTPS 由反向代理或托管平台提供；
 - 固定 Demo 默认离线，普通输入使用实时增强；
 - 密钥只通过环境变量注入，禁止写进仓库；
 - 每次发布前备份 `runtime/app.db`。
+
+## Vercel 预览版
+
+仓库根目录的 `server.py` 是 Vercel 识别 FastAPI 应用的入口。Vercel
+运行时只允许把临时文件写到 `/tmp`，因此预览版会把 SQLite 数据库放在
+`/tmp/yicheng-agent/`。这种数据会在冷启动、实例切换或重新部署后丢失，
+只适合公开体验和功能测试，不应作为长期记忆的最终存储。
+
+Vercel 预览版无需配置额外启动命令。导入 GitHub 仓库后，框架保持自动
+识别，根目录保持仓库根目录。首次部署可以先不开启外部 API，确认首页、
+健康检查和三个离线 Demo 均可访问，再配置模型、高德路线和天气环境变量。
+
+需要长期保存个人课表、计划、记忆和完成记录时，应把 SQLite 迁移到
+PostgreSQL；杭电知识文件可继续随版本发布，或迁移到对象存储。
 
 ## 启动命令
 
@@ -41,11 +55,13 @@ LIVE_WEATHER_ENABLED=false
 
 ```dotenv
 LLM_ENABLED=true
-LLM_MODEL=qwen3.6-flash
+LLM_MODEL=qwen3.7-plus
+LLM_FALLBACK_MODELS=qwen-plus-2025-07-28,glm-5
 LLM_BASE_URL=<百炼 OpenAI 兼容地址>
 LLM_API_KEY=<服务器密钥>
 LLM_ENABLE_THINKING=false
 LLM_RENDER_ENABLED=true
+LLM_PLAN_RENDER_ENABLED=false
 LLM_TIMEOUT_SECONDS=10
 
 LIVE_ROUTE_ENABLED=true
@@ -62,12 +78,22 @@ WEATHER_TIMEOUT_SECONDS=3
 实时增强版必须同时满足以下条件：
 
 - 模型：兼容接口已用结构化输出案例验证；
+- 模型容错：主模型额度耗尽、限流或不可用时能切换备用模型；
 - 路线：地点真实坐标已核验，Web 服务 Key 可用；
 - 天气：城市 adcode 已核验，返回字段完成联调。
 
-当前比赛版入口默认无需登录。提交信息表的测试账号栏填写“无需账号，访问
-链接即可体验”。如部署平台自身增加了访问保护，应填写平台提供的独立测试
-账号，不要把管理员账号交给评审。
+比赛公网版建议启用轻量测试登录。首页和健康检查保持可访问，规划、地图、
+天气、课表与记忆接口需要使用测试账号登录；登录后获得短期签名凭证。测试
+账号、密码、签名密钥只能配置在部署环境变量中，不得写入 GitHub、前端或
+PPT 源文件。参赛材料填写独立测试账号与有效期，不得提供管理员账号。
+
+```text
+APP_ACCESS_ENABLED=true
+APP_TEST_USERNAME=yicheng_test
+APP_TEST_PASSWORD=<单独生成的比赛测试密码>
+APP_AUTH_SECRET=<至少24字符的随机签名密钥>
+APP_ACCESS_HOURS=8
+```
 
 ## 高德配额与公网 IP
 
@@ -79,9 +105,9 @@ WEATHER_TIMEOUT_SECONDS=3
 - 服务器具有固定出口 IP 后，可以把该 IP 加入高德 Key 白名单；
 - 若托管平台出口 IP 不固定，暂不配置 IP 白名单，但必须保管好 Key。
 
-## 当前待选平台
+## 当前公网平台
 
-公网平台尚未确定。选择时必须同时满足：
+当前公开测试版部署在 Vercel。后续切换国内云服务器和自有域名时必须满足：
 
 - 能运行 Python 3.12 和 FastAPI；
 - 能配置环境变量；
@@ -98,8 +124,8 @@ WEATHER_TIMEOUT_SECONDS=3
 
 1. 冻结需求，不在发布当天新增功能；
 2. 运行静态数据校验；
-3. 运行全部 60 项自动化测试；
-4. 运行 60 例评估；
+3. 运行全部 183 项自动化测试；
+4. 运行 70 例评估；
 5. 本地浏览器运行三个 Demo；
 6. 备份数据库；
 7. 发布；

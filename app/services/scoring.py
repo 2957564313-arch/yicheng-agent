@@ -34,10 +34,11 @@ def candidate_cost(
     travel_minutes: int,
     preference_penalty: int,
     shift_minutes: int,
+    scheduling_delay_minutes: int = 0,
 ) -> float:
     return (
         0.5 * travel_minutes
         + 20 * preference_penalty
         + shift_minutes
+        + 0.08 * scheduling_delay_minutes
     )
-

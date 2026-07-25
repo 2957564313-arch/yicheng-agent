@@ -16,6 +16,7 @@
         "sun": [["07:00", "22:30"]]
       },
       "exceptions": [],
+      "closed_on_national_holidays": true,
       "source_url": "杭电时间知识库.docx",
       "verified_at": "2026-07-24"
     },
@@ -41,15 +42,197 @@
       "effective_from": "2026-01-01",
       "effective_to": null,
       "weekly": {
-        "mon": [["07:00", "21:00"]],
-        "tue": [["07:00", "21:00"]],
-        "wed": [["07:00", "21:00"]],
-        "thu": [["07:00", "21:00"]],
-        "fri": [["07:00", "21:00"]],
-        "sat": [["07:00", "21:00"]],
-        "sun": [["07:00", "21:00"]]
+        "mon": [["00:00", "24:00"]],
+        "tue": [["00:00", "24:00"]],
+        "wed": [["00:00", "24:00"]],
+        "thu": [["00:00", "24:00"]],
+        "fri": [["00:00", "24:00"]],
+        "sat": [["00:00", "24:00"]],
+        "sun": [["00:00", "24:00"]]
       },
       "exceptions": [],
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "location_id": "library_floor_6_12",
+      "effective_from": "2026-01-01",
+      "effective_to": null,
+      "weekly": {
+        "mon": [["07:00", "22:30"]],
+        "tue": [["07:00", "22:30"]],
+        "wed": [["07:00", "22:30"]],
+        "thu": [["07:00", "22:30"]],
+        "fri": [["07:00", "22:30"]],
+        "sat": [["07:00", "22:30"]],
+        "sun": [["07:00", "22:30"]]
+      },
+      "exceptions": [],
+      "closed_on_national_holidays": true,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "location_id": "library_floor_7_11",
+      "effective_from": "2026-01-01",
+      "effective_to": null,
+      "weekly": {
+        "mon": [["08:00", "21:30"]],
+        "tue": [["08:00", "21:30"]],
+        "wed": [["08:00", "21:30"]],
+        "thu": [["08:00", "21:30"]],
+        "fri": [["08:00", "21:30"]],
+        "sat": [["08:00", "21:30"]],
+        "sun": [["08:00", "21:30"]]
+      },
+      "exceptions": [],
+      "closed_on_national_holidays": true,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "location_id": "sf_express",
+      "effective_from": "2026-01-01",
+      "effective_to": null,
+      "weekly": {
+        "mon": [["08:00", "18:00"]],
+        "tue": [["08:00", "18:00"]],
+        "wed": [["08:00", "18:00"]],
+        "thu": [["08:00", "18:00"]],
+        "fri": [["08:00", "18:00"]],
+        "sat": [["08:00", "18:00"]],
+        "sun": [["08:00", "18:00"]]
+      },
+      "exceptions": [],
+      "closed_on_national_holidays": false,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "location_id": "jd_express",
+      "effective_from": "2026-01-01",
+      "effective_to": null,
+      "weekly": {
+        "mon": [["08:00", "22:00"]],
+        "tue": [["08:00", "22:00"]],
+        "wed": [["08:00", "22:00"]],
+        "thu": [["08:00", "22:00"]],
+        "fri": [["08:00", "22:00"]],
+        "sat": [["08:00", "22:00"]],
+        "sun": [["08:00", "22:00"]]
+      },
+      "exceptions": [],
+      "closed_on_national_holidays": false,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "location_id": "student_dormitory",
+      "effective_from": "2026-01-01",
+      "effective_to": null,
+      "weekly": {
+        "mon": [["06:20", "23:00"]],
+        "tue": [["06:20", "23:00"]],
+        "wed": [["06:20", "23:00"]],
+        "thu": [["06:20", "23:00"]],
+        "fri": [["06:20", "24:00"]],
+        "sat": [["06:20", "24:00"]],
+        "sun": [["06:20", "23:00"]]
+      },
+      "holiday": [["06:20", "24:00"]],
+      "exceptions": [],
+      "closed_on_national_holidays": false,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "location_id": "gym_main",
+      "effective_from": "2026-07-01",
+      "effective_to": "2026-09-04",
+      "weekly": {
+        "mon": [["11:30", "20:30"]],
+        "tue": [["11:30", "20:30"]],
+        "wed": [["11:30", "20:30"]],
+        "thu": [["11:30", "20:30"]],
+        "fri": [["11:30", "20:30"]],
+        "sat": [],
+        "sun": []
+      },
+      "exceptions": [],
+      "closed_on_national_holidays": true,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "location_id": "gym_comprehensive",
+      "effective_from": "2026-07-01",
+      "effective_to": "2026-09-04",
+      "weekly": {
+        "mon": [["11:30", "20:30"]],
+        "tue": [["11:30", "20:30"]],
+        "wed": [["11:30", "20:30"]],
+        "thu": [["11:30", "20:30"]],
+        "fri": [["11:30", "20:30"]],
+        "sat": [],
+        "sun": []
+      },
+      "exceptions": [],
+      "closed_on_national_holidays": true,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "location_id": "gym_south_track",
+      "effective_from": "2026-07-01",
+      "effective_to": "2026-09-04",
+      "weekly": {
+        "mon": [["00:00", "24:00"]],
+        "tue": [["00:00", "24:00"]],
+        "wed": [["00:00", "24:00"]],
+        "thu": [["00:00", "24:00"]],
+        "fri": [["00:00", "24:00"]],
+        "sat": [["00:00", "24:00"]],
+        "sun": [["00:00", "24:00"]]
+      },
+      "exceptions": [],
+      "closed_on_national_holidays": false,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "location_id": "northwest_track",
+      "effective_from": "2026-07-01",
+      "effective_to": "2026-09-04",
+      "weekly": {
+        "mon": [["00:00", "24:00"]],
+        "tue": [["00:00", "24:00"]],
+        "wed": [["00:00", "24:00"]],
+        "thu": [["00:00", "24:00"]],
+        "fri": [["00:00", "24:00"]],
+        "sat": [["00:00", "24:00"]],
+        "sun": [["00:00", "24:00"]]
+      },
+      "exceptions": [],
+      "closed_on_national_holidays": false,
+      "source_url": "杭电时间知识库.docx",
+      "verified_at": "2026-07-24"
+    },
+    {
+      "location_id": "campus_hospital",
+      "effective_from": "2026-01-01",
+      "effective_to": null,
+      "weekly": {
+        "mon": [["08:00", "20:00"]],
+        "tue": [["08:00", "20:00"]],
+        "wed": [["08:00", "20:00"]],
+        "thu": [["08:00", "20:00"]],
+        "fri": [["08:00", "20:00"]],
+        "sat": [["08:00", "11:30"], ["13:30", "16:00"]],
+        "sun": [["08:00", "11:30"], ["13:30", "16:00"]]
+      },
+      "holiday": [["08:00", "11:30"], ["13:30", "16:00"]],
+      "exceptions": [],
+      "closed_on_national_holidays": false,
       "source_url": "杭电时间知识库.docx",
       "verified_at": "2026-07-24"
     }

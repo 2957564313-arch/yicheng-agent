@@ -1,3 +1,15 @@
+const accessTokenKey = "yicheng_access_token";
+const originalFetch = globalThis.fetch.bind(globalThis);
+globalThis.fetch = (resource, options = {}) => {
+  const token = localStorage.getItem(accessTokenKey);
+  const headers = new Headers(options.headers || {});
+  const url = typeof resource === "string" ? resource : resource.url;
+  if (token && new URL(url, globalThis.location.href).origin === location.origin) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return originalFetch(resource, { ...options, headers });
+};
+
 const $ = (selector) => document.querySelector(selector);
 const queryInput = $("#query");
 const submitButton = $("#submit");
@@ -24,13 +36,288 @@ const memoryType = $("#memory-type");
 const memoryValue = $("#memory-value");
 const memorySave = $("#memory-save");
 const memoryList = $("#memory-list");
+const personalizationToggle = $("#personalization-toggle");
+const personalizationReset = $("#personalization-reset");
+const personalizationState = $("#personalization-state");
+const timetableName = $("#timetable-name");
+const termStart = $("#term-start");
+const termEnd = $("#term-end");
+const timetableFile = $("#timetable-file");
+const timetableImport = $("#timetable-import");
+const timetableConfirm = $("#timetable-confirm");
+const timetableSummary = $("#timetable-summary");
+const timetableClear = $("#timetable-clear");
+const calendarDate = $("#calendar-date");
+const calendarAction = $("#calendar-action");
+const calendarWeekday = $("#calendar-weekday");
+const calendarLabel = $("#calendar-label");
+const calendarSave = $("#calendar-save");
+const calendarList = $("#calendar-list");
+const campusName = $("#campus-name");
+const campusCity = $("#campus-city");
+const campusDiscover = $("#campus-discover");
+const campusReset = $("#campus-reset");
+const campusState = $("#campus-state");
+const campusSummary = $("#campus-summary");
+const weeklyDemoButtons = $("#weekly-demo-buttons");
+const weeklyState = $("#weekly-state");
+const weeklySummary = $("#weekly-summary");
+const weeklyGrid = $("#weekly-grid");
+const weeklyRisks = $("#weekly-risks");
+const agendaState = $("#agenda-state");
+const agendaDate = $("#agenda-date");
+const agendaToday = $("#agenda-today");
+const agendaRefresh = $("#agenda-refresh");
+const agendaMetrics = $("#agenda-metrics");
+const agendaList = $("#agenda-list");
+const agendaReminders = $("#agenda-reminders");
+const careSuggestions = $("#care-suggestions");
+const reminderCourse = $("#reminder-course");
+const reminderWakeup = $("#reminder-wakeup");
+const reminderMeeting = $("#reminder-meeting");
+const reminderStudy = $("#reminder-study");
+const reminderBedtime = $("#reminder-bedtime");
+const reminderBedtimeEnabled = $("#reminder-bedtime-enabled");
+const reminderEnable = $("#reminder-enable");
+const reminderSave = $("#reminder-save");
+const reminderState = $("#reminder-state");
+const agendaExport = $("#agenda-export");
+const accessGate = $("#access-gate");
+const loginForm = $("#login-form");
+const loginUsername = $("#login-username");
+const loginPassword = $("#login-password");
+const loginMessage = $("#login-message");
+const logoutButton = $("#logout");
 const adjustmentPanel = $(".adjustment-panel");
-const consoleThreadId = "demo_competition";
-const consoleUserId = "demo_user";
+const consoleUserId = getOrCreateLocalIdentity(
+  "yicheng_user_id",
+  "visitor",
+);
+const consoleThreadId = getOrCreateLocalIdentity(
+  "yicheng_thread_id",
+  "thread",
+);
 let lastSuggestedActions = [];
 let lastDebugPayload = null;
 let serverClockBaseMs = null;
 let serverClockFetchedAtMs = null;
+let pendingTimetableImport = null;
+let currentCampusProfile = null;
+const memorySnapshotKey = "yicheng_memory_snapshot";
+const timetableSnapshotKey = "yicheng_timetable_snapshot";
+const calendarSnapshotKey = "yicheng_calendar_snapshot";
+const planSnapshotKey = "yicheng_current_plan_snapshot";
+const campusSnapshotKey = "yicheng_campus_snapshot";
+const behaviorHistoryKey = "yicheng_behavior_history";
+const suggestionFeedbackKey = "yicheng_suggestion_feedback";
+const personalizationEnabledKey = "yicheng_personalization_enabled";
+const shownReminderKey = "yicheng_shown_reminders";
+const reminderSettingsSnapshotKey = "yicheng_reminder_settings_snapshot";
+let currentReminderSettings = null;
+let reminderPollTimer = null;
+
+function readLocalSnapshot(key, fallback) {
+  try {
+    return JSON.parse(localStorage.getItem(key)) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeLocalSnapshot(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function clientContextSnapshot() {
+  const memories = readLocalSnapshot(memorySnapshotKey, []);
+  const timetableData = readLocalSnapshot(timetableSnapshotKey, null);
+  const calendarOverrides = readLocalSnapshot(calendarSnapshotKey, []);
+  const previousPlan = readLocalSnapshot(planSnapshotKey, null);
+  const campus = readLocalSnapshot(campusSnapshotKey, null);
+  return {
+    memories: memories.map((item) => ({
+      category: item.category,
+      key: item.key,
+      label: item.label,
+      value: item.value,
+      enabled: item.enabled,
+    })),
+    timetable: timetableData?.entries?.length
+      ? {
+        name: timetableData.timetable?.name || "我的课表",
+        term_start: timetableData.timetable?.term_start || null,
+        term_end: timetableData.timetable?.term_end || null,
+        enabled: timetableData.timetable?.enabled ?? true,
+        entries: timetableData.entries,
+      }
+      : null,
+    calendar_overrides: calendarOverrides.map((item) => ({
+      date: item.date,
+      action: item.action,
+      replacement_weekday: item.replacement_weekday || null,
+      label: item.label,
+      source_ref: item.source_ref || null,
+    })),
+    previous_plan: previousPlan,
+    campus,
+    personalization: personalizationSnapshot(),
+  };
+}
+
+function renderCampus(campus, { isDefault = false } = {}) {
+  currentCampusProfile = campus;
+  renderPersonalizationState();
+  if (!campus) {
+    campusState.textContent = "读取失败";
+    campusSummary.textContent = "本校知识库暂时没有加载成功，请刷新重试。";
+    campusSummary.classList.add("muted");
+    campusReset.hidden = true;
+    return;
+  }
+  const locationCount = campus.locations?.length
+    ?? campus.location_count
+    ?? 0;
+  campusName.value = campus.display_name || "";
+  campusCity.value = campus.search_city || "";
+  campusState.textContent = isDefault ? "默认校园" : "已切换";
+  campusState.classList.add("ready");
+  campusSummary.classList.remove("muted");
+  campusSummary.innerHTML = `
+    <strong>${escapeHtml(campus.display_name)}</strong>
+    <span>已保存 ${locationCount} 个本校地点${
+      isDefault
+        ? "，并已配置本校知识规则。"
+        : "。地点可用于路线计算；开放时间、节次和制度仍需导入本校知识包。"
+    }</span>
+  `;
+  campusReset.hidden = isDefault;
+}
+
+async function loadCampus() {
+  const saved = readLocalSnapshot(campusSnapshotKey, null);
+  if (saved) {
+    renderCampus(saved);
+    return;
+  }
+  const response = await fetch("/api/v1/campuses/current");
+  const data = await response.json();
+  if (!response.ok) throw data;
+  renderCampus(data, { isDefault: true });
+}
+
+campusDiscover.addEventListener("click", async () => {
+  const schoolName = campusName.value.trim();
+  if (!schoolName) {
+    campusSummary.textContent = "请先填写学校名称，最好包含具体校区。";
+    campusSummary.classList.remove("muted");
+    return;
+  }
+  campusDiscover.disabled = true;
+  campusDiscover.textContent = "正在查找校园地点…";
+  campusSummary.textContent = "正在通过高德分类查找本校地点，请稍候。";
+  try {
+    const response = await fetch("/api/v1/campuses/discover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        school_name: schoolName,
+        city: campusCity.value.trim(),
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw data;
+    writeLocalSnapshot(campusSnapshotKey, data.campus);
+    localStorage.removeItem(planSnapshotKey);
+    renderCampus(data.campus);
+    campusSummary.insertAdjacentHTML(
+      "beforeend",
+      `<small>${escapeHtml(data.coverage_note)}</small>`,
+    );
+  } catch (error) {
+    campusState.textContent = "查找失败";
+    campusSummary.textContent = error?.error?.message
+      || "暂时无法查找这所学校，请检查名称和城市后重试。";
+    campusSummary.classList.remove("muted");
+  } finally {
+    campusDiscover.disabled = false;
+    campusDiscover.textContent = "查找这所学校";
+  }
+});
+
+campusReset.addEventListener("click", async () => {
+  localStorage.removeItem(campusSnapshotKey);
+  localStorage.removeItem(planSnapshotKey);
+  campusName.value = "";
+  campusCity.value = "";
+  campusState.classList.remove("ready");
+  await loadCampus().catch((error) => renderDebug(error));
+});
+
+function getOrCreateLocalIdentity(storageKey, prefix) {
+  const stored = localStorage.getItem(storageKey);
+  if (stored) return stored;
+  const randomPart = globalThis.crypto?.randomUUID
+    ? globalThis.crypto.randomUUID().replaceAll("-", "")
+    : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const value = `${prefix}_${randomPart}`.slice(0, 64);
+  localStorage.setItem(storageKey, value);
+  return value;
+}
+
+async function initializeAccess() {
+  try {
+    const response = await fetch("/api/v1/auth/status");
+    const status = await response.json();
+    if (!status.enabled) {
+      accessGate.hidden = true;
+      logoutButton.hidden = true;
+      return true;
+    }
+    if (status.authenticated) {
+      accessGate.hidden = true;
+      logoutButton.hidden = false;
+      return true;
+    }
+    localStorage.removeItem(accessTokenKey);
+    loginUsername.value = status.test_username || "";
+    loginPassword.value = "";
+    loginMessage.textContent = status.configured
+      ? "请输入参赛材料中提供的测试账号和密码。"
+      : "测试入口尚未完成安全配置，请联系项目负责人。";
+    accessGate.hidden = false;
+    logoutButton.hidden = true;
+    return false;
+  } catch {
+    accessGate.hidden = false;
+    loginMessage.textContent = "暂时无法检查登录状态，请稍后刷新页面。";
+    return false;
+  }
+}
+
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  loginMessage.textContent = "正在验证测试账号…";
+  const response = await fetch("/api/v1/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: loginUsername.value.trim(),
+      password: loginPassword.value,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    loginMessage.textContent = data?.error?.message || "登录没有成功。";
+    return;
+  }
+  localStorage.setItem(accessTokenKey, data.access_token);
+  globalThis.location.reload();
+});
+
+logoutButton.addEventListener("click", () => {
+  localStorage.removeItem(accessTokenKey);
+  globalThis.location.reload();
+});
 
 const sourceLabels = {
   user: "用户提供",
@@ -79,12 +366,178 @@ const memoryDefinitions = {
     placeholder: "例如：图书馆、东操场",
     category: "preference",
   },
-  custom_note: {
-    label: "其他习惯",
-    placeholder: "例如：晚上更适合运动",
+  preferred_study_period: {
+    label: "高效学习时段",
+    placeholder: "上午、下午或晚上",
     category: "habit",
   },
+  preferred_study_location: {
+    label: "常用自习地点",
+    placeholder: "例如：图书馆六层",
+    category: "preference",
+  },
+  usual_bedtime: {
+    label: "常用就寝时间",
+    placeholder: "例如：23:30",
+    category: "habit",
+  },
+  usual_wake_time: {
+    label: "常用起床时间",
+    placeholder: "例如：07:00",
+    category: "habit",
+  },
+  sleep_goal_hours: {
+    label: "希望睡眠时长",
+    placeholder: "例如：7.5小时",
+    category: "preference",
+  },
+  weekly_daily_focus_limit_min: {
+    label: "每日自主安排上限",
+    placeholder: "例如：180分钟",
+    category: "preference",
+  },
 };
+
+function behaviorTopic(title) {
+  const definitions = [
+    ["study", "自习", ["自习", "学习", "复习", "阅读"]],
+    ["exercise", "运动", ["跑步", "运动", "健身", "锻炼"]],
+    ["meal", "用餐", ["吃饭", "用餐", "早餐", "午餐", "晚餐"]],
+    ["parcel", "取快递", ["快递", "取件", "驿站"]],
+  ];
+  return definitions.find(([, , markers]) =>
+    markers.some((marker) => title.includes(marker))
+  ) || null;
+}
+
+function roundedHalfHour(value) {
+  const [hour, minute] = value.split(":").map(Number);
+  const total = Math.round((hour * 60 + minute) / 30) * 30;
+  const normalized = Math.min(total, 23 * 60 + 30);
+  return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${
+    String(normalized % 60).padStart(2, "0")
+  }`;
+}
+
+function median(values) {
+  const ordered = [...values].sort((left, right) => left - right);
+  return ordered[Math.floor(ordered.length / 2)];
+}
+
+function recordBehaviorHistory(data) {
+  if (!data.current_plan_saved || data.plan?.status !== "valid") return;
+  const existing = readLocalSnapshot(behaviorHistoryKey, [])
+    .filter((item) => item.plan_id !== data.plan.id);
+  const campusId = currentCampusProfile?.campus_id || null;
+  const additions = (data.plan.items || [])
+    .filter((item) => item.item_type === "task")
+    .flatMap((item) => {
+      const topic = behaviorTopic(item.title || "");
+      if (!topic || item.reason === "固定或用户锁定任务") return [];
+      const [, taskTitle] = topic;
+      const start = timePart(item.start_at);
+      return [{
+        plan_id: data.plan.id,
+        date: data.plan.date,
+        campus_id: campusId,
+        topic: topic[0],
+        task_title: taskTitle,
+        start_time: start,
+        duration_min: Math.max(
+          5,
+          Math.round(
+            (new Date(item.end_at) - new Date(item.start_at)) / 60000,
+          ),
+        ),
+        location_name: item.location_id
+          ? data.location_names?.[item.location_id] || null
+          : null,
+      }];
+    });
+  writeLocalSnapshot(
+    behaviorHistoryKey,
+    [...additions, ...existing].slice(0, 80),
+  );
+  renderPersonalizationState();
+}
+
+function buildBehaviorPatterns() {
+  const history = readLocalSnapshot(behaviorHistoryKey, []);
+  const feedback = readLocalSnapshot(suggestionFeedbackKey, {});
+  const groups = new Map();
+  history.forEach((item) => {
+    if (
+      currentCampusProfile?.campus_id
+      && item.campus_id
+      && item.campus_id !== currentCampusProfile.campus_id
+    ) return;
+    const timeBucket = roundedHalfHour(item.start_time);
+    const key = [
+      item.campus_id || "current",
+      item.topic,
+      timeBucket,
+      item.location_name || "",
+    ].join("|");
+    if (!groups.has(key)) groups.set(key, new Map());
+    groups.get(key).set(item.date, { ...item, time_bucket: timeBucket });
+  });
+  return [...groups.entries()]
+    .map(([key, byDate]) => {
+      const values = [...byDate.values()];
+      const response = feedback[`habit:${key}`] || {};
+      return {
+        key,
+        task_title: values[0]?.task_title,
+        typical_start: values[0]?.time_bucket,
+        duration_min: median(values.map((item) => item.duration_min)),
+        location_name: values[0]?.location_name || null,
+        campus_id: values[0]?.campus_id || null,
+        occurrences: values.length,
+        dismissed_count: response.dismissed_count || 0,
+        last_dismissed_at: response.last_dismissed_at || null,
+        last_suggested_at: response.last_suggested_at || null,
+      };
+    })
+    .filter((item) => item.occurrences >= 3)
+    .sort((left, right) => right.occurrences - left.occurrences)
+    .slice(0, 20);
+}
+
+function personalizationSnapshot() {
+  const enabled = localStorage.getItem(personalizationEnabledKey) === "true";
+  return {
+    enabled,
+    behavior_patterns: enabled ? buildBehaviorPatterns() : [],
+  };
+}
+
+function renderPersonalizationState() {
+  const enabled = localStorage.getItem(personalizationEnabledKey) === "true";
+  const patterns = buildBehaviorPatterns();
+  personalizationToggle.checked = enabled;
+  personalizationReset.hidden = patterns.length === 0;
+  personalizationState.textContent = enabled
+    ? patterns.length
+      ? `已开启，发现 ${patterns.length} 个稳定习惯；只询问，不会自动加入。`
+      : "已开启；同类行为在不同日期出现至少3次后，才会形成建议。"
+    : "当前关闭。历史仍保存在本机，开启后才会用于生成建议。";
+}
+
+personalizationToggle.addEventListener("change", () => {
+  localStorage.setItem(
+    personalizationEnabledKey,
+    String(personalizationToggle.checked),
+  );
+  renderPersonalizationState();
+});
+
+personalizationReset.addEventListener("click", () => {
+  localStorage.removeItem(suggestionFeedbackKey);
+  renderPersonalizationState();
+  personalizationState.textContent = (
+    "建议降频记录已重置；已识别的行为历史仍保留在本机。"
+  );
+});
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -274,16 +727,35 @@ function renderEvidence(data) {
     "API_DEGRADED",
     "UNVERIFIED_CAMPUS_DATA",
     "PARTIAL_LIVE_ROUTE_COVERAGE",
+    "ROUTE_FALLBACK",
     "LLM_DEGRADED",
   ]);
   const warningItems = (data.warnings || []).filter(
     (item) => !hiddenTechnicalCodes.has(item.code),
   );
-  warnings.classList.toggle("muted", warningItems.length === 0);
-  warnings.innerHTML = warningItems.length
-    ? warningItems.map((item) => `
-      <div class="warning ${item.severity === "error" ? "error" : ""}">
-        <strong>${item.severity === "error" ? "需处理" : "数据说明"}</strong>
+  const careInsights = (data.insights || []).filter(
+    (item) => ["required", "attention"].includes(item.importance)
+      && !["规划时间基准", "通勤方式与高峰缓冲"].includes(item.title),
+  );
+  const careItems = [
+    ...warningItems.map((item) => ({
+      title: item.severity === "error" ? "需处理" : "数据说明",
+      message: item.message,
+      error: item.severity === "error",
+    })),
+    ...careInsights.map((item) => ({
+      title: item.title,
+      message: item.content,
+      error: false,
+    })),
+  ].filter((item, index, items) => (
+    items.findIndex((candidate) => candidate.message === item.message) === index
+  )).slice(0, 4);
+  warnings.classList.toggle("muted", careItems.length === 0);
+  warnings.innerHTML = careItems.length
+    ? careItems.map((item) => `
+      <div class="warning ${item.error ? "error" : ""}">
+        <strong>${escapeHtml(item.title)}</strong>
         <span>${escapeHtml(item.message)}</span>
       </div>`).join("")
     : "暂时没有提醒。";
@@ -313,13 +785,32 @@ function renderDebug(payload) {
 
 function renderSuggestedActions(actions = []) {
   lastSuggestedActions = actions;
+  const feedback = readLocalSnapshot(suggestionFeedbackKey, {});
+  actions
+    .filter((action) => action.kind === "habit_suggestion")
+    .forEach((action) => {
+      feedback[action.id] = {
+        ...(feedback[action.id] || {}),
+        last_suggested_at: new Date().toISOString(),
+      };
+    });
+  writeLocalSnapshot(suggestionFeedbackKey, feedback);
   assistantActions.innerHTML = actions.map((action, index) => `
-    <button class="suggestion-button" data-action-index="${index}">
-      <strong>${escapeHtml(action.label)}</strong>
-      <span>${escapeHtml(action.description)}</span>
-    </button>
+    <div class="suggestion-card ${
+      action.kind === "habit_suggestion" ? "habit" : ""
+    }">
+      <button class="suggestion-button" data-action-index="${index}">
+        <strong>${escapeHtml(action.label)}</strong>
+        <span>${escapeHtml(action.description)}</span>
+      </button>
+      ${action.dismissible ? `
+        <button class="suggestion-dismiss" data-dismiss-index="${index}">
+          这次不用
+        </button>
+      ` : ""}
+    </div>
   `).join("");
-  assistantActions.querySelectorAll("button").forEach((button) => {
+  assistantActions.querySelectorAll("[data-action-index]").forEach((button) => {
     button.addEventListener("click", async () => {
       const action = lastSuggestedActions[
         Number(button.dataset.actionIndex)
@@ -329,9 +820,31 @@ function renderSuggestedActions(actions = []) {
       await submitQuery(action.query);
     });
   });
+  assistantActions.querySelectorAll("[data-dismiss-index]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = lastSuggestedActions[
+        Number(button.dataset.dismissIndex)
+      ];
+      if (!action) return;
+      const current = readLocalSnapshot(suggestionFeedbackKey, {});
+      const item = current[action.id] || {};
+      current[action.id] = {
+        ...item,
+        dismissed_count: (item.dismissed_count || 0) + 1,
+        last_dismissed_at: new Date().toISOString(),
+      };
+      writeLocalSnapshot(suggestionFeedbackKey, current);
+      button.closest(".suggestion-card")?.remove();
+      renderPersonalizationState();
+    });
+  });
 }
 
 function renderResponse(data) {
+  if (data.current_plan_saved && data.plan?.status === "valid") {
+    writeLocalSnapshot(planSnapshotKey, data.plan);
+  }
+  recordBehaviorHistory(data);
   answer.textContent = data.answer;
   answer.classList.remove("muted");
   saveState.textContent = data.current_plan_saved
@@ -347,7 +860,385 @@ function renderResponse(data) {
   renderInsights(data.insights || []);
   renderSuggestedActions(data.suggested_actions);
   renderDebug(data);
+  if (data.current_plan_saved) {
+    loadAgenda(agendaDate.value || shanghaiDateString()).catch((error) =>
+      renderDebug(error),
+    );
+  }
 }
+
+function shanghaiDateString(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const fields = Object.fromEntries(
+    parts.filter((item) => item.type !== "literal")
+      .map((item) => [item.type, item.value]),
+  );
+  return `${fields.year}-${fields.month}-${fields.day}`;
+}
+
+const agendaSourceLabels = {
+  course: "个人课表",
+  plan: "对话安排",
+  weekly: "周目标",
+  manual: "手动添加",
+};
+
+function agendaItemDate(item) {
+  return shanghaiDateString(new Date(item.start_at));
+}
+
+function renderAgenda(data, selectedDate) {
+  const items = (data.items || []).filter(
+    (item) => agendaItemDate(item) === selectedDate,
+  );
+  const minutes = (item) => Math.max(
+    0,
+    Math.round((new Date(item.end_at) - new Date(item.start_at)) / 60000),
+  );
+  const dayBusy = items
+    .filter((item) => item.kind !== "travel")
+    .reduce((sum, item) => sum + minutes(item), 0);
+  const courseCount = items.filter((item) => item.kind === "course").length;
+  const dayReminders = (data.reminders || []).filter(
+    (item) => shanghaiDateString(new Date(item.event_start_at)) === selectedDate,
+  ).sort((left, right) =>
+    new Date(left.notify_at).getTime() - new Date(right.notify_at).getTime()
+  );
+  const reminderCount = dayReminders.length;
+  const today = shanghaiDateString();
+  agendaState.textContent = selectedDate === today
+    ? `今天 · ${items.length}项`
+    : `${selectedDate.slice(5).replace("-", "月")}日 · ${items.length}项`;
+  agendaState.classList.toggle("ready", items.length > 0);
+  agendaMetrics.innerHTML = `
+    <span>课程 ${courseCount} 节次段</span>
+    <span>已安排 ${Math.round(dayBusy / 6) / 10} 小时</span>
+    <span>提醒 ${reminderCount} 次</span>
+    <span>已汇总未来7天</span>
+  `;
+  agendaList.classList.toggle("muted", items.length === 0);
+  agendaList.innerHTML = items.length
+    ? items.map((item) => `
+      <div class="agenda-item ${escapeHtml(item.kind)}">
+        <time>${escapeHtml(timePart(item.start_at))}
+          —${escapeHtml(timePart(item.end_at))}</time>
+        <span class="agenda-kind" aria-hidden="true"></span>
+        <div>
+          <strong>${escapeHtml(item.title)}</strong>
+          <small>${item.location_name
+            ? escapeHtml(item.location_name)
+            : item.kind === "travel"
+              ? "已预留通勤时间"
+              : "地点未设置"}${
+            item.locked ? " · 固定安排" : ""
+          }</small>
+        </div>
+        <span class="agenda-source">${
+          agendaSourceLabels[item.source] || "个人日程"
+        }</span>
+      </div>
+    `).join("")
+    : `
+      <div class="weekly-safe">
+        <strong>这一天还没有固定安排</strong>
+        <span>可以通过上方对话告诉我想完成什么，也可以把它留给休息和临时变化。</span>
+      </div>
+    `;
+  agendaReminders.innerHTML = dayReminders.length
+    ? `
+      <div class="agenda-reminder-heading">
+        <strong>今天会这样提醒你</strong>
+        <span>按时间先后排列，可在下方修改提前量</span>
+      </div>
+      <div class="agenda-reminder-list">
+        ${dayReminders.slice(0, 6).map((item) => `
+          <div class="agenda-reminder ${escapeHtml(item.kind)}">
+            <time>${escapeHtml(timePart(item.notify_at))}</time>
+            <div>
+              <strong>${escapeHtml(item.title)}</strong>
+              <span>${escapeHtml(item.body)}</span>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    `
+    : "";
+  const careItems = data.care_suggestions || [];
+  careSuggestions.innerHTML = careItems.length
+    ? `
+      <div class="care-heading">
+        <strong>未来7天的生活关照</strong>
+        <span>只给建议，不会未经确认写入日程</span>
+      </div>
+      ${careItems.map((item, index) => `
+      <div class="care-card ${escapeHtml(item.level)}">
+        <strong>${escapeHtml(item.title)}</strong>
+        <p>${escapeHtml(item.content)}</p>
+        ${item.action_query ? `
+          <button class="ghost" data-care-action="${index}">
+            让我帮你找合适时段
+          </button>
+        ` : ""}
+      </div>
+      `).join("")}
+    `
+    : "";
+  careSuggestions.querySelectorAll("[data-care-action]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const suggestion = data.care_suggestions[
+        Number(button.dataset.careAction)
+      ];
+      if (!suggestion?.action_query) return;
+      queryInput.value = suggestion.action_query;
+      await submitQuery(suggestion.action_query);
+    });
+  });
+}
+
+async function loadAgenda(selectedDate = shanghaiDateString()) {
+  agendaDate.value = selectedDate;
+  agendaState.textContent = "正在汇总";
+  const endDate = addWeeklyDays(selectedDate, 6);
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/agenda`
+      + `?start_date=${encodeURIComponent(selectedDate)}`
+      + `&end_date=${encodeURIComponent(endDate)}`,
+  );
+  const data = await response.json();
+  if (!response.ok) throw data;
+  renderAgenda(data, selectedDate);
+  return data;
+}
+
+function renderReminderSettings(payload) {
+  const settings = payload.settings;
+  currentReminderSettings = settings;
+  writeLocalSnapshot(reminderSettingsSnapshotKey, settings);
+  reminderCourse.value = settings.course_lead_min;
+  reminderWakeup.value = settings.early_course_wakeup_min;
+  reminderMeeting.value = settings.meeting_lead_min;
+  reminderStudy.value = settings.study_lead_min;
+  reminderBedtime.value = settings.bedtime_lead_min;
+  reminderBedtimeEnabled.checked = settings.bedtime_enabled !== false;
+  const permission = "Notification" in globalThis
+    ? Notification.permission
+    : "unsupported";
+  if (permission === "granted" && settings.browser_notifications) {
+    reminderState.textContent = (
+      "浏览器提醒已开启。网页打开时会自动检查；"
+      + "需要关闭网页后仍提醒，请导出到系统日历。"
+    );
+    reminderEnable.textContent = "浏览器提醒已开启";
+    reminderEnable.disabled = true;
+    startReminderPolling();
+  } else if (permission === "denied") {
+    reminderState.textContent = (
+      "浏览器已拒绝通知权限，可在浏览器网站设置中重新开启；"
+      + "系统日历导出仍可使用。"
+    );
+    reminderEnable.textContent = "通知权限已被拒绝";
+    reminderEnable.disabled = true;
+  } else if (permission === "unsupported") {
+    reminderState.textContent = (
+      "当前浏览器不支持网页通知，可使用“导出到系统日历”。"
+    );
+    reminderEnable.disabled = true;
+  } else {
+    reminderState.textContent = (
+      "浏览器提醒尚未开启；你的提前时间设置已经可以保存。"
+    );
+    reminderEnable.textContent = "开启浏览器提醒";
+    reminderEnable.disabled = false;
+  }
+}
+
+async function loadReminderSettings() {
+  const saved = readLocalSnapshot(reminderSettingsSnapshotKey, null);
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/reminders/settings`,
+    saved
+      ? {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(saved),
+        }
+      : undefined,
+  );
+  const data = await response.json();
+  if (!response.ok) throw data;
+  renderReminderSettings(data);
+}
+
+function reminderPayload(overrides = {}) {
+  return {
+    enabled: true,
+    browser_notifications:
+      currentReminderSettings?.browser_notifications || false,
+    bedtime_enabled: reminderBedtimeEnabled.checked,
+    course_lead_min: Number(reminderCourse.value),
+    early_course_wakeup_min: Number(reminderWakeup.value),
+    meeting_lead_min: Number(reminderMeeting.value),
+    study_lead_min: Number(reminderStudy.value),
+    exercise_lead_min:
+      currentReminderSettings?.exercise_lead_min ?? 15,
+    task_lead_min: currentReminderSettings?.task_lead_min ?? 10,
+    bedtime_lead_min: Number(reminderBedtime.value),
+    quiet_start: currentReminderSettings?.quiet_start || "23:00:00",
+    quiet_end: currentReminderSettings?.quiet_end || "06:30:00",
+    ...overrides,
+  };
+}
+
+async function saveReminderSettings(overrides = {}) {
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/reminders/settings`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(reminderPayload(overrides)),
+    },
+  );
+  const data = await response.json();
+  if (!response.ok) throw data;
+  renderReminderSettings(data);
+  await loadAgenda(agendaDate.value || shanghaiDateString());
+}
+
+async function serviceWorkerRegistration() {
+  if (!("serviceWorker" in navigator)) return null;
+  return navigator.serviceWorker.register("/sw.js");
+}
+
+async function showReminderNotification(item) {
+  const registration = await serviceWorkerRegistration().catch(() => null);
+  const options = {
+    body: item.body,
+    tag: item.id,
+    renotify: false,
+    data: { url: "/" },
+  };
+  if (registration) {
+    await registration.showNotification(item.title, options);
+  } else {
+    new Notification(item.title, options);
+  }
+}
+
+async function pollDueReminders() {
+  if (
+    !currentReminderSettings?.browser_notifications
+    || !("Notification" in globalThis)
+    || Notification.permission !== "granted"
+  ) return;
+  try {
+    const response = await fetch(
+      `/api/v1/users/${consoleUserId}/reminders/due?window_min=2`,
+    );
+    const data = await response.json();
+    if (!response.ok) throw data;
+    const shown = readLocalSnapshot(shownReminderKey, {});
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    Object.entries(shown).forEach(([key, value]) => {
+      if (new Date(value).getTime() < cutoff) delete shown[key];
+    });
+    for (const item of data.reminders || []) {
+      if (shown[item.id]) continue;
+      await showReminderNotification(item);
+      shown[item.id] = new Date().toISOString();
+    }
+    writeLocalSnapshot(shownReminderKey, shown);
+  } catch (error) {
+    reminderState.textContent = (
+      "这次自动检查提醒没有成功，我会稍后再试；"
+      + "已导入系统日历的闹钟不受影响。"
+    );
+    renderDebug(error);
+  }
+}
+
+function startReminderPolling() {
+  if (reminderPollTimer !== null) return;
+  pollDueReminders();
+  reminderPollTimer = setInterval(pollDueReminders, 30000);
+}
+
+agendaToday.addEventListener("click", () => {
+  loadAgenda(shanghaiDateString()).catch((error) => renderDebug(error));
+});
+
+agendaRefresh.addEventListener("click", () => {
+  loadAgenda(agendaDate.value || shanghaiDateString())
+    .catch((error) => renderDebug(error));
+});
+
+agendaDate.addEventListener("change", () => {
+  if (!agendaDate.value) return;
+  loadAgenda(agendaDate.value).catch((error) => renderDebug(error));
+});
+
+reminderSave.addEventListener("click", async () => {
+  reminderSave.disabled = true;
+  try {
+    await saveReminderSettings();
+    reminderState.textContent = "提醒时间已经保存。";
+  } catch (error) {
+    reminderState.textContent = error?.error?.message
+      || "提醒设置暂时没有保存成功。";
+    renderDebug(error);
+  } finally {
+    reminderSave.disabled = false;
+  }
+});
+
+reminderEnable.addEventListener("click", async () => {
+  if (!("Notification" in globalThis)) return;
+  const permission = await Notification.requestPermission();
+  if (permission === "granted") {
+    await serviceWorkerRegistration().catch(() => null);
+    await saveReminderSettings({ browser_notifications: true });
+    await pollDueReminders();
+  } else {
+    reminderState.textContent = (
+      "没有获得通知权限。你仍可以导出到系统日历，用系统闹钟提醒。"
+    );
+  }
+});
+
+agendaExport.addEventListener("click", async (event) => {
+  event.preventDefault();
+  const startDate = agendaDate.value || shanghaiDateString();
+  const endDate = addWeeklyDays(startDate, 90);
+  agendaExport.textContent = "正在生成日历文件…";
+  try {
+    const response = await fetch(
+      `/api/v1/users/${consoleUserId}/agenda.ics`
+        + `?start_date=${encodeURIComponent(startDate)}`
+        + `&end_date=${encodeURIComponent(endDate)}`,
+    );
+    if (!response.ok) throw await response.json();
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `易程智策个人日程_${startDate}.ics`;
+    link.click();
+    URL.revokeObjectURL(url);
+    reminderState.textContent = (
+      "日历文件已生成。导入手机或电脑日历后，系统会按提醒时间通知。"
+    );
+  } catch (error) {
+    reminderState.textContent = error?.error?.message
+      || "日历文件暂时没有生成成功。";
+    renderDebug(error);
+  } finally {
+    agendaExport.textContent = "导出到系统日历（含闹钟）";
+  }
+});
 
 function renderError(error) {
   const body = error?.error || {};
@@ -401,10 +1292,11 @@ async function submitQuery(rawQuery) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      user_id: "demo_user",
+      user_id: consoleUserId,
       thread_id: consoleThreadId,
       query,
       mode: modeSelect.value,
+      client_context: clientContextSnapshot(),
     }),
   }).catch(() => {});
 }
@@ -439,6 +1331,7 @@ resetButton.addEventListener("click", async () => {
     renderSuggestedActions([]);
     renderInsights([]);
     renderDebug(null);
+    localStorage.removeItem(planSnapshotKey);
     saveState.textContent = "尚未生成当前计划";
     saveState.classList.remove("saved");
   } catch (error) {
@@ -464,6 +1357,194 @@ async function loadDemos() {
       await runRequest(`/api/v1/demos/${demo.id}/run`, {
         method: "POST",
       }).catch(() => {});
+    });
+  });
+}
+
+function parseWeeklyDate(rawDate) {
+  const [year, month, day] = String(rawDate).split("-").map(Number);
+  return { year, month, day };
+}
+
+function addWeeklyDays(rawDate, offset) {
+  const { year, month, day } = parseWeeklyDate(rawDate);
+  const value = new Date(Date.UTC(year, month - 1, day + offset, 12));
+  return value.toISOString().slice(0, 10);
+}
+
+function weeklyDateLabel(rawDate) {
+  const { year, month, day } = parseWeeklyDate(rawDate);
+  const value = new Date(Date.UTC(year, month - 1, day, 12));
+  const weekday = "日一二三四五六"[value.getUTCDay()];
+  return `${month}月${day}日 · 周${weekday}`;
+}
+
+function weeklyTimeLabel(rawValue) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(rawValue));
+}
+
+const weeklyLocationLabels = {
+  library: "图书馆",
+  library_floor_6_12: "图书馆六层或十二层",
+  library_floor_7_11: "图书馆七至十一层",
+  teaching_building_6: "第六教学楼",
+  parcel_station: "菜鸟驿站",
+  sf_express: "顺丰快递点",
+  jd_express: "京东快递点",
+  canteen: "学生餐厅",
+  track: "东操场",
+  gym_south_track: "体育馆副馆南侧跑道",
+  northwest_track: "西北田径场",
+  gym_main: "体育馆主馆",
+  gym_comprehensive: "综合馆",
+  laboratory: "实验室",
+  student_dormitory: "学生公寓",
+  campus_hospital: "校医院",
+};
+
+function weeklyLocationLabel(rawValue) {
+  if (!rawValue) return "";
+  if (weeklyLocationLabels[rawValue]) return weeklyLocationLabels[rawValue];
+  return /[\u3400-\u9fff]/.test(rawValue) ? rawValue : "";
+}
+
+function renderWeeklyPlan(data) {
+  const plan = data.weekly_plan;
+  const capacitySummary = data.capacity_summary || {};
+  const statusLabels = {
+    valid: "本周可执行",
+    at_risk: "存在挤压风险",
+    infeasible: "容量不足",
+  };
+  weeklyState.textContent = statusLabels[plan.status] || "已生成";
+  weeklyState.classList.toggle("ready", plan.status === "valid");
+  weeklySummary.classList.remove("muted");
+  weeklySummary.innerHTML = `
+    <strong>${escapeHtml(data.answer)}</strong>
+    <div class="weekly-metrics">
+      <span>目标 ${plan.goals.length} 项</span>
+      <span>时间块 ${plan.allocations.length} 个</span>
+      <span>已分配 ${Math.round(plan.metrics.allocated_duration_min / 6) / 10} 小时</span>
+      <span>未分配 ${plan.metrics.unallocated_duration_min} 分钟</span>
+    </div>
+    ${capacitySummary.source === "personal_context" ? `
+      <div class="weekly-context">
+        <span>${capacitySummary.timetable_applied
+          ? `已扣除 ${capacitySummary.excluded_course_count || 0} 段个人课程`
+          : "尚未启用个人课表"}</span>
+        ${(capacitySummary.memory_labels || []).map((label) =>
+          `<span>已参考${escapeHtml(label)}</span>`,
+        ).join("")}
+      </div>
+      <p class="weekly-context-note">${escapeHtml(
+        (capacitySummary.notes || []).join("；"),
+      )}</p>
+    ` : ""}
+  `;
+  const goals = new Map(plan.goals.map((goal) => [goal.id, goal]));
+  const stages = new Map(
+    plan.goals.flatMap((goal) =>
+      goal.stages.map((stage) => [stage.id, stage]),
+    ),
+  );
+  const byDate = plan.allocations.reduce((result, item) => {
+    (result[item.date] ||= []).push(item);
+    return result;
+  }, {});
+  const allDates = Array.from(
+    { length: 7 },
+    (_, offset) => addWeeklyDays(plan.week_start, offset),
+  );
+  weeklyGrid.innerHTML = allDates.map((rawDate) => {
+    const items = byDate[rawDate] || [];
+    return `
+      <section class="weekly-day ${items.length ? "" : "weekly-day-empty"}">
+        <header>
+          <strong>${escapeHtml(weeklyDateLabel(rawDate))}</strong>
+          <small>${items.reduce(
+            (sum, item) => sum + item.allocated_duration_min,
+            0,
+          )} 分钟</small>
+        </header>
+        <div>
+          ${items.length ? items.map((item) => {
+            const goal = goals.get(item.goal_id);
+            const stage = stages.get(item.stage_id);
+            const locationLabel = weeklyLocationLabel(item.location_id);
+            return `
+              <article class="weekly-block">
+                <time>${escapeHtml(weeklyTimeLabel(item.earliest_start))}
+                  — ${escapeHtml(weeklyTimeLabel(item.latest_end))}</time>
+                <strong>${escapeHtml(stage?.title || goal?.title || "本周任务")}</strong>
+                <small>${escapeHtml(goal?.title || "")}${
+                  locationLabel
+                    ? ` · ${escapeHtml(locationLabel)}`
+                    : ""
+                }</small>
+              </article>
+            `;
+          }).join("") : "<p>留作缓冲、休息或临时变化</p>"}
+        </div>
+      </section>
+    `;
+  }).join("");
+  weeklyRisks.innerHTML = plan.issues.length
+    ? plan.issues.map((issue) => `
+      <div class="warning ${issue.severity === "error" ? "error" : ""}">
+        <strong>本周风险</strong>
+        <span>${escapeHtml(issue.message)}</span>
+      </div>
+    `).join("")
+    : `
+      <div class="weekly-safe">
+        <strong>本周目标均已纳入</strong>
+        <span>每天执行前仍会根据实时天气、通勤和临时校历再次检查。</span>
+      </div>
+    `;
+  renderDebug(data);
+}
+
+async function loadWeeklyDemos() {
+  const response = await fetch("/api/v1/weeks/demos/catalog");
+  const demos = await response.json();
+  if (!response.ok) throw demos;
+  weeklyDemoButtons.innerHTML = demos.map((demo) => `
+    <button
+      class="ghost"
+      data-weekly-demo="${escapeHtml(demo.id)}"
+      title="${escapeHtml(demo.description)}"
+    >${escapeHtml(demo.title)}</button>
+  `).join("");
+  weeklyDemoButtons.querySelectorAll("button").forEach((button) => {
+    button.addEventListener("click", async () => {
+      weeklyDemoButtons.querySelectorAll("button").forEach((item) =>
+        item.classList.toggle("active", item === button),
+      );
+      button.disabled = true;
+      weeklyState.textContent = "正在分配…";
+      try {
+        const response = await fetch(
+          `/api/v1/weeks/demos/${button.dataset.weeklyDemo}/run`
+            + `?user_id=${encodeURIComponent(consoleUserId)}`,
+          { method: "POST" },
+        );
+        const data = await response.json();
+        if (!response.ok) throw data;
+        renderWeeklyPlan(data);
+      } catch (error) {
+        weeklyState.textContent = "生成失败";
+        weeklySummary.textContent = error?.error?.message
+          || "周计划暂时没有生成成功，请稍后重试。";
+        weeklySummary.classList.remove("muted");
+        renderDebug(error);
+      } finally {
+        button.disabled = false;
+      }
     });
   });
 }
@@ -504,6 +1585,38 @@ function parseMemoryValue(key, rawValue) {
   if (key === "preferred_locations") {
     return value.split(/[、,，]/).map((item) => item.trim()).filter(Boolean);
   }
+  if (key === "preferred_study_period") {
+    const normalized = {
+      上午: "morning",
+      早上: "morning",
+      下午: "afternoon",
+      晚上: "evening",
+      晚间: "evening",
+    }[value];
+    if (!normalized) throw new Error("高效学习时段请填写：上午、下午或晚上。");
+    return normalized;
+  }
+  if (key === "weekly_daily_focus_limit_min") {
+    const minutes = Number(value.match(/\d+/)?.[0]);
+    if (!Number.isFinite(minutes) || minutes < 30 || minutes > 720) {
+      throw new Error("每日自主安排上限请填写30到720分钟。");
+    }
+    return minutes;
+  }
+  if (["usual_bedtime", "usual_wake_time"].includes(key)) {
+    const matched = value.match(/^([01]?\d|2[0-3])[:：]([0-5]\d)$/);
+    if (!matched) {
+      throw new Error("请按24小时制填写，例如：23:30或07:00。");
+    }
+    return `${matched[1].padStart(2, "0")}:${matched[2]}`;
+  }
+  if (key === "sleep_goal_hours") {
+    const hours = Number(value.match(/\d+(?:\.\d+)?/)?.[0]);
+    if (!Number.isFinite(hours) || hours < 4 || hours > 12) {
+      throw new Error("希望睡眠时长请填写4到12小时。");
+    }
+    return hours;
+  }
   return value;
 }
 
@@ -522,6 +1635,16 @@ function displayMemoryValue(key, value) {
   if (["avoid_rain", "avoid_tight_schedule", "avoid_congestion"].includes(key)) {
     return value ? "是" : "否";
   }
+  if (key === "preferred_study_period") {
+    return {
+      morning: "上午",
+      afternoon: "下午",
+      evening: "晚上",
+    }[value] || value;
+  }
+  if (key === "weekly_daily_focus_limit_min") return `${value}分钟`;
+  if (["usual_bedtime", "usual_wake_time"].includes(key)) return value;
+  if (key === "sleep_goal_hours") return `${value}小时`;
   if (Array.isArray(value)) return value.join("、");
   return String(value);
 }
@@ -535,7 +1658,13 @@ async function loadMemories() {
   const response = await fetch(`/api/v1/users/${consoleUserId}/memories`);
   const data = await response.json();
   if (!response.ok) throw data;
-  const items = data.items || [];
+  let items = data.items || [];
+  const localItems = readLocalSnapshot(memorySnapshotKey, []);
+  if (items.length) {
+    writeLocalSnapshot(memorySnapshotKey, items);
+  } else if (localItems.length) {
+    items = localItems;
+  }
   memoryList.classList.toggle("muted", items.length === 0);
   memoryList.innerHTML = items.length
     ? items.map((item) => `
@@ -575,7 +1704,14 @@ async function loadMemories() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: !item.enabled }),
       });
+      writeLocalSnapshot(
+        memorySnapshotKey,
+        items.map((value) => value.id === item.id
+          ? { ...value, enabled: !value.enabled }
+          : value),
+      );
       await loadMemories();
+      await loadAgenda(agendaDate.value || shanghaiDateString());
     });
   });
   memoryList.querySelectorAll("[data-memory-delete]").forEach((button) => {
@@ -584,7 +1720,12 @@ async function loadMemories() {
         `/api/v1/users/${consoleUserId}/memories/${button.dataset.memoryDelete}`,
         { method: "DELETE" },
       );
+      writeLocalSnapshot(
+        memorySnapshotKey,
+        items.filter((value) => value.id !== button.dataset.memoryDelete),
+      );
       await loadMemories();
+      await loadAgenda(agendaDate.value || shanghaiDateString());
     });
   });
 }
@@ -607,8 +1748,17 @@ memorySave.addEventListener("click", async () => {
     });
     const data = await response.json();
     if (!response.ok) throw data;
+    const current = readLocalSnapshot(memorySnapshotKey, []);
+    writeLocalSnapshot(
+      memorySnapshotKey,
+      [
+        data,
+        ...current.filter((item) => item.key !== data.key),
+      ],
+    );
     memoryValue.value = "";
     await loadMemories();
+    await loadAgenda(agendaDate.value || shanghaiDateString());
   } catch (error) {
     const message = error instanceof Error
       ? error.message
@@ -616,6 +1766,332 @@ memorySave.addEventListener("click", async () => {
     memoryList.textContent = message;
     memoryList.classList.remove("muted");
     renderDebug(error);
+  }
+});
+
+function timetableWeekdayLabel(value) {
+  return `周${"一二三四五六日"[Number(value) - 1] || value}`;
+}
+
+async function fileToImportPayload(file) {
+  const extension = file.name.split(".").pop().toLowerCase();
+  if (extension === "xlsx" || extension === "pdf") {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+    }
+    return {
+      format: extension === "pdf" ? "pdf_base64" : "xlsx_base64",
+      content: btoa(binary),
+    };
+  }
+  if (extension === "csv" || extension === "json") {
+    return { format: extension, content: await file.text() };
+  }
+  throw new Error("请选择 .pdf、.xlsx、.csv 或 .json 课表文件。");
+}
+
+function renderTimetable(data) {
+  const entries = data.entries || [];
+  const isPreview = Boolean(entries.length && !data.timetable?.id);
+  timetableSummary.classList.toggle("muted", entries.length === 0);
+  timetableClear.hidden = entries.length === 0 || isPreview;
+  if (!entries.length) {
+    timetableSummary.textContent = "当前还没有导入个人课表。";
+    return;
+  }
+  const grouped = new Map();
+  [...entries]
+    .sort(
+      (left, right) =>
+        left.weekday - right.weekday
+        || left.start_period - right.start_period
+        || left.end_period - right.end_period
+        || left.course_name.localeCompare(right.course_name, "zh-CN"),
+    )
+    .forEach((entry) => {
+    if (!grouped.has(entry.weekday)) grouped.set(entry.weekday, []);
+    grouped.get(entry.weekday).push(entry);
+  });
+  timetableSummary.innerHTML = `
+    <div class="timetable-status">
+      <strong>${escapeHtml(data.timetable?.name || "我的课表")}</strong>
+      <span>${entries.length}个课程时段 · ${
+        isPreview ? "等待确认" : "已启用"
+      }</span>
+    </div>
+    ${[...grouped.entries()].map(([weekday, values]) => `
+      <div class="timetable-day">
+        <strong>${timetableWeekdayLabel(weekday)}</strong>
+        <div>
+          ${values.map((entry) => `
+            <span>${escapeHtml(entry.course_name)} · 第${entry.start_period}${
+              entry.end_period === entry.start_period
+                ? ""
+                : `—${entry.end_period}`
+            }节${entry.location ? ` · ${escapeHtml(entry.location)}` : ""}${
+              entry.weeks?.length
+                ? ` · 第${escapeHtml(entry.weeks.join("、"))}周`
+                : ""
+            }</span>
+          `).join("")}
+        </div>
+      </div>
+    `).join("")}
+  `;
+}
+
+async function loadTimetable() {
+  const response = await fetch(`/api/v1/users/${consoleUserId}/timetable`);
+  const data = await response.json();
+  if (!response.ok) throw data;
+  const timetableData = data.entries?.length
+    ? data
+    : readLocalSnapshot(timetableSnapshotKey, data);
+  if (data.entries?.length) {
+    writeLocalSnapshot(timetableSnapshotKey, data);
+  }
+  timetableName.value = timetableData.timetable?.name || "我的课表";
+  termStart.value = timetableData.timetable?.term_start || "";
+  termEnd.value = timetableData.timetable?.term_end || "";
+  renderTimetable(timetableData);
+}
+
+timetableImport.addEventListener("click", async () => {
+  const file = timetableFile.files?.[0];
+  if (!file) {
+    timetableSummary.textContent = "请先选择一份课表文件。";
+    timetableSummary.classList.remove("muted");
+    return;
+  }
+  if (!termStart.value) {
+    timetableSummary.textContent = (
+      "请先选择“第一教学周周一”。这样我才能把课表里的教学周次"
+      + "准确换算成真实日期。"
+    );
+    timetableSummary.classList.remove("muted");
+    termStart.focus();
+    return;
+  }
+  timetableImport.disabled = true;
+  timetableImport.textContent = "正在识别课表…";
+  try {
+    const filePayload = await fileToImportPayload(file);
+    const importPayload = {
+      name: timetableName.value.trim() || "我的课表",
+      term_start: termStart.value || null,
+      term_end: termEnd.value || null,
+      ...filePayload,
+    };
+    const response = await fetch(
+      `/api/v1/users/${consoleUserId}/timetable/preview`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(importPayload),
+      },
+    );
+    const data = await response.json();
+    if (!response.ok) throw data;
+    pendingTimetableImport = importPayload;
+    if (!termEnd.value && data.term_end) termEnd.value = data.term_end;
+    renderTimetable({
+      timetable: {
+        name: importPayload.name,
+        term_start: data.term_start,
+        term_end: data.term_end,
+      },
+      entries: data.entries,
+    });
+    timetableConfirm.hidden = false;
+    answer.textContent = (
+      `我先识别出了 ${data.imported_count} 个课程时段，尚未覆盖原课表。`
+      + "请检查课程名、星期、节次、周次和地点，确认无误后再启用。"
+    );
+    answer.classList.remove("muted");
+  } catch (error) {
+    timetableSummary.textContent = error instanceof Error
+      ? error.message
+      : error?.error?.message || "课表暂时没有导入成功。";
+    timetableSummary.classList.remove("muted");
+    renderDebug(error);
+  } finally {
+    timetableImport.disabled = false;
+    timetableImport.textContent = "识别并预览课表";
+  }
+});
+
+timetableFile.addEventListener("change", () => {
+  pendingTimetableImport = null;
+  timetableConfirm.hidden = true;
+});
+
+timetableConfirm.addEventListener("click", async () => {
+  if (!pendingTimetableImport) return;
+  timetableConfirm.disabled = true;
+  timetableConfirm.textContent = "正在启用课表…";
+  try {
+    const response = await fetch(
+      `/api/v1/users/${consoleUserId}/timetable/import`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pendingTimetableImport),
+      },
+    );
+    const data = await response.json();
+    if (!response.ok) throw data;
+    writeLocalSnapshot(timetableSnapshotKey, data);
+    renderTimetable(data);
+    pendingTimetableImport = null;
+    timetableConfirm.hidden = true;
+    timetableFile.value = "";
+    answer.textContent = (
+      `课表已经启用，共保存 ${data.imported_count} 个课程时段。`
+      + "之后你只要告诉我日期和想做的事，我会自动避开上课时间。"
+    );
+    answer.classList.remove("muted");
+    await loadAgenda(agendaDate.value || shanghaiDateString());
+  } catch (error) {
+    timetableSummary.textContent = error?.error?.message
+      || "课表暂时没有启用成功。";
+    timetableSummary.classList.remove("muted");
+    renderDebug(error);
+  } finally {
+    timetableConfirm.disabled = false;
+    timetableConfirm.textContent = "确认启用这份课表";
+  }
+});
+
+timetableClear.addEventListener("click", async () => {
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/timetable`,
+    { method: "DELETE" },
+  );
+  if (response.ok) {
+    localStorage.removeItem(timetableSnapshotKey);
+    renderTimetable({ timetable: null, entries: [] });
+    await loadAgenda(agendaDate.value || shanghaiDateString());
+  }
+});
+
+const calendarActionLabels = {
+  no_class: "不上课",
+  normal: "按当天课表",
+  makeup: "补课",
+};
+
+function renderCalendarOverrides(items) {
+  calendarList.classList.toggle("muted", !items.length);
+  if (!items.length) {
+    calendarList.textContent = "暂无学校校历调整。";
+    return;
+  }
+  calendarList.innerHTML = items.map((item) => {
+    const weekday = item.replacement_weekday
+      ? ` · 按周${"一二三四五六日"[item.replacement_weekday - 1]}课表`
+      : "";
+    return `
+      <div class="calendar-item">
+        <span>
+          <strong>${escapeHtml(item.date)}</strong> ·
+          ${calendarActionLabels[item.action] || escapeHtml(item.action)}
+          ${weekday}<br />
+          ${escapeHtml(item.label || "学校校历调整")}
+        </span>
+        <button type="button" data-calendar-delete="${escapeHtml(item.date)}">
+          删除
+        </button>
+      </div>
+    `;
+  }).join("");
+}
+
+async function loadCalendarOverrides() {
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/calendar-overrides`,
+  );
+  const data = await response.json();
+  if (!response.ok) throw data;
+  const items = data.items?.length
+    ? data.items
+    : readLocalSnapshot(calendarSnapshotKey, []);
+  if (data.items?.length) {
+    writeLocalSnapshot(calendarSnapshotKey, data.items);
+  }
+  renderCalendarOverrides(items);
+}
+
+calendarAction.addEventListener("change", () => {
+  calendarWeekday.hidden = calendarAction.value !== "makeup";
+});
+
+calendarSave.addEventListener("click", async () => {
+  if (!calendarDate.value) {
+    calendarList.textContent = "请先选择需要调整的日期。";
+    calendarList.classList.remove("muted");
+    calendarDate.focus();
+    return;
+  }
+  const payload = {
+    date: calendarDate.value,
+    action: calendarAction.value,
+    replacement_weekday: calendarAction.value === "makeup"
+      ? Number(calendarWeekday.value)
+      : null,
+    label: calendarLabel.value.trim() || "学校校历调整",
+  };
+  calendarSave.disabled = true;
+  try {
+    const response = await fetch(
+      `/api/v1/users/${consoleUserId}/calendar-overrides`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+    const data = await response.json();
+    if (!response.ok) throw data;
+    const current = readLocalSnapshot(calendarSnapshotKey, []);
+    const items = [
+      data,
+      ...current.filter((item) => item.date !== data.date),
+    ].sort((left, right) => left.date.localeCompare(right.date));
+    writeLocalSnapshot(calendarSnapshotKey, items);
+    renderCalendarOverrides(items);
+    calendarLabel.value = "";
+    answer.textContent = (
+      `已记下 ${data.date} 的校历安排。之后规划这一天时，`
+      + "我会先按这条学校通知处理课程，再安排其他活动。"
+    );
+    answer.classList.remove("muted");
+    await loadAgenda(agendaDate.value || shanghaiDateString());
+  } catch (error) {
+    calendarList.textContent = error?.error?.message
+      || "这条校历调整暂时没有保存成功。";
+    calendarList.classList.remove("muted");
+    renderDebug(error);
+  } finally {
+    calendarSave.disabled = false;
+  }
+});
+
+calendarList.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-calendar-delete]");
+  if (!button) return;
+  const eventDate = button.dataset.calendarDelete;
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/calendar-overrides/${eventDate}`,
+    { method: "DELETE" },
+  );
+  if (response.ok || response.status === 404) {
+    const items = readLocalSnapshot(calendarSnapshotKey, [])
+      .filter((item) => item.date !== eventDate);
+    writeLocalSnapshot(calendarSnapshotKey, items);
+    renderCalendarOverrides(items);
+    await loadAgenda(agendaDate.value || shanghaiDateString());
   }
 });
 
@@ -636,10 +2112,39 @@ async function checkHealth() {
   }
 }
 
-checkHealth();
-setInterval(renderClock, 30000);
-updateMemoryPlaceholder();
-loadMemories().catch((error) => renderDebug(error));
-loadDemos().catch(() => {
-  demoButtons.textContent = "案例加载失败";
-});
+async function initializeApp() {
+  checkHealth();
+  setInterval(renderClock, 30000);
+  updateMemoryPlaceholder();
+  renderPersonalizationState();
+  loadCampus().catch((error) => {
+    campusState.textContent = "读取失败";
+    campusSummary.textContent = "暂时无法读取校园设置。";
+    renderDebug(error);
+  });
+  loadDemos().catch(() => {
+    demoButtons.textContent = "案例加载失败";
+  });
+  const accessGranted = await initializeAccess();
+  if (!accessGranted) return;
+  agendaDate.value = shanghaiDateString();
+  serviceWorkerRegistration().catch(() => {});
+  loadReminderSettings().catch((error) => {
+    reminderState.textContent = "提醒设置暂时无法读取。";
+    renderDebug(error);
+  });
+  loadAgenda(agendaDate.value).catch((error) => {
+    agendaState.textContent = "读取失败";
+    agendaList.textContent = "个人日程暂时没有加载成功，请稍后刷新。";
+    renderDebug(error);
+  });
+  loadWeeklyDemos().catch((error) => {
+    weeklyDemoButtons.textContent = "复杂周场景暂时无法读取";
+    renderDebug(error);
+  });
+  loadMemories().catch((error) => renderDebug(error));
+  loadTimetable().catch((error) => renderDebug(error));
+  loadCalendarOverrides().catch((error) => renderDebug(error));
+}
+
+initializeApp();

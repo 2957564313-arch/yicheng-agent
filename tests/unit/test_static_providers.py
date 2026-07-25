@@ -5,6 +5,7 @@ import pytest
 from app.providers.location_repository import LocationRepository
 from app.providers.route_static import StaticRouteProvider
 from app.schemas.common import DataSource
+from app.schemas.context import CampusLocation, SourceMetadata
 
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -15,6 +16,42 @@ def test_location_alias_resolution():
     assert repository.resolve("六教").id == "teaching_building_6"
     assert repository.resolve(" 菜鸟驿站 ").id == "parcel_station"
     assert repository.resolve("不存在的地点") is None
+
+
+def test_location_aliases_are_isolated_by_campus():
+    repository = LocationRepository(DATA_DIR / "locations.json")
+    other_library = repository.register_runtime(
+        CampusLocation(
+            id="library",
+            campus_id="other_university",
+            name="图书馆",
+            aliases=["本校图书馆"],
+            category="study",
+            longitude=121.1,
+            latitude=31.1,
+            source=SourceMetadata(
+                type="amap_poi",
+                reference="other-library",
+            ),
+        )
+    )
+
+    assert other_library.id != "library"
+    assert (
+        repository.resolve("图书馆", campus_id="hdu_xiasha").id
+        == "library"
+    )
+    assert (
+        repository.resolve(
+            "图书馆",
+            campus_id="other_university",
+        ).id
+        == other_library.id
+    )
+    assert (
+        repository.get("library", campus_id="other_university")
+        is None
+    )
 
 
 @pytest.mark.asyncio
@@ -64,9 +101,55 @@ async def test_unknown_route_with_coordinates_is_estimated():
 
 
 @pytest.mark.asyncio
+async def test_hdu_named_venues_use_cached_area_route_when_offline():
+    locations = LocationRepository(DATA_DIR / "locations.json")
+    routes = StaticRouteProvider(DATA_DIR / "travel_times.json", locations)
+
+    first = await routes.get_route(
+        "library_floor_7_11",
+        "sf_express",
+    )
+    second = await routes.get_route(
+        "sf_express",
+        "northwest_track",
+    )
+
+    assert first.origin_id == "library_floor_7_11"
+    assert first.destination_id == "sf_express"
+    assert first.duration_min == 13
+    assert second.duration_min == 15
+    assert first.source == DataSource.ESTIMATED
+    assert "高德" in (first.warning or "")
+
+
+@pytest.mark.asyncio
 async def test_unknown_route_without_coordinates_fails():
     locations = LocationRepository(DATA_DIR / "locations.json")
     routes = StaticRouteProvider(DATA_DIR / "travel_times.json", locations)
 
     with pytest.raises(LookupError):
         await routes.get_route("laboratory", "track")
+
+
+@pytest.mark.asyncio
+async def test_route_never_crosses_campus_boundaries():
+    locations = LocationRepository(DATA_DIR / "locations.json")
+    other = locations.register_runtime(
+        CampusLocation(
+            id="other_gate",
+            campus_id="other_university",
+            name="另一所学校校门",
+            aliases=[],
+            category="campus",
+            longitude=121.1,
+            latitude=31.1,
+            source=SourceMetadata(
+                type="amap_poi",
+                reference="other-gate",
+            ),
+        )
+    )
+    routes = StaticRouteProvider(DATA_DIR / "travel_times.json", locations)
+
+    with pytest.raises(LookupError, match="different campuses"):
+        await routes.get_route("library", other.id)

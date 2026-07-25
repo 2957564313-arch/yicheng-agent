@@ -1328,5 +1328,239 @@
         "API_DEGRADED"
       ]
     }
+  },
+  {
+    "case_id": "hdu_complex_course_courier_run",
+    "category": "hdu_constraints",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_hdu_complex_course_courier_run",
+      "query": "7月24日第3到4节有课，下课后去图书馆七楼自习2小时，18点前取顺丰，晚上去西北田径场完成40分钟阳光长跑。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 4,
+      "warning_codes": [
+        "API_DEGRADED",
+        "ROUTE_FALLBACK"
+      ]
+    }
+  },
+  {
+    "case_id": "hdu_clinic_and_hot_water",
+    "category": "hdu_constraints",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_hdu_clinic_and_hot_water",
+      "query": "7月24日下午去校医院就诊30分钟，晚上回宿舍洗澡30分钟。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 2,
+      "warning_codes": [
+        "API_DEGRADED",
+        "ROUTE_FALLBACK"
+      ]
+    }
+  },
+  {
+    "case_id": "hdu_weekend_badminton_closed",
+    "category": "hdu_constraints",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_hdu_weekend_badminton_closed",
+      "query": "7月25日下午去校医院就诊30分钟，再打羽毛球1小时，晚上回宿舍洗澡30分钟。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "partial",
+      "plan_status": null,
+      "min_task_count": 2,
+      "warning_codes": [
+        "OUTSIDE_OPENING_HOURS",
+        "TASK_UNSCHEDULED"
+      ]
+    }
+  },
+  {
+    "case_id": "hdu_library_floor_closing",
+    "category": "hdu_constraints",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_hdu_library_floor_closing",
+      "query": "7月24日21点后去图书馆七楼自习1小时。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "partial",
+      "plan_status": null,
+      "min_task_count": 0,
+      "warning_codes": [
+        "TASK_UNSCHEDULED"
+      ]
+    }
+  },
+  {
+    "case_id": "hdu_sf_after_closing",
+    "category": "hdu_constraints",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_hdu_sf_after_closing",
+      "query": "7月24日19点去顺丰取件。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "partial",
+      "plan_status": null,
+      "min_task_count": 0,
+      "warning_codes": [
+        "TASK_UNSCHEDULED"
+      ]
+    }
+  },
+  {
+    "case_id": "hdu_northwest_sun_run_window",
+    "category": "hdu_constraints",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_hdu_northwest_sun_run_window",
+      "query": "7月24日下午去西北田径场完成40分钟阳光长跑。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 1,
+      "warning_codes": [
+        "API_DEGRADED"
+      ]
+    }
+  },
+  {
+    "case_id": "hdu_sunday_dorm_gate",
+    "category": "hdu_constraints",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_hdu_sunday_dorm_gate",
+      "query": "7月26日晚上23点30分回宿舍洗澡30分钟。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "partial",
+      "plan_status": null,
+      "min_task_count": 0,
+      "warning_codes": [
+        "TASK_UNSCHEDULED"
+      ]
+    }
+  },
+  {
+    "case_id": "hdu_weekend_clinic_closing",
+    "category": "hdu_constraints",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_hdu_weekend_clinic_closing",
+      "query": "7月25日15点45分去校医院就诊30分钟。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "partial",
+      "plan_status": null,
+      "min_task_count": 0,
+      "warning_codes": [
+        "TASK_UNSCHEDULED"
+      ]
+    }
+  },
+  {
+    "case_id": "hdu_weekday_badminton",
+    "category": "hdu_constraints",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_hdu_weekday_badminton",
+      "query": "7月24日下午打羽毛球1小时。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 1,
+      "warning_codes": [
+        "API_DEGRADED"
+      ]
+    }
+  },
+  {
+    "case_id": "hdu_hdu_multi_constraint",
+    "category": "hdu_constraints",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_hdu_hdu_multi_constraint",
+      "query": "7月24日第1至2节有课，下课后学习90分钟，17点30分前取京东快递，晚上跑步30分钟。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 4,
+      "warning_codes": [
+        "API_DEGRADED",
+        "ROUTE_FALLBACK"
+      ]
+    }
   }
 ]

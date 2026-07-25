@@ -5,25 +5,59 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="面向校园学习与生活任务的时空规划智能体"
+      content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
-    <title>易程智策 · 规划控制台</title>
-    <link rel="stylesheet" href="/styles.css?v=20260724-3" />
+    <title>易程智策 · 我的校园日程</title>
+    <link rel="stylesheet" href="/styles.css?v=20260724-10" />
   </head>
   <body>
+    <section id="access-gate" class="access-gate" hidden>
+      <form id="login-form" class="access-card">
+        <div class="brand-mark" aria-hidden="true">易</div>
+        <p class="eyebrow">比赛测试入口</p>
+        <h1>登录后体验易程智策</h1>
+        <p>
+          为防止公开接口被恶意调用，规划、地图和天气能力仅向持有
+          测试账号的评审与体验者开放。
+        </p>
+        <label>
+          测试账号
+          <input
+            id="login-username"
+            type="text"
+            autocomplete="username"
+            required
+          />
+        </label>
+        <label>
+          测试密码
+          <input
+            id="login-password"
+            type="password"
+            autocomplete="current-password"
+            required
+          />
+        </label>
+        <button class="primary" type="submit">进入测试</button>
+        <small id="login-message">
+          请输入参赛材料中提供的测试账号和密码。
+        </small>
+      </form>
+    </section>
     <header class="masthead">
       <div class="brand">
         <div class="brand-mark" aria-hidden="true">易</div>
         <div>
-          <p class="eyebrow">校园时空规划智能体</p>
+          <p class="eyebrow">杭电个性化校园日程助手</p>
           <h1>易程智策</h1>
-          <p class="subtitle">理解需求、计算通勤、校验约束、应对变化</p>
+          <p class="subtitle">安排日程、记住习惯、按时提醒、关照生活</p>
         </div>
       </div>
       <div class="header-status">
         <span id="clock" class="status subtle">正在获取北京时间…</span>
         <span id="health" class="status">正在检查服务…</span>
         <span id="save-state" class="status subtle">尚未生成当前计划</span>
+        <button id="logout" class="status subtle" hidden>退出测试</button>
       </div>
     </header>
 
@@ -59,6 +93,44 @@
             <button id="submit" class="primary">交给易程智策</button>
           </article>
 
+          <article class="panel campus-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="step">本校知识底座</p>
+                <h2>杭州电子科技大学下沙校区</h2>
+              </div>
+              <span id="campus-state" class="campus-state">正在读取…</span>
+            </div>
+            <p class="panel-note">
+              已接入学校节次、图书馆与场馆开放、快递点、宿舍门禁、
+              阳光长跑、校医院、校园拥堵和学生手册。规划时将知识规则
+              作为硬约束或提醒依据。
+            </p>
+            <div class="campus-form" hidden>
+              <input
+                id="campus-name"
+                type="text"
+                placeholder="例如：浙江大学紫金港校区"
+                maxlength="120"
+              />
+              <input
+                id="campus-city"
+                type="text"
+                placeholder="所在城市（可选）"
+                maxlength="60"
+              />
+              <button id="campus-discover" class="ghost">
+                查找这所学校
+              </button>
+            </div>
+            <div id="campus-summary" class="campus-summary muted">
+              正在读取当前校园。
+            </div>
+            <button id="campus-reset" class="text-button" hidden>
+              恢复本校知识库
+            </button>
+          </article>
+
           <article class="panel execution-panel">
             <div class="panel-heading compact">
               <div>
@@ -71,6 +143,102 @@
             </div>
           </article>
 
+          <article class="panel timetable-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="step">个人课表</p>
+                <h2>导入后自动避开上课时间</h2>
+              </div>
+            </div>
+            <p class="panel-note">
+              每位用户都可以导入自己的教务系统课表 PDF，或使用
+              Excel、CSV、JSON。确认预览后，课程才会成为不可移动的
+              个人时间约束。
+            </p>
+            <div class="timetable-form">
+              <input
+                id="timetable-name"
+                type="text"
+                value="我的课表"
+                aria-label="课表名称"
+                maxlength="80"
+              />
+              <div class="term-fields">
+                <label>
+                  第一教学周周一
+                  <input id="term-start" type="date" required />
+                </label>
+                <label>
+                  学期结束
+                  <input id="term-end" type="date" />
+                </label>
+              </div>
+              <label class="file-picker">
+                <span>选择课表文件</span>
+                <input
+                  id="timetable-file"
+                  type="file"
+                  accept=".pdf,.xlsx,.csv,.json"
+                />
+              </label>
+              <button id="timetable-import" class="ghost">识别并预览课表</button>
+              <button id="timetable-confirm" class="primary" hidden>
+                确认启用这份课表
+              </button>
+            </div>
+            <div id="timetable-summary" class="timetable-summary muted">
+              当前还没有导入个人课表。
+            </div>
+            <button id="timetable-clear" class="text-button danger-link" hidden>
+              清空我的课表
+            </button>
+            <details class="calendar-editor">
+              <summary>学校临时调课与停课</summary>
+              <p class="panel-note">
+                法定节假日会自动参考国家日历；学校补哪天的课必须以
+                教务通知为准，可在这里手动覆盖。
+              </p>
+              <div class="calendar-form">
+                <input
+                  id="calendar-date"
+                  type="date"
+                  aria-label="校历调整日期"
+                />
+                <select id="calendar-action" aria-label="当天课程安排">
+                  <option value="no_class">当天不上课</option>
+                  <option value="makeup">按其他星期补课</option>
+                  <option value="normal">按当天正常课表</option>
+                </select>
+                <select
+                  id="calendar-weekday"
+                  aria-label="补星期几的课程"
+                  hidden
+                >
+                  <option value="1">补星期一的课</option>
+                  <option value="2">补星期二的课</option>
+                  <option value="3">补星期三的课</option>
+                  <option value="4">补星期四的课</option>
+                  <option value="5">补星期五的课</option>
+                  <option value="6">补星期六的课</option>
+                  <option value="7">补星期日的课</option>
+                </select>
+                <input
+                  id="calendar-label"
+                  type="text"
+                  placeholder="例如：校庆停课 / 补周五课程"
+                  maxlength="100"
+                />
+                <button id="calendar-save" class="ghost">保存这天的安排</button>
+              </div>
+              <div id="calendar-list" class="calendar-list muted">
+                暂无学校校历调整。
+              </div>
+            </details>
+            <p class="storage-note">
+              当前为公开测试版；系统更新时，体验数据可能重置。
+            </p>
+          </article>
+
           <article class="panel memory-panel">
             <div class="panel-heading compact">
               <div>
@@ -81,6 +249,30 @@
             <p class="panel-note">
               只保存你主动设置的内容，可随时停用、修改或删除。
             </p>
+            <div class="personalization-control">
+              <label class="toggle-row">
+                <span>
+                  <strong>个性化习惯建议</strong>
+                  <small>发现重复行为后先询问，绝不自动加入日程</small>
+                </span>
+                <input
+                  id="personalization-toggle"
+                  type="checkbox"
+                  role="switch"
+                  aria-label="启用个性化习惯建议"
+                />
+              </label>
+              <p id="personalization-state" class="panel-note">
+                当前关闭。
+              </p>
+              <button
+                id="personalization-reset"
+                class="text-button"
+                hidden
+              >
+                重置建议降频记录
+              </button>
+            </div>
             <div class="memory-form">
               <select id="memory-type" aria-label="记忆类型">
                 <option value="buffer_min">日程缓冲时间</option>
@@ -90,7 +282,14 @@
                 <option value="avoid_rain">避雨偏好</option>
                 <option value="avoid_tight_schedule">日程松紧</option>
                 <option value="preferred_locations">常用地点</option>
-                <option value="custom_note">其他习惯</option>
+                <option value="preferred_study_period">高效学习时段</option>
+                <option value="preferred_study_location">常用自习地点</option>
+                <option value="usual_bedtime">常用就寝时间</option>
+                <option value="usual_wake_time">常用起床时间</option>
+                <option value="sleep_goal_hours">希望睡眠时长</option>
+                <option value="weekly_daily_focus_limit_min">
+                  每日自主安排上限
+                </option>
               </select>
               <input
                 id="memory-value"
@@ -123,6 +322,109 @@
             </div>
             <div id="assistant-actions" class="assistant-actions"></div>
             <div id="freshness" class="source-tags"></div>
+          </article>
+
+          <article class="panel agenda-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="step">我的长期日程</p>
+                <h2>今天不只排出来，也要真正陪你执行</h2>
+              </div>
+              <span id="agenda-state" class="campus-state">
+                正在读取
+              </span>
+            </div>
+            <div class="agenda-toolbar">
+              <label>
+                查看日期
+                <input id="agenda-date" type="date" />
+              </label>
+              <button id="agenda-today" class="ghost">回到今天</button>
+              <button id="agenda-refresh" class="ghost">刷新日程</button>
+            </div>
+            <div id="agenda-metrics" class="agenda-metrics"></div>
+            <div id="agenda-list" class="agenda-list muted">
+              正在汇总个人课表和已保存计划。
+            </div>
+            <div id="agenda-reminders" class="agenda-reminders"></div>
+            <div id="care-suggestions" class="care-suggestions"></div>
+            <details class="reminder-center">
+              <summary>提醒与闹钟设置</summary>
+              <p class="panel-note">
+                浏览器通知适合网页打开时使用；导入系统日历后，即使关闭
+                网页，手机或电脑也能按照日历闹钟提醒。
+              </p>
+              <div class="reminder-grid">
+                <label>
+                  上课前
+                  <input id="reminder-course" type="number" min="5" max="180" />
+                  <span>分钟提醒</span>
+                </label>
+                <label>
+                  早课起床
+                  <input id="reminder-wakeup" type="number" min="20" max="240" />
+                  <span>分钟前提醒</span>
+                </label>
+                <label>
+                  会议前
+                  <input id="reminder-meeting" type="number" min="5" max="180" />
+                  <span>分钟提醒</span>
+                </label>
+                <label>
+                  自习前
+                  <input id="reminder-study" type="number" min="0" max="120" />
+                  <span>分钟提醒</span>
+                </label>
+                <label>
+                  就寝准备
+                  <input id="reminder-bedtime" type="number" min="0" max="120" />
+                  <span>分钟前提醒</span>
+                </label>
+                <label class="reminder-switch">
+                  就寝关怀
+                  <input id="reminder-bedtime-enabled" type="checkbox" />
+                  <span>按日常作息生成，可单独关闭</span>
+                </label>
+              </div>
+              <div class="reminder-actions">
+                <button id="reminder-enable" class="ghost">
+                  开启浏览器提醒
+                </button>
+                <button id="reminder-save" class="ghost">
+                  保存提醒设置
+                </button>
+                <a id="agenda-export" class="calendar-export" href="#">
+                  导出到系统日历（含闹钟）
+                </a>
+              </div>
+              <p id="reminder-state" class="panel-note">
+                正在读取提醒设置。
+              </p>
+            </details>
+          </article>
+
+          <article class="panel weekly-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="step">复杂场景能力</p>
+                <h2>一周目标如何真正落到每天？</h2>
+              </div>
+              <span id="weekly-state" class="campus-state">
+                尚未生成
+              </span>
+            </div>
+            <p class="panel-note">
+              周层拆解目标、阶段和每天的时间块；日层再结合课表、通勤、
+              开放时间与天气细化。任务放不下时会说明缺口，不会静默漏掉。
+            </p>
+            <div id="weekly-demo-buttons" class="weekly-demo-buttons">
+              正在读取复杂周场景…
+            </div>
+            <div id="weekly-summary" class="weekly-summary muted">
+              选择一个案例，可查看阶段依赖、跨日分配与容量风险。
+            </div>
+            <div id="weekly-grid" class="weekly-grid"></div>
+            <div id="weekly-risks" class="weekly-risks"></div>
           </article>
 
           <section class="visual-grid">
@@ -193,8 +495,8 @@
     </main>
 
     <footer>
-      <span>易程智策 · 校园时空规划智能体</span>
-      <span>智能回复是主体，结构化时间轴提供可验证的规划依据</span>
+      <span>易程智策 · 杭电个性化校园日程助手</span>
+      <span>对话负责理解与修改，长期日程、提醒和校园规则负责陪伴执行</span>
     </footer>
     <details id="debug-panel" class="debug-panel">
       <summary>初期调试信息</summary>
@@ -203,6 +505,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260724-3" defer></script>
+    <script src="/app.js?v=20260724-10" defer></script>
   </body>
 </html>

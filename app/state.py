@@ -16,10 +16,20 @@ class CampusAgentState(TypedDict, total=False):
     intent: str
     requested_date: str | None
     old_plan_id: str | None
+    old_plan: dict[str, Any] | None
 
     tasks: list[dict[str, Any]]
     preferences: dict[str, Any]
+    client_memories: list[dict[str, Any]]
+    client_timetable: dict[str, Any] | None
+    client_calendar_overrides: list[dict[str, Any]]
+    active_campus: dict[str, Any] | None
     user_memories: list[dict[str, Any]]
+    timetable_summary: str | None
+    academic_day_context: dict[str, Any] | None
+    initial_location_raw: str | None
+    initial_location_id: str | None
+    initial_departure_at: str | None
     clarifications: list[str]
     parse_confidence: float
 
@@ -29,6 +39,7 @@ class CampusAgentState(TypedDict, total=False):
     weather_context: list[dict[str, Any]]
     retrieved_facts: list[dict[str, Any]]
     opening_windows: dict[str, list[list[str]]]
+    task_windows: dict[str, list[list[str]]]
     provider_warnings: list[dict[str, Any]]
 
     candidate_plan: dict[str, Any] | None

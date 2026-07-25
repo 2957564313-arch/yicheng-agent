@@ -163,6 +163,41 @@ async def test_scheduler_marks_impossible_task_unscheduled(tz):
 
 
 @pytest.mark.asyncio
+async def test_scheduler_uses_venue_closing_time_after_22_not_legacy_cutoff(tz):
+    target_date = date(2026, 7, 24)
+    now = datetime(2026, 7, 24, 13, 0, tzinfo=tz)
+    task = Task(
+        id="study",
+        title="图书馆自习",
+        date=target_date,
+        duration_min=30,
+        location_id="library",
+        earliest_start=datetime(2026, 7, 24, 22, 0, tzinfo=tz),
+        latest_end=datetime(2026, 7, 24, 22, 30, tzinfo=tz),
+    )
+    context = await build_context(target_date, now, [])
+
+    result = Scheduler().schedule(
+        user_id="demo_user",
+        thread_id="thread_library_boundary",
+        tasks=[task],
+        preferences=UserPreferences(),
+        context=context,
+    )
+    plan, issues = PlanValidator().validate(
+        plan=result.plan,
+        tasks=[task],
+        context=context,
+    )
+
+    study = next(item for item in plan.items if item.task_id == "study")
+    assert not result.unscheduled_task_ids
+    assert study.start_at == datetime(2026, 7, 24, 22, 0, tzinfo=tz)
+    assert study.end_at == datetime(2026, 7, 24, 22, 30, tzinfo=tz)
+    assert not [issue for issue in issues if issue.severity == "error"]
+
+
+@pytest.mark.asyncio
 async def test_peak_window_extends_travel_and_keeps_user_time_choice(tz):
     target_date = date(2026, 7, 24)
     now = datetime(2026, 7, 23, 20, 0, tzinfo=tz)
@@ -224,6 +259,53 @@ async def test_peak_window_extends_travel_and_keeps_user_time_choice(tz):
 
 
 @pytest.mark.asyncio
+async def test_travel_is_placed_close_to_following_task_when_gap_is_long(tz):
+    target_date = date(2026, 7, 24)
+    now = datetime(2026, 7, 23, 20, 0, tzinfo=tz)
+    context = await build_context(
+        target_date,
+        now,
+        [("parcel_station", "track")],
+    )
+    tasks = [
+        Task(
+            id="parcel",
+            title="取快递",
+            date=target_date,
+            duration_min=30,
+            location_id="parcel_station",
+            fixed_start=datetime(2026, 7, 24, 13, 30, tzinfo=tz),
+            fixed_end=datetime(2026, 7, 24, 14, 0, tzinfo=tz),
+            flexibility=TaskFlexibility.FIXED,
+        ),
+        Task(
+            id="run",
+            title="跑步",
+            date=target_date,
+            duration_min=30,
+            location_id="track",
+            fixed_start=datetime(2026, 7, 24, 18, 0, tzinfo=tz),
+            fixed_end=datetime(2026, 7, 24, 18, 30, tzinfo=tz),
+            flexibility=TaskFlexibility.FIXED,
+        ),
+    ]
+
+    result = Scheduler().schedule(
+        user_id="demo_user",
+        thread_id="thread_late_travel",
+        tasks=tasks,
+        preferences=UserPreferences(buffer_min=10),
+        context=context,
+    )
+    travel = next(
+        item for item in result.plan.items if item.item_type == "travel"
+    )
+
+    assert travel.start_at > tasks[0].fixed_end
+    assert travel.end_at == tasks[1].fixed_start - timedelta(minutes=10)
+
+
+@pytest.mark.asyncio
 async def test_validator_rejects_any_change_to_fixed_course_time(tz):
     target_date = date(2026, 7, 24)
     now = datetime(2026, 7, 23, 20, 0, tzinfo=tz)
@@ -260,3 +342,55 @@ async def test_validator_rejects_any_change_to_fixed_course_time(tz):
 
     assert plan.status == "infeasible"
     assert "FIXED_TIME_CHANGED" in {issue.code for issue in issues}
+
+
+def test_scheduler_uses_activity_specific_window_for_sunshine_run(tz):
+    target_date = date(2026, 7, 24)
+    task = Task(
+        id="sun_run",
+        title="完成一次阳光长跑",
+        date=target_date,
+        duration_min=40,
+        location_id="northwest_track",
+    )
+    context = PlanningContext(
+        target_date=target_date,
+        timezone=tz,
+        now=datetime(2026, 7, 23, 20, 0, tzinfo=tz),
+        opening_windows={
+            "northwest_track": [
+                (
+                    datetime(2026, 7, 24, 0, 0, tzinfo=tz),
+                    datetime(2026, 7, 25, 0, 0, tzinfo=tz),
+                )
+            ]
+        },
+        task_windows={
+            "sun_run": [
+                (
+                    datetime(2026, 7, 24, 18, 30, tzinfo=tz),
+                    datetime(2026, 7, 24, 21, 0, tzinfo=tz),
+                )
+            ]
+        },
+    )
+
+    result = Scheduler().schedule(
+        user_id="demo_user",
+        thread_id="thread_sun_run",
+        tasks=[task],
+        preferences=UserPreferences(),
+        context=context,
+    )
+    item = next(
+        item for item in result.plan.items if item.task_id == "sun_run"
+    )
+
+    assert item.start_at == datetime(2026, 7, 24, 18, 30, tzinfo=tz)
+    plan, issues = PlanValidator().validate(
+        plan=result.plan,
+        tasks=[task],
+        context=context,
+    )
+    assert plan.status == "valid"
+    assert not [issue for issue in issues if issue.severity == "error"]

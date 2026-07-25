@@ -142,7 +142,106 @@ def build_cases() -> list[dict]:
                 },
             }
         )
-    assert len(cases) == 60
+
+    hdu_constraint_cases = [
+        (
+            "complex_course_courier_run",
+            (
+                "7月24日第3到4节有课，下课后去图书馆七楼自习2小时，"
+                "18点前取顺丰，晚上去西北田径场完成40分钟阳光长跑。"
+            ),
+            4,
+            "completed",
+            ["API_DEGRADED", "ROUTE_FALLBACK"],
+        ),
+        (
+            "clinic_and_hot_water",
+            "7月24日下午去校医院就诊30分钟，晚上回宿舍洗澡30分钟。",
+            2,
+            "completed",
+            ["API_DEGRADED", "ROUTE_FALLBACK"],
+        ),
+        (
+            "weekend_badminton_closed",
+            (
+                "7月25日下午去校医院就诊30分钟，再打羽毛球1小时，"
+                "晚上回宿舍洗澡30分钟。"
+            ),
+            2,
+            "partial",
+            ["OUTSIDE_OPENING_HOURS", "TASK_UNSCHEDULED"],
+        ),
+        (
+            "library_floor_closing",
+            "7月24日21点后去图书馆七楼自习1小时。",
+            0,
+            "partial",
+            ["TASK_UNSCHEDULED"],
+        ),
+        (
+            "sf_after_closing",
+            "7月24日19点去顺丰取件。",
+            0,
+            "partial",
+            ["TASK_UNSCHEDULED"],
+        ),
+        (
+            "northwest_sun_run_window",
+            "7月24日下午去西北田径场完成40分钟阳光长跑。",
+            1,
+            "completed",
+            ["API_DEGRADED"],
+        ),
+        (
+            "sunday_dorm_gate",
+            "7月26日晚上23点30分回宿舍洗澡30分钟。",
+            0,
+            "partial",
+            ["TASK_UNSCHEDULED"],
+        ),
+        (
+            "weekend_clinic_closing",
+            "7月25日15点45分去校医院就诊30分钟。",
+            0,
+            "partial",
+            ["TASK_UNSCHEDULED"],
+        ),
+        (
+            "weekday_badminton",
+            "7月24日下午打羽毛球1小时。",
+            1,
+            "completed",
+            ["API_DEGRADED"],
+        ),
+        (
+            "hdu_multi_constraint",
+            (
+                "7月24日第1至2节有课，下课后学习90分钟，"
+                "17点30分前取京东快递，晚上跑步30分钟。"
+            ),
+            4,
+            "completed",
+            ["API_DEGRADED", "ROUTE_FALLBACK"],
+        ),
+    ]
+    for (
+        suffix,
+        query,
+        count,
+        status,
+        warning_codes,
+    ) in hdu_constraint_cases:
+        cases.append(
+            chat_case(
+                f"hdu_{suffix}",
+                "hdu_constraints",
+                query,
+                min_task_count=count,
+                expected_status=status,
+                warning_codes=warning_codes,
+            )
+        )
+    assert len(cases) == 70
     return cases
 
 
@@ -153,7 +252,7 @@ def main() -> None:
         json.dumps(build_cases(), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    print(f"wrote 60 cases: {output}")
+    print(f"wrote 70 cases: {output}")
 
 
 if __name__ == "__main__":

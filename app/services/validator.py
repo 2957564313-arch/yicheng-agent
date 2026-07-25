@@ -246,23 +246,33 @@ class PlanValidator:
     ) -> list[Issue]:
         issues = []
         for item in self._task_items(items):
-            if not item.location_id:
-                continue
-            windows = context.opening_windows.get(item.location_id)
-            if not windows:
-                continue
-            if not any(
-                start <= item.start_at and item.end_at <= end
-                for start, end in windows
-            ):
-                issues.append(
-                    Issue(
-                        code="OUTSIDE_OPENING_HOURS",
-                        severity=IssueSeverity.ERROR,
-                        message=f"“{item.title}”不在场所开放时段内",
-                        task_ids=[item.task_id] if item.task_id else [],
+            checks = [
+                (
+                    context.opening_windows.get(item.location_id)
+                    if item.location_id
+                    else None,
+                    "场所开放时段",
+                ),
+                (
+                    context.task_windows.get(item.task_id or ""),
+                    "该活动的有效时段",
+                ),
+            ]
+            for windows, label in checks:
+                if windows is None:
+                    continue
+                if not any(
+                    start <= item.start_at and item.end_at <= end
+                    for start, end in windows
+                ):
+                    issues.append(
+                        Issue(
+                            code="OUTSIDE_OPENING_HOURS",
+                            severity=IssueSeverity.ERROR,
+                            message=f"“{item.title}”不在{label}内",
+                            task_ids=[item.task_id] if item.task_id else [],
+                        )
                     )
-                )
         return issues
 
     def _check_travel(
