@@ -78,6 +78,8 @@ def test_normal_demo_has_exact_timeline_and_evidence(tmp_path):
         assert "安排思路" in payload["answer"]
         assert "今天可以这样安排" in payload["answer"]
         assert "如果临时晚出发" in payload["answer"]
+        assert "天气有变化时" not in payload["answer"]
+        assert "先避开风险时段" not in payload["answer"]
 
         tasks = task_items(payload)
         assert tasks["study"]["start_at"] == "2026-07-24T14:00:00+08:00"
@@ -166,6 +168,8 @@ def test_weather_demo_moves_outdoor_task_before_rain(tmp_path):
             warning["code"] == "WEATHER_RISK"
             for warning in payload["warnings"]
         )
+        assert "天气有变化时" in payload["answer"]
+        assert "先避开风险时段" in payload["answer"]
         run_change = next(
             change
             for change in payload["plan_diff"]

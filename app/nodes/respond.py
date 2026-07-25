@@ -286,7 +286,10 @@ def _success_answer(
         raw.get("code") == "CAMPUS_KNOWLEDGE_NOT_CONFIGURED"
         for raw in warnings
     )
-    weather_adjustment = _has_precise_weather_risk(weather)
+    weather_adjustment = (
+        _has_precise_weather_risk(weather)
+        and _outdoor_tasks_finish_before_weather_risk(plan, weather)
+    )
     if weather_adjustment:
         lines = [
             "天气有变化时，安全比赶进度更重要。"
@@ -481,6 +484,57 @@ def _has_precise_weather_risk(weather: list[WeatherContext]) -> bool:
             or (item.rain_probability or 0) >= 0.5
         )
         for item in weather
+    )
+
+
+def _outdoor_tasks_finish_before_weather_risk(
+    plan: Plan,
+    weather: list[WeatherContext],
+) -> bool:
+    """Prove that a timed weather adjustment is reflected in the plan.
+
+    A precise rain boundary alone does not prove that the planner moved an
+    outdoor task. This guard prevents a normal demo (or a live plan that still
+    crosses the boundary) from claiming that the risk was already avoided.
+    """
+    risk_times = [
+        item.risk_start_at
+        for item in weather
+        if item.risk_start_at is not None
+        and (
+            "雨" in (item.condition or "")
+            or "雪" in (item.condition or "")
+            or "风" in (item.condition or "")
+            or (item.rain_probability or 0) >= 0.5
+        )
+    ]
+    if not risk_times:
+        return False
+    risk_start = min(risk_times)
+    outdoor_items = [
+        item
+        for item in plan.items
+        if item.item_type == "task"
+        and (
+            item.location_id in {"track", "east_track", "northwest_track"}
+            or any(
+                marker in item.title
+                for marker in (
+                    "跑步",
+                    "长跑",
+                    "操场",
+                    "骑行",
+                    "足球",
+                    "篮球",
+                    "排球",
+                    "网球",
+                    "户外",
+                )
+            )
+        )
+    ]
+    return bool(outdoor_items) and all(
+        item.end_at <= risk_start for item in outdoor_items
     )
 
 

@@ -147,6 +147,89 @@ def test_day_level_weather_adds_reminder_without_claiming_timed_adjustment():
     assert "当前预报约 37℃" in answer
 
 
+def test_precise_weather_risk_is_not_claimed_when_outdoor_task_crosses_it():
+    plan = _plan().model_copy(
+        update={
+            "items": [
+                *_plan().items,
+                PlanItem(
+                    id="run_item",
+                    task_id="run",
+                    item_type="task",
+                    title="跑步",
+                    start_at=datetime(2026, 7, 24, 17, 5, tzinfo=TZ),
+                    end_at=datetime(2026, 7, 24, 17, 35, tzinfo=TZ),
+                    location_id="track",
+                    source=DataSource.USER,
+                ),
+            ]
+        }
+    )
+    answer = _success_answer(
+        plan,
+        [],
+        intent="plan",
+        query="下午去图书馆自习、取快递和跑步",
+        facts=[],
+        weather=[
+            WeatherContext(
+                date=datetime(2026, 7, 24, tzinfo=TZ).date(),
+                period="17:00以后",
+                condition="rain",
+                rain_probability=0.85,
+                risk_start_at=datetime(2026, 7, 24, 17, 0, tzinfo=TZ),
+                source=DataSource.DEMO_FIXTURE,
+            )
+        ],
+        congestion_windows=[],
+    )
+
+    assert "天气有变化时" not in answer
+    assert "先避开风险时段" not in answer
+    assert "户外任务安排在已知风险时段之前" not in answer
+
+
+def test_precise_weather_adjustment_is_claimed_after_outdoor_task_moves_early():
+    plan = _plan().model_copy(
+        update={
+            "items": [
+                PlanItem(
+                    id="run_item",
+                    task_id="run",
+                    item_type="task",
+                    title="跑步",
+                    start_at=datetime(2026, 7, 24, 14, 0, tzinfo=TZ),
+                    end_at=datetime(2026, 7, 24, 14, 30, tzinfo=TZ),
+                    location_id="track",
+                    source=DataSource.USER,
+                ),
+                *_plan().items,
+            ]
+        }
+    )
+    answer = _success_answer(
+        plan,
+        [],
+        intent="replan",
+        query="17点以后有雨，请调整计划",
+        facts=[],
+        weather=[
+            WeatherContext(
+                date=datetime(2026, 7, 24, tzinfo=TZ).date(),
+                period="17:00以后",
+                condition="用户告知有雨",
+                rain_probability=1,
+                risk_start_at=datetime(2026, 7, 24, 17, 0, tzinfo=TZ),
+                source=DataSource.USER,
+            )
+        ],
+        congestion_windows=[],
+    )
+
+    assert "天气有变化时" in answer
+    assert "先避开风险时段" in answer
+
+
 def test_missing_requested_weather_is_explained_without_provider_jargon():
     answer = _success_answer(
         _plan(),
