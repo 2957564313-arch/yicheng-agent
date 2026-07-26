@@ -1,5 +1,6 @@
 from datetime import date, datetime
 
+from app.repositories.database import Database
 from app.repositories.plans import PlanRepository
 from app.schemas.common import PlanStatus
 from app.schemas.plan import Plan, PlanItem, PlanMetrics
@@ -8,6 +9,24 @@ from app.schemas.plan import Plan, PlanItem, PlanMetrics
 def test_database_initialization_is_idempotent(temp_database):
     temp_database.initialize()
     temp_database.initialize()
+
+
+def test_database_initialization_releases_file_handle(tmp_path):
+    database_path = tmp_path / "initialization.sqlite"
+    Database(database_path).initialize()
+
+    database_path.unlink()
+    assert not database_path.exists()
+
+
+def test_connection_context_releases_file_handle(tmp_path):
+    database_path = tmp_path / "connection.sqlite"
+    database = Database(database_path)
+    with database.connect() as connection:
+        connection.execute("CREATE TABLE example (id INTEGER PRIMARY KEY)")
+
+    database_path.unlink()
+    assert not database_path.exists()
 
 
 def test_plan_roundtrip(temp_database, tz):
@@ -46,4 +65,3 @@ def test_plan_roundtrip(temp_database, tz):
 
     loaded = repository.get("plan_1")
     assert loaded == plan
-
