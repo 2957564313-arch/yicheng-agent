@@ -1,10 +1,33 @@
 from __future__ import annotations
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
+import pytest
 from fastapi.testclient import TestClient
 
+from app.api import weeks as weekly_api
 from tests.integration.test_api_demos import build_test_app
+
+
+@pytest.fixture(autouse=True)
+def freeze_weekly_api_clock(monkeypatch):
+    """Keep fixed-date weekly fixtures deterministic as wall-clock time moves."""
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = datetime(
+                2026,
+                7,
+                23,
+                20,
+                0,
+                tzinfo=ZoneInfo("Asia/Shanghai"),
+            )
+            return value.astimezone(tz) if tz else value.replace(tzinfo=None)
+
+    monkeypatch.setattr(weekly_api, "datetime", FixedDateTime)
 
 
 def weekly_payload() -> dict:

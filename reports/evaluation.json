@@ -1,11 +1,16 @@
 {
   "summary": {
-    "generated_at": "2026-07-25T12:35:16.914974+00:00",
+    "generated_at": "2026-07-30T01:35:45.806694+00:00",
     "suite": "offline_mvp",
-    "total": 100,
-    "passed": 100,
+    "total": 112,
+    "passed": 112,
     "pass_rate": 1.0,
     "categories": {
+      "broad_student_scenarios": {
+        "total": 12,
+        "passed": 12,
+        "pass_rate": 1.0
+      },
       "clarification": {
         "total": 5,
         "passed": 5,
@@ -547,6 +552,126 @@
     {
       "case_id": "degraded_10",
       "category": "degraded",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "broad_academic_combo",
+      "category": "broad_student_scenarios",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "broad_project_lab",
+      "category": "broad_student_scenarios",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 1,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "broad_fixed_meeting",
+      "category": "broad_student_scenarios",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "broad_life_activity_sequence",
+      "category": "broad_student_scenarios",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 3,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "broad_three_meals",
+      "category": "broad_student_scenarios",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 3,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "broad_rest_and_call",
+      "category": "broad_student_scenarios",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 3,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "broad_scoped_admin_deadline",
+      "category": "broad_student_scenarios",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 3,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "broad_location_scoping",
+      "category": "broad_student_scenarios",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "broad_shopping_laundry",
+      "category": "broad_student_scenarios",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "broad_exam_review",
+      "category": "broad_student_scenarios",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "broad_collaboration_report",
+      "category": "broad_student_scenarios",
+      "passed": true,
+      "failures": [],
+      "metrics": {
+        "task_count": 2,
+        "hard_violation_count": 0
+      }
+    },
+    {
+      "case_id": "broad_morning_admin",
+      "category": "broad_student_scenarios",
       "passed": true,
       "failures": [],
       "metrics": {

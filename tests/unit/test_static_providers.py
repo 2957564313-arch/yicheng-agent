@@ -7,7 +7,6 @@ from app.providers.route_static import StaticRouteProvider
 from app.schemas.common import DataSource
 from app.schemas.context import CampusLocation, SourceMetadata
 
-
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
 
@@ -123,12 +122,40 @@ async def test_hdu_named_venues_use_cached_area_route_when_offline():
 
 
 @pytest.mark.asyncio
-async def test_unknown_route_without_coordinates_fails():
+async def test_route_without_coordinates_uses_connected_cached_segments():
     locations = LocationRepository(DATA_DIR / "locations.json")
     routes = StaticRouteProvider(DATA_DIR / "travel_times.json", locations)
 
+    forward = await routes.get_route("laboratory", "student_dormitory")
+    reverse = await routes.get_route("student_dormitory", "laboratory")
+
+    assert forward.duration_min == 23
+    assert reverse.duration_min == 23
+    assert forward.source == DataSource.ESTIMATED
+    assert forward.confidence <= 0.4
+    assert "多段校内缓存路线" in (forward.warning or "")
+
+
+@pytest.mark.asyncio
+async def test_disconnected_route_without_coordinates_fails():
+    locations = LocationRepository(DATA_DIR / "locations.json")
+    detached = locations.register_runtime(
+        CampusLocation(
+            id="detached_office",
+            campus_id="hdu_xiasha",
+            name="临时校内办公室",
+            aliases=[],
+            category="campus",
+            source=SourceMetadata(
+                type="manual",
+                reference="test-only",
+            ),
+        )
+    )
+    routes = StaticRouteProvider(DATA_DIR / "travel_times.json", locations)
+
     with pytest.raises(LookupError):
-        await routes.get_route("laboratory", "track")
+        await routes.get_route("laboratory", detached.id)
 
 
 @pytest.mark.asyncio
