@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from app.nodes.understand import _can_apply_rule_guard
-from app.schemas.common import Intent
+from app.nodes.understand import (
+    _can_apply_rule_guard,
+    _merge_llm_with_rule_constraints,
+)
+from app.schemas.common import Intent, TaskFlexibility
+from app.schemas.task import Task
 from app.schemas.understand import UnderstandResult
 from app.services.requirement_parser import RuleBasedRequirementParser
-
 
 NOW = datetime(
     2026,
@@ -93,3 +96,159 @@ def test_open_ended_request_still_allows_a_real_clarification():
         llm_result=llm_result,
         rule_result=rule_result,
     )
+
+
+def test_online_merge_keeps_model_tasks_and_adds_verified_constraints():
+    query = (
+        "明天去打印店打印材料，再去菜鸟驿站取快递，"
+        "最后给辅导员发邮件，18点前结束。"
+    )
+    parsed = _parse(query)
+    rule_parcel = next(task for task in parsed.tasks if task.id == "parcel")
+    rule_result = parsed.model_copy(
+        update={
+            "tasks": [
+                rule_parcel.model_copy(update={"depends_on": []})
+            ]
+        }
+    )
+    target_date = parsed.requested_date
+    timezone = NOW.tzinfo
+    llm_result = UnderstandResult(
+        intent=Intent.PLAN,
+        requested_date=target_date,
+        tasks=[
+            Task(
+                id="print_materials",
+                title="打印课程材料",
+                date=target_date,
+                duration_min=20,
+                location_raw="打印店",
+                earliest_start=datetime(
+                    2026, 7, 25, 8, 0, tzinfo=timezone
+                ),
+                latest_end=datetime(
+                    2026, 7, 25, 18, 0, tzinfo=timezone
+                ),
+            ),
+            Task(
+                id="model_parcel",
+                title="领取快递",
+                date=target_date,
+                duration_min=12,
+                location_raw="菜鸟驿站",
+                earliest_start=datetime(
+                    2026, 7, 25, 7, 0, tzinfo=timezone
+                ),
+                latest_end=datetime(
+                    2026, 7, 25, 20, 0, tzinfo=timezone
+                ),
+                depends_on=["print_materials"],
+                tags=["model_interpreted"],
+            ),
+            Task(
+                id="email_adviser",
+                title="给辅导员发邮件",
+                date=target_date,
+                duration_min=10,
+                depends_on=["model_parcel"],
+            ),
+        ],
+        confidence=0.92,
+    )
+
+    result = _merge_llm_with_rule_constraints(
+        query=query,
+        llm_result=llm_result,
+        rule_result=rule_result,
+    )
+
+    assert [task.id for task in result.tasks] == [
+        "print_materials",
+        "parcel",
+        "email_adviser",
+    ]
+    parcel = result.tasks[1]
+    assert parcel.duration_min == 12
+    assert parcel.earliest_start == rule_parcel.earliest_start
+    assert parcel.latest_end == rule_parcel.latest_end
+    assert parcel.deadline == rule_parcel.deadline
+    assert "model_interpreted" in parcel.tags
+    assert "hard_constraint" in parcel.tags
+    assert result.tasks[2].depends_on == ["parcel"]
+
+
+def test_online_merge_adds_fixed_task_omitted_by_model():
+    target_date = NOW.date() + timedelta(days=1)
+    fixed_start = datetime(
+        2026, 7, 25, 10, 0, tzinfo=NOW.tzinfo
+    )
+    fixed_task = Task(
+        id="project_review",
+        title="项目评审",
+        date=target_date,
+        duration_min=60,
+        fixed_start=fixed_start,
+        fixed_end=fixed_start + timedelta(hours=1),
+        flexibility=TaskFlexibility.FIXED,
+        tags=["hard_constraint"],
+    )
+    rule_result = UnderstandResult(
+        intent=Intent.PLAN,
+        requested_date=target_date,
+        tasks=[fixed_task],
+    )
+    llm_result = UnderstandResult(
+        intent=Intent.PLAN,
+        requested_date=target_date,
+        tasks=[
+            Task(
+                id="meeting_notes",
+                title="整理会议纪要",
+                date=target_date,
+                duration_min=45,
+            )
+        ],
+        confidence=0.9,
+    )
+
+    result = _merge_llm_with_rule_constraints(
+        query="明天10点参加项目评审，再整理会议纪要",
+        llm_result=llm_result,
+        rule_result=rule_result,
+    )
+
+    assert [task.id for task in result.tasks] == [
+        "project_review",
+        "meeting_notes",
+    ]
+    assert result.tasks[0].fixed_start == fixed_start
+    assert result.tasks[0].flexibility == TaskFlexibility.FIXED
+
+
+def test_online_merge_does_not_force_rule_defaults_over_model_semantics():
+    query = "今天帮我安排在宿舍学习45分钟。"
+    rule_result = _parse(query)
+    rule_task = rule_result.tasks[0]
+    model_task = rule_task.model_copy(
+        update={
+            "id": "focused_study",
+            "title": "在宿舍复习专业课",
+            "duration_min": 45,
+            "location_raw": "宿舍",
+        }
+    )
+    llm_result = rule_result.model_copy(
+        update={"tasks": [model_task], "confidence": 0.95}
+    )
+
+    result = _merge_llm_with_rule_constraints(
+        query=query,
+        llm_result=llm_result,
+        rule_result=rule_result,
+    )
+
+    assert result.tasks[0].id == "study"
+    assert result.tasks[0].title == "在宿舍复习专业课"
+    assert result.tasks[0].duration_min == 45
+    assert result.tasks[0].location_raw == "宿舍"

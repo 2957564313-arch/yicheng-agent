@@ -70,12 +70,27 @@ async def run(model: str, timeout_seconds: float) -> None:
             "secrets_printed": False,
         }
     except Exception as exc:
+        safe_details = (
+            exc.details[0]
+            if getattr(exc, "details", None)
+            and isinstance(exc.details[0], dict)
+            else {}
+        )
         payload = {
             "model": model,
             "ok": False,
             "elapsed_seconds": round(perf_counter() - started, 2),
             "error_type": type(exc).__name__,
             "error_code": getattr(exc, "code", None),
+            "provider_status_code": safe_details.get(
+                "provider_status_code"
+            ),
+            "provider_error_code": safe_details.get(
+                "provider_error_code"
+            ),
+            "provider_error_type": safe_details.get(
+                "provider_error_type"
+            ),
             "secrets_printed": False,
         }
     print(json.dumps(payload, ensure_ascii=False, indent=2))

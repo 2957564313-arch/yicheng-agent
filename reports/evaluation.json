@@ -1,7 +1,7 @@
 {
   "summary": {
-    "generated_at": "2026-07-30T01:35:45.806694+00:00",
-    "suite": "offline_mvp",
+    "generated_at": "2026-07-30T02:49:17.614445+00:00",
+    "suite": "deterministic_regression",
     "total": 112,
     "passed": 112,
     "pass_rate": 1.0,

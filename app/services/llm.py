@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from contextvars import ContextVar
 import json
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -369,14 +369,46 @@ class OpenAICompatibleLLM:
             details=[
                 {
                     "attempted_model_count": len(attempted_models),
-                    "provider_error_type": (
-                        type(last_error).__name__
-                        if last_error is not None
-                        else "UnknownError"
-                    ),
+                    **self._safe_provider_error_details(last_error),
                 }
             ],
         ) from last_error
+
+    @staticmethod
+    def _safe_provider_error_details(
+        error: Exception | None,
+    ) -> dict[str, Any]:
+        """Expose actionable provider metadata without leaking response data."""
+        if error is None:
+            return {"provider_error_type": "UnknownError"}
+
+        details: dict[str, Any] = {
+            "provider_error_type": type(error).__name__,
+            "provider_exception_type": type(error).__name__,
+        }
+        if not isinstance(error, requests.HTTPError):
+            return details
+        response = error.response
+        if response is None:
+            return details
+
+        details["provider_status_code"] = response.status_code
+        try:
+            payload = response.json()
+        except (requests.RequestException, TypeError, ValueError):
+            return details
+        if not isinstance(payload, dict):
+            return details
+        provider_error = payload.get("error")
+        if not isinstance(provider_error, dict):
+            return details
+        provider_code = provider_error.get("code")
+        provider_type = provider_error.get("type")
+        if isinstance(provider_code, (str, int, float, bool)):
+            details["provider_error_code"] = provider_code
+        if isinstance(provider_type, (str, int, float, bool)):
+            details["provider_error_type"] = provider_type
+        return details
 
     def _post_sync(
         self,

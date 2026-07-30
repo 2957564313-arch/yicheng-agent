@@ -193,7 +193,7 @@ def main() -> None:
     )
     summary = {
         "generated_at": datetime.now(UTC).isoformat(),
-        "suite": "offline_mvp",
+        "suite": "deterministic_regression",
         "total": len(results),
         "passed": passed,
         "pass_rate": passed / len(results),
