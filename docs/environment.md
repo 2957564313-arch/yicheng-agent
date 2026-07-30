@@ -32,7 +32,7 @@ Docker、Conda 和 Node 构建链不是本项目本地开发前置。
 ## 复现
 
 ```powershell
-$env:UV_CACHE_DIR = 'D:\APP\Dev\uv\cache'
+$env:UV_CACHE_DIR = 'D:\APP\Dev\Python\uv-cache'
 $env:UV_PROJECT_ENVIRONMENT = 'D:\APP\Dev\Python\envs\yicheng-agent'
 uv sync
 & D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe --version
@@ -47,7 +47,7 @@ C 盘均不创建 `.venv`。
 
 1. 安装 Git 与 uv。
 2. 进入项目目录，设置
-   `UV_CACHE_DIR=D:\APP\Dev\uv\cache` 和
+   `UV_CACHE_DIR=D:\APP\Dev\Python\uv-cache` 和
    `UV_PROJECT_ENVIRONMENT=D:\APP\Dev\Python\envs\yicheng-agent`，
    再执行 `uv sync`。
 3. 复制 `.env.example` 为 `.env`。先验证确定性核心和冻结 Demo，
