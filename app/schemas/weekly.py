@@ -78,9 +78,8 @@ class GoalStageCreate(BaseModel):
     completion_criteria: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
-    def validate_chunk(self) -> "GoalStageCreate":
-        if self.min_chunk_min > self.duration_min:
-            self.min_chunk_min = self.duration_min
+    def validate_chunk(self) -> GoalStageCreate:
+        self.min_chunk_min = min(self.min_chunk_min, self.duration_min)
         if not self.splittable:
             self.min_chunk_min = self.duration_min
         if self.id and self.id in self.depends_on_stage_ids:
@@ -121,7 +120,7 @@ class WeeklyGoalCreate(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_goal(self) -> "WeeklyGoalCreate":
+    def validate_goal(self) -> WeeklyGoalCreate:
         values = [
             value
             for value in (self.earliest_start, self.deadline)
@@ -133,10 +132,8 @@ class WeeklyGoalCreate(BaseModel):
             raise ValueError("目标截止时间必须晚于最早开始时间")
         if self.min_chunk_min > self.max_chunk_min:
             raise ValueError("最小时间块不能大于最大时间块")
-        if self.min_chunk_min > self.total_duration_min:
-            self.min_chunk_min = self.total_duration_min
-        if self.max_chunk_min > self.total_duration_min:
-            self.max_chunk_min = self.total_duration_min
+        self.min_chunk_min = min(self.min_chunk_min, self.total_duration_min)
+        self.max_chunk_min = min(self.max_chunk_min, self.total_duration_min)
         if not self.splittable:
             self.min_chunk_min = self.total_duration_min
             self.max_chunk_min = self.total_duration_min
@@ -166,6 +163,7 @@ class WeeklyGoalCreate(BaseModel):
 
 class GoalStage(BaseModel):
     id: str = Field(min_length=1, max_length=80)
+    lineage_id: str | None = Field(default=None, max_length=80)
     goal_id: str = Field(min_length=1, max_length=80)
     title: str = Field(min_length=1, max_length=160)
     sequence: int = Field(ge=1, le=100)
@@ -183,6 +181,7 @@ class GoalStage(BaseModel):
 
 class WeeklyGoal(BaseModel):
     id: str = Field(min_length=1, max_length=80)
+    lineage_id: str | None = Field(default=None, max_length=80)
     user_id: str = Field(min_length=1, max_length=64)
     campus_id: str = Field(min_length=1, max_length=100)
     week_start: date
@@ -216,7 +215,7 @@ class DailyWindow(BaseModel):
     location_id: str | None = Field(default=None, max_length=120)
 
     @model_validator(mode="after")
-    def validate_window(self) -> "DailyWindow":
+    def validate_window(self) -> DailyWindow:
         if self.start_at.tzinfo is None or self.end_at.tzinfo is None:
             raise ValueError("每日容量窗口必须包含时区")
         if self.end_at <= self.start_at:
@@ -252,7 +251,7 @@ class WeeklyClockWindow(BaseModel):
     location_id: str | None = Field(default=None, max_length=120)
 
     @model_validator(mode="after")
-    def validate_clock_window(self) -> "WeeklyClockWindow":
+    def validate_clock_window(self) -> WeeklyClockWindow:
         if self.end <= self.start:
             raise ValueError("周可用时段结束时间必须晚于开始时间")
         return self
@@ -275,7 +274,7 @@ class WeeklyAvailabilityProfile(BaseModel):
     use_memories: bool = True
 
     @model_validator(mode="after")
-    def validate_days(self) -> "WeeklyAvailabilityProfile":
+    def validate_days(self) -> WeeklyAvailabilityProfile:
         weekdays = [item.weekday for item in self.days]
         if len(weekdays) != len(set(weekdays)):
             raise ValueError("同一星期不能重复设置可用时段")
@@ -293,13 +292,20 @@ class WeeklyCapacitySummary(BaseModel):
 
 class DayAllocation(BaseModel):
     id: str = Field(min_length=1, max_length=80)
+    lineage_id: str | None = Field(default=None, max_length=80)
+    source_allocation_id: str | None = Field(default=None, max_length=80)
     weekly_plan_id: str = Field(min_length=1, max_length=80)
     date: date
     goal_id: str = Field(min_length=1, max_length=80)
     stage_id: str = Field(min_length=1, max_length=80)
     allocated_duration_min: int = Field(ge=5, le=720)
+    completed_duration_min: int = Field(default=0, ge=0, le=720)
     earliest_start: datetime
     latest_end: datetime
+    window_start_at: datetime | None = None
+    window_end_at: datetime | None = None
+    preferred_start_at: datetime | None = None
+    preferred_end_at: datetime | None = None
     preferred_period: str | None = Field(default=None, max_length=40)
     location_id: str | None = Field(default=None, max_length=120)
     priority_score: float = 0
@@ -311,7 +317,9 @@ class DayAllocation(BaseModel):
     updated_at: datetime
 
     @model_validator(mode="after")
-    def validate_interval(self) -> "DayAllocation":
+    def validate_interval(self) -> DayAllocation:
+        if self.completed_duration_min > self.allocated_duration_min:
+            raise ValueError("分配块已完成时长不能超过分配时长")
         if self.earliest_start.tzinfo is None or self.latest_end.tzinfo is None:
             raise ValueError("每日分配时间必须包含时区")
         if self.latest_end <= self.earliest_start:
@@ -323,6 +331,54 @@ class DayAllocation(BaseModel):
         )
         if self.allocated_duration_min > available:
             raise ValueError("分配时长不能超过候选时间窗")
+        if (self.window_start_at is None) != (self.window_end_at is None):
+            raise ValueError("候选窗口开始和结束时间必须同时提供")
+        if self.window_start_at and self.window_end_at:
+            if (
+                self.window_start_at.tzinfo is None
+                or self.window_end_at.tzinfo is None
+            ):
+                raise ValueError("候选窗口必须包含时区")
+            if not (
+                self.window_start_at
+                <= self.earliest_start
+                < self.latest_end
+                <= self.window_end_at
+            ):
+                raise ValueError("建议时间必须位于候选窗口内")
+            window_duration = int(
+                (
+                    self.window_end_at - self.window_start_at
+                ).total_seconds()
+                // 60
+            )
+            if self.allocated_duration_min > window_duration:
+                raise ValueError("分配时长不能超过候选窗口")
+        if (self.preferred_start_at is None) != (
+            self.preferred_end_at is None
+        ):
+            raise ValueError("偏好开始和结束时间必须同时提供")
+        if self.preferred_start_at and self.preferred_end_at:
+            if (
+                self.preferred_start_at.tzinfo is None
+                or self.preferred_end_at.tzinfo is None
+            ):
+                raise ValueError("偏好时间必须包含时区")
+            if not (
+                (self.window_start_at or self.earliest_start)
+                <= self.preferred_start_at
+                < self.preferred_end_at
+                <= (self.window_end_at or self.latest_end)
+            ):
+                raise ValueError("偏好时间必须位于候选时间窗内")
+            preferred_duration = int(
+                (
+                    self.preferred_end_at - self.preferred_start_at
+                ).total_seconds()
+                // 60
+            )
+            if preferred_duration != self.allocated_duration_min:
+                raise ValueError("偏好时间长度必须等于分配时长")
         return self
 
 
@@ -356,7 +412,7 @@ class WeeklyPlan(BaseModel):
     updated_at: datetime
 
     @model_validator(mode="after")
-    def validate_week(self) -> "WeeklyPlan":
+    def validate_week(self) -> WeeklyPlan:
         if self.week_start.isoweekday() != 1:
             raise ValueError("week_start 必须是周一")
         if self.week_end != self.week_start.fromordinal(
@@ -376,7 +432,7 @@ class CompletionEventCreate(BaseModel):
     client_event_id: str = Field(min_length=1, max_length=120)
 
     @model_validator(mode="after")
-    def validate_event(self) -> "CompletionEventCreate":
+    def validate_event(self) -> CompletionEventCreate:
         if self.occurred_at.tzinfo is None:
             raise ValueError("执行事件时间必须包含时区")
         if self.event_type != CompletionEventType.NEW_TASK and not (
@@ -416,7 +472,7 @@ class WeeklyPlanCreateRequest(BaseModel):
     availability: WeeklyAvailabilityProfile | None = None
 
     @model_validator(mode="after")
-    def validate_request(self) -> "WeeklyPlanCreateRequest":
+    def validate_request(self) -> WeeklyPlanCreateRequest:
         if self.week_start.isoweekday() != 1:
             raise ValueError("week_start 必须是周一")
         allowed_dates = {
@@ -436,6 +492,44 @@ class WeeklyPlanCreateRequest(BaseModel):
         return self
 
 
+class WeeklyReplanRequest(BaseModel):
+    trigger_type: WeeklyTriggerType = WeeklyTriggerType.MANUAL
+    capacities: list[DailyCapacity] = Field(default_factory=list, max_length=7)
+    availability: WeeklyAvailabilityProfile | None = None
+    invalidated_allocation_ids: list[str] = Field(
+        default_factory=list,
+        max_length=100,
+    )
+    additional_goals: list[WeeklyGoalCreate] = Field(
+        default_factory=list,
+        max_length=10,
+    )
+
+    @model_validator(mode="after")
+    def validate_replan(self) -> WeeklyReplanRequest:
+        if self.trigger_type == WeeklyTriggerType.INITIAL:
+            raise ValueError("滚动重排不能使用 initial 触发类型")
+        if self.capacities and self.availability is not None:
+            raise ValueError("capacities 和 availability 只能提供一种")
+        dates = [item.date for item in self.capacities]
+        if len(dates) != len(set(dates)):
+            raise ValueError("同一天不能重复提供重排容量")
+        self.invalidated_allocation_ids = list(
+            dict.fromkeys(self.invalidated_allocation_ids)
+        )
+        if (
+            self.trigger_type == WeeklyTriggerType.NEW_TASK
+            and not self.additional_goals
+        ):
+            raise ValueError("new_task 重排必须提供 additional_goals")
+        if (
+            self.additional_goals
+            and self.trigger_type != WeeklyTriggerType.NEW_TASK
+        ):
+            raise ValueError("additional_goals 只能用于 new_task 重排")
+        return self
+
+
 class WeeklyTextInterpretation(BaseModel):
     goals: list[WeeklyGoalCreate] = Field(default_factory=list, max_length=30)
     clarifications: list[str] = Field(default_factory=list, max_length=5)
@@ -451,7 +545,7 @@ class WeeklyTextPlanRequest(BaseModel):
     availability: WeeklyAvailabilityProfile | None = None
 
     @model_validator(mode="after")
-    def validate_week_start(self) -> "WeeklyTextPlanRequest":
+    def validate_week_start(self) -> WeeklyTextPlanRequest:
         if self.week_start.isoweekday() != 1:
             raise ValueError("week_start 必须是周一")
         return self

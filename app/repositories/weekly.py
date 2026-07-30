@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import json
 from datetime import date, datetime
+from hashlib import sha256
 from uuid import uuid4
 
 from app.repositories.database import Database
+from app.repositories.exceptions import (
+    WeeklyPlanSnapshotChanged,
+    WeeklyPlanSuperseded,
+)
 from app.schemas.weekly import (
     AllocationStatus,
     CompletionEvent,
@@ -27,130 +32,197 @@ class WeeklyPlanRepository:
         self.database = database
 
     def save(self, plan: WeeklyPlan) -> None:
-        timestamp = plan.updated_at.isoformat()
         with self.database.transaction() as connection:
-            connection.execute(
+            self._save_on_connection(connection, plan)
+
+    def save_replan(
+        self,
+        plan: WeeklyPlan,
+        *,
+        baseline_plan_id: str,
+        baseline_fingerprint: str,
+    ) -> None:
+        """Atomically save a replan if its full baseline is still current."""
+
+        if plan.baseline_plan_id != baseline_plan_id:
+            raise ValueError("replan baseline id does not match the plan")
+        with self.database.transaction() as connection:
+            baseline_row = connection.execute(
                 """
-                INSERT INTO users(id, created_at, updated_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at
+                SELECT * FROM weekly_plans
+                WHERE id = ? AND user_id = ?
                 """,
-                (plan.user_id, timestamp, timestamp),
+                (baseline_plan_id, plan.user_id),
+            ).fetchone()
+            if baseline_row is None:
+                raise LookupError("WEEKLY_PLAN_NOT_FOUND")
+            self._assert_latest_on_connection(
+                connection,
+                plan_row=baseline_row,
             )
+            current_baseline = self._hydrate(connection, baseline_row)
+            if (
+                self.weekly_plan_fingerprint(current_baseline)
+                != baseline_fingerprint
+            ):
+                raise WeeklyPlanSnapshotChanged(
+                    "weekly baseline changed while replan was computed"
+                )
+            if plan.version != current_baseline.version + 1:
+                raise ValueError("replan version must follow its baseline")
+            self._save_on_connection(connection, plan)
+
+    @staticmethod
+    def weekly_plan_fingerprint(plan: WeeklyPlan) -> str:
+        """Hash a fully hydrated baseline for optimistic concurrency."""
+
+        return sha256(plan.model_dump_json().encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _assert_latest_on_connection(connection, *, plan_row) -> None:
+        latest = connection.execute(
+            """
+            SELECT id FROM weekly_plans
+            WHERE user_id = ? AND campus_id = ? AND week_start = ?
+            ORDER BY version DESC
+            LIMIT 1
+            """,
+            (
+                plan_row["user_id"],
+                plan_row["campus_id"],
+                plan_row["week_start"],
+            ),
+        ).fetchone()
+        if latest is None or latest["id"] != plan_row["id"]:
+            raise WeeklyPlanSuperseded(
+                "target weekly plan is no longer the latest version"
+            )
+
+    @staticmethod
+    def _save_on_connection(connection, plan: WeeklyPlan) -> None:
+        timestamp = plan.updated_at.isoformat()
+        connection.execute(
+            """
+            INSERT INTO users(id, created_at, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at
+            """,
+            (plan.user_id, timestamp, timestamp),
+        )
+        connection.execute(
+            """
+            INSERT INTO weekly_plans(
+                id, user_id, campus_id, week_start, week_end, timezone,
+                version, status, baseline_plan_id, trigger_type,
+                issues_json, metrics_json, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                plan.id,
+                plan.user_id,
+                plan.campus_id,
+                plan.week_start.isoformat(),
+                plan.week_end.isoformat(),
+                plan.timezone,
+                plan.version,
+                plan.status.value,
+                plan.baseline_plan_id,
+                plan.trigger_type.value,
+                json.dumps(
+                    [
+                        item.model_dump(mode="json")
+                        for item in plan.issues
+                    ],
+                    ensure_ascii=False,
+                ),
+                plan.metrics.model_dump_json(),
+                plan.created_at.isoformat(),
+                plan.updated_at.isoformat(),
+            ),
+        )
+        for goal in plan.goals:
             connection.execute(
                 """
-                INSERT INTO weekly_plans(
-                    id, user_id, campus_id, week_start, week_end, timezone,
-                    version, status, baseline_plan_id, trigger_type,
-                    issues_json, metrics_json, created_at, updated_at
+                INSERT INTO weekly_goals(
+                    id, weekly_plan_id, user_id, campus_id, week_start,
+                    goal_json,
+                    status, remaining_duration_min, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
+                    goal.id,
                     plan.id,
-                    plan.user_id,
-                    plan.campus_id,
-                    plan.week_start.isoformat(),
-                    plan.week_end.isoformat(),
-                    plan.timezone,
-                    plan.version,
-                    plan.status.value,
-                    plan.baseline_plan_id,
-                    plan.trigger_type.value,
-                    json.dumps(
-                        [
-                            item.model_dump(mode="json")
-                            for item in plan.issues
-                        ],
-                        ensure_ascii=False,
-                    ),
-                    plan.metrics.model_dump_json(),
-                    plan.created_at.isoformat(),
-                    plan.updated_at.isoformat(),
+                    goal.user_id,
+                    goal.campus_id,
+                    goal.week_start.isoformat(),
+                    goal.model_dump_json(exclude={"stages"}),
+                    goal.status.value,
+                    goal.remaining_duration_min,
+                    goal.created_at.isoformat(),
+                    goal.updated_at.isoformat(),
                 ),
             )
-            for goal in plan.goals:
+            for stage in goal.stages:
                 connection.execute(
                     """
-                    INSERT INTO weekly_goals(
-                        id, weekly_plan_id, user_id, campus_id, week_start,
-                        goal_json,
-                        status, remaining_duration_min, created_at, updated_at
+                    INSERT INTO goal_stages(
+                        id, goal_id, stage_json, status,
+                        remaining_duration_min, sequence,
+                        created_at, updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
+                        stage.id,
                         goal.id,
-                        plan.id,
-                        goal.user_id,
-                        goal.campus_id,
-                        goal.week_start.isoformat(),
-                        goal.model_dump_json(exclude={"stages"}),
-                        goal.status.value,
-                        goal.remaining_duration_min,
-                        goal.created_at.isoformat(),
-                        goal.updated_at.isoformat(),
+                        stage.model_dump_json(),
+                        stage.status.value,
+                        stage.remaining_duration_min,
+                        stage.sequence,
+                        stage.created_at.isoformat(),
+                        stage.updated_at.isoformat(),
                     ),
                 )
-                for stage in goal.stages:
-                    connection.execute(
-                        """
-                        INSERT INTO goal_stages(
-                            id, goal_id, stage_json, status,
-                            remaining_duration_min, sequence,
-                            created_at, updated_at
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            stage.id,
-                            goal.id,
-                            stage.model_dump_json(),
-                            stage.status.value,
-                            stage.remaining_duration_min,
-                            stage.sequence,
-                            stage.created_at.isoformat(),
-                            stage.updated_at.isoformat(),
-                        ),
-                    )
-            for allocation in plan.allocations:
-                connection.execute(
-                    """
-                    INSERT INTO day_allocations(
-                        id, weekly_plan_id, goal_id, stage_id,
-                        allocation_json, allocation_date, status,
-                        allocated_duration_min, created_at, updated_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        allocation.id,
-                        plan.id,
-                        allocation.goal_id,
-                        allocation.stage_id,
-                        allocation.model_dump_json(),
-                        allocation.date.isoformat(),
-                        allocation.status.value,
-                        allocation.allocated_duration_min,
-                        allocation.created_at.isoformat(),
-                        allocation.updated_at.isoformat(),
-                    ),
-                )
+        for allocation in plan.allocations:
             connection.execute(
                 """
-                INSERT INTO weekly_plan_versions(
-                    id, weekly_plan_id, version, snapshot_json, created_at
+                INSERT INTO day_allocations(
+                    id, weekly_plan_id, goal_id, stage_id,
+                    allocation_json, allocation_date, status,
+                    allocated_duration_min, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    f"weekly_snapshot_{uuid4().hex}",
+                    allocation.id,
                     plan.id,
-                    plan.version,
-                    plan.model_dump_json(),
-                    plan.created_at.isoformat(),
+                    allocation.goal_id,
+                    allocation.stage_id,
+                    allocation.model_dump_json(),
+                    allocation.date.isoformat(),
+                    allocation.status.value,
+                    allocation.allocated_duration_min,
+                    allocation.created_at.isoformat(),
+                    allocation.updated_at.isoformat(),
                 ),
             )
+        connection.execute(
+            """
+            INSERT INTO weekly_plan_versions(
+                id, weekly_plan_id, version, snapshot_json, created_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                f"weekly_snapshot_{uuid4().hex}",
+                plan.id,
+                plan.version,
+                plan.model_dump_json(),
+                plan.created_at.isoformat(),
+            ),
+        )
 
     def get(self, plan_id: str) -> WeeklyPlan | None:
         with self.database.connect() as connection:
@@ -210,6 +282,19 @@ class WeeklyPlanRepository:
         now: datetime,
     ) -> tuple[CompletionEvent, bool]:
         with self.database.transaction() as connection:
+            plan_row = connection.execute(
+                """
+                SELECT * FROM weekly_plans
+                WHERE id = ? AND user_id = ?
+                """,
+                (plan_id, user_id),
+            ).fetchone()
+            if plan_row is None:
+                raise LookupError("WEEKLY_PLAN_NOT_FOUND")
+            self._assert_latest_on_connection(
+                connection,
+                plan_row=plan_row,
+            )
             existing = connection.execute(
                 """
                 SELECT event_json FROM completion_events
@@ -224,15 +309,6 @@ class WeeklyPlanRepository:
                     ),
                     False,
                 )
-            plan_row = connection.execute(
-                """
-                SELECT id FROM weekly_plans
-                WHERE id = ? AND user_id = ?
-                """,
-                (plan_id, user_id),
-            ).fetchone()
-            if plan_row is None:
-                raise LookupError("WEEKLY_PLAN_NOT_FOUND")
 
             allocation_row = None
             if payload.allocation_id:
@@ -247,7 +323,11 @@ class WeeklyPlanRepository:
                     raise LookupError("WEEKLY_ALLOCATION_NOT_FOUND")
 
             completed_duration = payload.completed_duration_min
+            prior_completed_duration = 0
             if allocation_row is not None and completed_duration:
+                allocation_snapshot = DayAllocation.model_validate_json(
+                    allocation_row["allocation_json"]
+                )
                 already = connection.execute(
                     """
                     SELECT COALESCE(SUM(
@@ -262,9 +342,16 @@ class WeeklyPlanRepository:
                     """,
                     (payload.allocation_id,),
                 ).fetchone()["total"]
+                prior_completed_duration = max(
+                    allocation_snapshot.completed_duration_min,
+                    int(already),
+                )
                 available = max(
                     0,
-                    allocation_row["allocated_duration_min"] - int(already),
+                    (
+                        allocation_snapshot.allocated_duration_min
+                        - prior_completed_duration
+                    ),
                 )
                 completed_duration = min(completed_duration, available)
 
@@ -307,8 +394,87 @@ class WeeklyPlanRepository:
                     allocation_row=allocation_row,
                     event=event,
                     now=now,
+                    prior_completed_duration=prior_completed_duration,
                 )
             return event, True
+
+    def bind_daily_plan(
+        self,
+        *,
+        user_id: str,
+        plan_id: str,
+        target_date: date,
+        allocation_ids: list[str],
+        daily_plan_id: str,
+        now: datetime,
+    ) -> list[str]:
+        """Idempotently bind validated daily output to weekly allocations."""
+
+        if not allocation_ids:
+            return []
+        timestamp = now.isoformat()
+        with self.database.transaction() as connection:
+            owner = connection.execute(
+                """
+                SELECT * FROM weekly_plans
+                WHERE id = ? AND user_id = ?
+                """,
+                (plan_id, user_id),
+            ).fetchone()
+            if owner is None:
+                raise LookupError("WEEKLY_PLAN_NOT_FOUND")
+            self._assert_latest_on_connection(
+                connection,
+                plan_row=owner,
+            )
+
+            placeholders = ",".join("?" for _ in allocation_ids)
+            rows = connection.execute(
+                f"""
+                SELECT * FROM day_allocations
+                WHERE weekly_plan_id = ?
+                  AND allocation_date = ?
+                  AND id IN ({placeholders})
+                """,
+                [
+                    plan_id,
+                    target_date.isoformat(),
+                    *allocation_ids,
+                ],
+            ).fetchall()
+            found = {row["id"] for row in rows}
+            if found != set(allocation_ids):
+                raise LookupError("WEEKLY_ALLOCATION_NOT_FOUND")
+
+            bound: list[str] = []
+            for row in rows:
+                allocation = DayAllocation.model_validate_json(
+                    row["allocation_json"]
+                )
+                if allocation.status in {
+                    AllocationStatus.COMPLETED,
+                    AllocationStatus.CANCELLED,
+                    AllocationStatus.DEFERRED,
+                }:
+                    continue
+                allocation.daily_plan_id = daily_plan_id
+                allocation.status = AllocationStatus.SCHEDULED
+                allocation.updated_at = now
+                connection.execute(
+                    """
+                    UPDATE day_allocations
+                    SET allocation_json = ?, status = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        allocation.model_dump_json(),
+                        allocation.status.value,
+                        timestamp,
+                        allocation.id,
+                    ),
+                )
+                bound.append(allocation.id)
+        return sorted(bound)
 
     @staticmethod
     def _apply_event(
@@ -317,6 +483,7 @@ class WeeklyPlanRepository:
         allocation_row,
         event: CompletionEvent,
         now: datetime,
+        prior_completed_duration: int = 0,
     ) -> None:
         allocation = DayAllocation.model_validate_json(
             allocation_row["allocation_json"]
@@ -327,23 +494,19 @@ class WeeklyPlanRepository:
         }:
             allocation.status = AllocationStatus.DEFERRED
         elif event.completed_duration_min > 0:
-            total_row = connection.execute(
-                """
-                SELECT COALESCE(SUM(
-                    CAST(json_extract(
-                        event_json,
-                        '$.completed_duration_min'
-                    ) AS INTEGER)
-                ), 0) AS total
-                FROM completion_events
-                WHERE allocation_id = ?
-                  AND event_type IN ('completed', 'partial')
-                """,
-                (allocation.id,),
-            ).fetchone()
+            allocation.completed_duration_min = min(
+                (
+                    prior_completed_duration
+                    + event.completed_duration_min
+                ),
+                allocation.allocated_duration_min,
+            )
             allocation.status = (
                 AllocationStatus.COMPLETED
-                if int(total_row["total"]) >= allocation.allocated_duration_min
+                if (
+                    allocation.completed_duration_min
+                    >= allocation.allocated_duration_min
+                )
                 else AllocationStatus.SCHEDULED
             )
         allocation.updated_at = now

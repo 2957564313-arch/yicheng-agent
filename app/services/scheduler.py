@@ -1,16 +1,15 @@
 from __future__ import annotations
 
+import math
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
-import math
-from typing import Iterable
+from itertools import pairwise
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from app.schemas.common import (
     DataSource,
-    Issue,
-    IssueSeverity,
     PlanStatus,
     TaskFlexibility,
 )
@@ -99,7 +98,18 @@ class SchedulerResult:
     missing_route_pairs: list[tuple[str, str]]
 
 
+@dataclass(slots=True)
+class _BeamState:
+    task_items: list[PlanItem]
+    unscheduled_task_ids: list[str]
+    missing_route_pairs: set[tuple[str, str]]
+    soft_cost: float = 0
+
+
 class Scheduler:
+    replan_beam_width = 48
+    replan_candidates_per_task = 36
+
     def schedule(
         self,
         *,
@@ -147,78 +157,70 @@ class Scheduler:
         )
 
         old_starts = self._old_task_starts(context.old_plan)
-
-        for task in movable:
-            has_dependents = any(
-                task.id in candidate.depends_on
-                for candidate in movable
+        if context.old_plan is not None and old_starts:
+            beam_result = self._schedule_minimum_disruption(
+                initial_items=task_items,
+                tasks=movable,
+                preferences=preferences,
+                context=context,
+                old_starts=old_starts,
             )
-            candidates = list(
-                self._candidate_intervals(
-                    task=task,
-                    scheduled=task_items,
-                    preferences=preferences,
-                    context=context,
-                    missing_route_pairs=missing_route_pairs,
+            task_items = beam_result.task_items
+            unscheduled = beam_result.unscheduled_task_ids
+            missing_route_pairs = beam_result.missing_route_pairs
+        else:
+            for task in movable:
+                has_dependents = any(
+                    task.id in candidate.depends_on
+                    for candidate in movable
                 )
-            )
-            if not candidates:
-                unscheduled.append(task.id)
-                continue
+                candidates = list(
+                    self._candidate_intervals(
+                        task=task,
+                        scheduled=task_items,
+                        preferences=preferences,
+                        context=context,
+                        missing_route_pairs=missing_route_pairs,
+                    )
+                )
+                if not candidates:
+                    unscheduled.append(task.id)
+                    continue
 
-            old_start = old_starts.get(task.id)
-            scored = []
-            for start_at, end_at, travel_minutes, preference_penalty in candidates:
-                shift_minutes = (
-                    int(abs((start_at - old_start).total_seconds()) // 60)
-                    if old_start
-                    else 0
-                )
-                scored.append(
+                scored = [
                     (
-                        candidate_cost(
+                        self._candidate_soft_cost(
+                            task=task,
+                            start_at=start_at,
                             travel_minutes=travel_minutes,
                             preference_penalty=preference_penalty,
-                            shift_minutes=shift_minutes,
-                            scheduling_delay_minutes=(
-                                max(
-                                    0,
-                                    int(
-                                        (
-                                            start_at
-                                            - (
-                                                task.earliest_start
-                                                or datetime.combine(
-                                                    context.target_date,
-                                                    context.day_start,
-                                                    context.timezone,
-                                                )
-                                            )
-                                        ).total_seconds()
-                                        // 60
-                                    ),
-                                )
-                                if has_dependents
-                                else 0
-                            ),
+                            old_start=old_starts.get(task.id),
+                            has_dependents=has_dependents,
+                            context=context,
                         ),
                         start_at,
                         end_at,
                     )
+                    for (
+                        start_at,
+                        end_at,
+                        travel_minutes,
+                        preference_penalty,
+                    ) in candidates
+                ]
+                _, start_at, end_at = min(
+                    scored,
+                    key=lambda item: (item[0], item[1]),
                 )
-            _, start_at, end_at = min(
-                scored,
-                key=lambda item: (item[0], item[1]),
-            )
-            task_items.append(
-                self._task_item(
-                    task,
-                    start_at,
-                    end_at,
-                    reason="依据优先级、通勤和可用时间窗安排",
+                task_items.append(
+                    self._task_item(
+                        task,
+                        start_at,
+                        end_at,
+                        reason="依据优先级、通勤和可用时间窗安排",
+                    )
                 )
-            )
-            task_items.sort(key=lambda item: item.start_at)
+                task_items.sort(key=lambda item: item.start_at)
 
         plan_items = self._insert_travel_items(
             task_items,
@@ -250,6 +252,219 @@ class Scheduler:
             plan=plan,
             unscheduled_task_ids=unscheduled,
             missing_route_pairs=sorted(missing_route_pairs),
+        )
+
+    def _schedule_minimum_disruption(
+        self,
+        *,
+        initial_items: list[PlanItem],
+        tasks: list[Task],
+        preferences: UserPreferences,
+        context: PlanningContext,
+        old_starts: dict[str, datetime],
+    ) -> _BeamState:
+        """Bounded global search with a lexicographic replan objective.
+
+        Hard constraints are enforced while candidates are generated.  Among
+        feasible states we first retain task coverage, then minimise the number
+        of moved existing tasks, total shift, and finally travel/preference
+        cost.  This avoids the cascade where moving one task into another
+        task's old slot needlessly moves both.
+        """
+
+        beam = [
+            _BeamState(
+                task_items=list(initial_items),
+                unscheduled_task_ids=[],
+                missing_route_pairs=set(),
+            )
+        ]
+        for task in tasks:
+            expanded: list[_BeamState] = []
+            has_dependents = any(
+                task.id in candidate.depends_on for candidate in tasks
+            )
+            for state in beam:
+                candidate_missing_pairs = set(state.missing_route_pairs)
+                candidates = list(
+                    self._candidate_intervals(
+                        task=task,
+                        scheduled=state.task_items,
+                        preferences=preferences,
+                        context=context,
+                        missing_route_pairs=candidate_missing_pairs,
+                    )
+                )
+                ranked = sorted(
+                    candidates,
+                    key=lambda item: (
+                        self._candidate_soft_cost(
+                            task=task,
+                            start_at=item[0],
+                            travel_minutes=item[2],
+                            preference_penalty=item[3],
+                            old_start=old_starts.get(task.id),
+                            has_dependents=has_dependents,
+                            context=context,
+                        ),
+                        item[0],
+                    ),
+                )[: self.replan_candidates_per_task]
+                if not ranked:
+                    expanded.append(
+                        _BeamState(
+                            task_items=list(state.task_items),
+                            unscheduled_task_ids=[
+                                *state.unscheduled_task_ids,
+                                task.id,
+                            ],
+                            missing_route_pairs=candidate_missing_pairs,
+                            soft_cost=state.soft_cost,
+                        )
+                    )
+                    continue
+
+                for (
+                    start_at,
+                    end_at,
+                    travel_minutes,
+                    preference_penalty,
+                ) in ranked:
+                    item = self._task_item(
+                        task,
+                        start_at,
+                        end_at,
+                        reason=(
+                            "按全局最小扰动目标保留原计划，并同时满足"
+                            "通勤和可用时间窗"
+                        ),
+                    )
+                    child_items = sorted(
+                        [*state.task_items, item],
+                        key=lambda value: value.start_at,
+                    )
+                    expanded.append(
+                        _BeamState(
+                            task_items=child_items,
+                            unscheduled_task_ids=list(
+                                state.unscheduled_task_ids
+                            ),
+                            missing_route_pairs=set(
+                                candidate_missing_pairs
+                            ),
+                            soft_cost=(
+                                state.soft_cost
+                                + self._candidate_soft_cost(
+                                    task=task,
+                                    start_at=start_at,
+                                    travel_minutes=travel_minutes,
+                                    preference_penalty=preference_penalty,
+                                    old_start=old_starts.get(task.id),
+                                    has_dependents=has_dependents,
+                                    context=context,
+                                )
+                            ),
+                        )
+                    )
+
+            deduplicated: dict[tuple, _BeamState] = {}
+            for state in expanded:
+                signature = tuple(
+                    (
+                        item.task_id,
+                        item.start_at,
+                        item.end_at,
+                    )
+                    for item in state.task_items
+                    if item.item_type == "task"
+                )
+                current = deduplicated.get(signature)
+                if current is None or self._beam_score(
+                    state,
+                    old_starts,
+                ) < self._beam_score(current, old_starts):
+                    deduplicated[signature] = state
+            beam = sorted(
+                deduplicated.values(),
+                key=lambda state: self._beam_score(state, old_starts),
+            )[: self.replan_beam_width]
+
+        return min(
+            beam,
+            key=lambda state: self._beam_score(state, old_starts),
+        )
+
+    @staticmethod
+    def _beam_score(
+        state: _BeamState,
+        old_starts: dict[str, datetime],
+    ) -> tuple:
+        shifts = [
+            int(
+                abs(
+                    (
+                        item.start_at - old_starts[item.task_id]
+                    ).total_seconds()
+                )
+                // 60
+            )
+            for item in state.task_items
+            if item.task_id in old_starts
+        ]
+        return (
+            len(state.unscheduled_task_ids),
+            sum(shift > 0 for shift in shifts),
+            sum(shifts),
+            round(state.soft_cost, 6),
+            tuple(
+                (item.task_id or "", item.start_at.isoformat())
+                for item in state.task_items
+                if item.item_type == "task"
+            ),
+        )
+
+    @staticmethod
+    def _candidate_soft_cost(
+        *,
+        task: Task,
+        start_at: datetime,
+        travel_minutes: int,
+        preference_penalty: int,
+        old_start: datetime | None,
+        has_dependents: bool,
+        context: PlanningContext,
+    ) -> float:
+        shift_minutes = (
+            int(abs((start_at - old_start).total_seconds()) // 60)
+            if old_start
+            else 0
+        )
+        scheduling_delay_minutes = (
+            max(
+                0,
+                int(
+                    (
+                        start_at
+                        - (
+                            task.earliest_start
+                            or datetime.combine(
+                                context.target_date,
+                                context.day_start,
+                                context.timezone,
+                            )
+                        )
+                    ).total_seconds()
+                    // 60
+                ),
+            )
+            if has_dependents
+            else 0
+        )
+        return candidate_cost(
+            travel_minutes=travel_minutes,
+            preference_penalty=preference_penalty,
+            shift_minutes=shift_minutes,
+            scheduling_delay_minutes=scheduling_delay_minutes,
         )
 
     @staticmethod
@@ -600,7 +815,7 @@ class Scheduler:
 
     @staticmethod
     def _raise_if_fixed_overlap(items: list[PlanItem]) -> None:
-        for previous, current in zip(items, items[1:]):
+        for previous, current in pairwise(items):
             if current.start_at < previous.end_at:
                 raise ValueError(
                     "fixed tasks overlap: "

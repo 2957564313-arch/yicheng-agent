@@ -22,14 +22,10 @@ def route_after_enrich(state: CampusAgentState) -> str:
 
 
 def route_after_validate(state: CampusAgentState) -> str:
-    has_errors = any(
-        issue.get("severity") == "error"
-        for issue in state.get("validation_issues", [])
-    )
-    if not has_errors:
-        return "respond"
-    if state.get("replan_count", 0) < state.get("max_replans", 2):
-        return "plan"
+    # The planner is deterministic and does not mutate its candidate domain
+    # from validation issues. Re-entering it with the same state would only
+    # reproduce the same invalid plan and waste latency. Return the validator's
+    # precise issues to the user; explicit event replanning rebuilds context.
     return "respond"
 
 

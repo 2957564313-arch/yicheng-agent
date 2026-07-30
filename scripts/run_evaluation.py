@@ -218,7 +218,7 @@ def main() -> None:
         encoding="utf-8",
     )
     markdown = [
-        "# 离线 MVP 评估报告",
+        "# 确定性综合回归评估报告",
         "",
         f"- 总案例：{summary['total']}",
         f"- 通过：{summary['passed']}",

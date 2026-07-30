@@ -11,7 +11,7 @@
 `GET /api/v1/health`
 
 返回数据库、知识库、模型、路线和天气能力的当前状态。外部服务未配置
-不等于应用故障；离线核心可用时，服务仍可正常提供 Demo。
+不等于应用故障；确定性规划核心仍会给出可核验结果或明确的缺失信息。
 
 ## Demo 列表
 
@@ -29,7 +29,8 @@
 - `demo_02_emergency`
 - `demo_03_degraded`
 
-Demo 强制采用离线模式，保证比赛演示不依赖外部网络。
+Demo 使用冻结输入与可审计数据快照保证结果可复现；正式交互默认保持联网，
+按配置调用在线模型、高德路线和天气，不把“离线模式”作为产品卖点。
 
 ## 复位 Demo
 
@@ -50,7 +51,7 @@ Demo 强制采用离线模式，保证比赛演示不依赖外部网络。
   "thread_id": "optional_thread",
   "query": "明天下午自习两个小时，18点前取快递，晚上跑步",
   "old_plan_id": null,
-  "mode": "offline",
+  "mode": "auto",
   "client_context": {
     "current_location_id": null,
     "now": "2026-07-23T12:00:00+08:00"
@@ -60,9 +61,9 @@ Demo 强制采用离线模式，保证比赛演示不依赖外部网络。
 
 `mode`：
 
-- `offline`：只用当前学校已加载或浏览器已缓存的数据，最稳定；
-- `auto`：已配置实时服务时优先调用，否则降级；
+- `auto`：推荐值；已配置实时服务时优先调用，提供者失败时明确降级；
 - `live`：请求实时增强，但提供者失败时仍执行降级逻辑。
+- `offline`：仅保留为开发回归兼容选项，不用于当前比赛产品口径。
 
 响应核心字段：
 
@@ -221,9 +222,57 @@ Demo 强制采用离线模式，保证比赛演示不依赖外部网络。
 
 - `POST /api/v1/weeks/plan`：提交完整结构化周目标；
 - `GET /api/v1/weeks/{week_start}?user_id=...`：读取当前周计划；
+- `POST /api/v1/weeks/{plan_id}/days/{date}/materialize`：把某日周分配
+  结合课表、校历、路线、场馆和天气落成经校验的日计划；
 - `POST /api/v1/weeks/{plan_id}/events`：记录完成、部分完成或延期；
 - `POST /api/v1/weeks/{plan_id}/replan`：按事件最小扰动重排；
-- `GET /api/v1/weeks/{plan_id}/versions`：查看历史版本。
+
+每日落地会在一个数据库事务内完成 Plan、PlanItems 与周分配绑定；并发请求
+返回同一胜出计划。若排程期间分配状态、已完成分钟或时间窗发生变化，返回
+可重试的 `WEEKLY_GROUNDING_SNAPSHOT_CHANGED`（409），不保存过期快照。
+分配响应中的 `completed_duration_min` 是该块累计完成分钟，重排只计算
+`allocated_duration_min - completed_duration_min`。
+- `GET /api/v1/weeks/{week_start}/versions?user_id=...&campus_id=...`：
+  查看指定用户、校区与周起始日的历史版本。
+
+滚动重排请求示例：
+
+```json
+{
+  "trigger_type": "new_task",
+  "capacities": [
+    {
+      "date": "2026-07-27",
+      "windows": [
+        {
+          "start_at": "2026-07-27T18:00:00+08:00",
+          "end_at": "2026-07-27T21:00:00+08:00"
+        }
+      ]
+    }
+  ],
+  "invalidated_allocation_ids": [],
+  "additional_goals": [
+    {
+      "title": "新增答辩提纲",
+      "deadline": "2026-07-27T21:00:00+08:00",
+      "total_duration_min": 60,
+      "min_chunk_min": 60,
+      "max_chunk_min": 60,
+      "splittable": false
+    }
+  ]
+}
+```
+
+若不提供 `capacities` 或 `availability`，接口会按当前个人课表、校历和已启用
+偏好重新计算本周容量。新版本不会覆盖旧版本；`lineage_id` 用于跨版本识别
+同一目标、阶段或分配，`source_allocation_id` 指向直接来源时间块。对已经被
+新版本替代的旧计划再次重排、写入完成事件或执行每日落地都会返回
+`WEEKLY_PLAN_SUPERSEDED`，避免旧版本污染最新状态和并发分叉。
+若重排计算期间同一基线的完成进度发生变化，保存 V2 时返回可重试的
+`WEEKLY_REPLAN_SNAPSHOT_CHANGED`（409）；调用方应读取最新周计划后重试，
+不能原样重复提交旧快照。
 
 ## 错误格式
 

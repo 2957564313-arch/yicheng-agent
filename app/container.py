@@ -1,39 +1,41 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import time
-import json
 from pathlib import Path
 
 from app.config import BASE_DIR, Settings
-from app.providers.campus_rules import CampusRulesRepository
 from app.providers.amap import (
     AmapCampusDiscoveryProvider,
     AmapGeocodingProvider,
     AmapRouteProvider,
     AmapWeatherProvider,
 )
+from app.providers.campus_rules import CampusRulesRepository
 from app.providers.fallback import RouteFallbackService, WeatherFallbackService
 from app.providers.location_repository import LocationRepository
 from app.providers.rag import KnowledgeRepository
 from app.providers.route_static import StaticRouteProvider
 from app.providers.weather_static import StaticWeatherProvider
-from app.repositories.database import Database
 from app.repositories.academic_calendar import AcademicCalendarRepository
+from app.repositories.database import Database
 from app.repositories.memories import MemoryRepository
 from app.repositories.plans import PlanRepository
 from app.repositories.reminders import ReminderSettingsRepository
 from app.repositories.runs import RunRepository
 from app.repositories.timetables import TimetableRepository
 from app.repositories.weekly import WeeklyPlanRepository
-from app.services.llm import OpenAICompatibleLLM
 from app.services.agenda import AgendaService
+from app.services.llm import OpenAICompatibleLLM
 from app.services.replanner import Replanner
 from app.services.requirement_parser import RuleBasedRequirementParser
 from app.services.scheduler import Scheduler
 from app.services.validator import PlanValidator
 from app.services.weekly_allocator import WeeklyAllocator
 from app.services.weekly_capacity import WeeklyCapacityBuilder
+from app.services.weekly_grounding import WeeklyGroundingService
+from app.services.weekly_replanner import WeeklyReplanner
 
 
 @dataclass(slots=True)
@@ -60,6 +62,8 @@ class AppContainer:
     validator: PlanValidator
     weekly_allocator: WeeklyAllocator
     weekly_capacity: WeeklyCapacityBuilder
+    weekly_grounding: WeeklyGroundingService
+    weekly_replanner: WeeklyReplanner
     agenda: AgendaService
     parser: RuleBasedRequirementParser
     llm: OpenAICompatibleLLM
@@ -105,6 +109,8 @@ def build_container(settings: Settings) -> AppContainer:
     campus_profile = _load_campus_profile(settings.app_data_dir)
     amap_profile = _profile_amap_settings(campus_profile)
     scheduler = Scheduler()
+    validator = PlanValidator()
+    weekly_allocator = WeeklyAllocator()
     static_routes = StaticRouteProvider(
         settings.app_data_dir / "travel_times.json",
         locations,
@@ -177,6 +183,39 @@ def build_container(settings: Settings) -> AppContainer:
         class_periods=class_periods,
         timezone_name=settings.app_timezone,
     )
+    weekly_plans = WeeklyPlanRepository(database)
+    weekly_capacity = WeeklyCapacityBuilder(
+        timetables=timetables,
+        memories=memories,
+        academic_calendar=academic_calendar,
+        class_periods=class_periods,
+    )
+    weekly_grounding = WeeklyGroundingService(
+        settings=settings,
+        campus_profile=campus_profile,
+        plans=plans,
+        weekly_plans=weekly_plans,
+        timetables=timetables,
+        academic_calendar=academic_calendar,
+        locations=locations,
+        routes=RouteFallbackService(
+            static=static_routes,
+            live=live_routes,
+        ),
+        weather=WeatherFallbackService(
+            static=static_weather,
+            live=live_weather,
+        ),
+        rules=CampusRulesRepository(
+            settings.app_data_dir / "opening_hours.json",
+            settings.app_data_dir / "campus_rules.json",
+            settings.app_data_dir / "class_periods.json",
+            settings.app_timezone,
+        ),
+        scheduler=scheduler,
+        validator=validator,
+        class_periods=class_periods,
+    )
     return AppContainer(
         settings=settings,
         campus_profile=campus_profile,
@@ -186,7 +225,7 @@ def build_container(settings: Settings) -> AppContainer:
         memories=memories,
         timetables=timetables,
         academic_calendar=academic_calendar,
-        weekly_plans=WeeklyPlanRepository(database),
+        weekly_plans=weekly_plans,
         runs=RunRepository(database),
         locations=locations,
         geocoder=geocoder,
@@ -202,31 +241,17 @@ def build_container(settings: Settings) -> AppContainer:
             if settings.live_route_enabled and settings.route_api_key
             else None
         ),
-        routes=RouteFallbackService(
-            static=static_routes,
-            live=live_routes,
-        ),
-        weather=WeatherFallbackService(
-            static=static_weather,
-            live=live_weather,
-        ),
-        rules=CampusRulesRepository(
-            settings.app_data_dir / "opening_hours.json",
-            settings.app_data_dir / "campus_rules.json",
-            settings.app_data_dir / "class_periods.json",
-            settings.app_timezone,
-        ),
+        routes=weekly_grounding.routes,
+        weather=weekly_grounding.weather,
+        rules=weekly_grounding.rules,
         rag=KnowledgeRepository(settings.app_data_dir / "knowledge"),
         scheduler=scheduler,
         replanner=Replanner(scheduler),
-        validator=PlanValidator(),
-        weekly_allocator=WeeklyAllocator(),
-        weekly_capacity=WeeklyCapacityBuilder(
-            timetables=timetables,
-            memories=memories,
-            academic_calendar=academic_calendar,
-            class_periods=class_periods,
-        ),
+        validator=validator,
+        weekly_allocator=weekly_allocator,
+        weekly_capacity=weekly_capacity,
+        weekly_grounding=weekly_grounding,
+        weekly_replanner=WeeklyReplanner(weekly_allocator),
         agenda=agenda,
         parser=RuleBasedRequirementParser(
             settings.app_timezone,

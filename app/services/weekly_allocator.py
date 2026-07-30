@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from itertools import pairwise
 from math import sqrt
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -128,7 +129,14 @@ class WeeklyAllocator:
                 )
                 if stage_allocations:
                     stage_finish[stage.id] = max(
-                        item.latest_end for item in stage_allocations
+                        item.preferred_end_at
+                        or (
+                            item.earliest_start
+                            + timedelta(
+                                minutes=item.allocated_duration_min
+                            )
+                        )
+                        for item in stage_allocations
                     )
                 else:
                     stage_finish[stage.id] = dependency_ready
@@ -259,6 +267,7 @@ class WeeklyAllocator:
             stages.append(
                 GoalStage(
                     id=aliases[alias],
+                    lineage_id=aliases[alias],
                     goal_id=goal_id,
                     title=stage.title,
                     sequence=stage.sequence or index,
@@ -279,6 +288,7 @@ class WeeklyAllocator:
             )
         return WeeklyGoal(
             id=goal_id,
+            lineage_id=goal_id,
             user_id=user_id,
             campus_id=campus_id,
             week_start=week_start,
@@ -388,7 +398,7 @@ class WeeklyAllocator:
             ],
             end_at,
         ]
-        return list(zip(points, points[1:]))
+        return list(pairwise(points))
 
     def _allocate_stage(
         self,
@@ -491,8 +501,10 @@ class WeeklyAllocator:
                 1.0,
                 (goal.deadline - start_at).total_seconds() / 3600,
             )
+            allocation_id = f"day_allocation_{uuid4().hex}"
             allocation = DayAllocation(
-                id=f"day_allocation_{uuid4().hex}",
+                id=allocation_id,
+                lineage_id=allocation_id,
                 weekly_plan_id=plan_id,
                 date=start_at.date(),
                 goal_id=goal.id,
@@ -500,6 +512,10 @@ class WeeklyAllocator:
                 allocated_duration_min=chunk,
                 earliest_start=start_at,
                 latest_end=allocation_end,
+                window_start_at=start_at,
+                window_end_at=end_at,
+                preferred_start_at=start_at,
+                preferred_end_at=allocation_end,
                 preferred_period=self._period_for(start_at),
                 location_id=(
                     stage.preferred_location
