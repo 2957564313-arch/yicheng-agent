@@ -8,7 +8,7 @@
       content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
     <title>易程智策 · 我的校园日程</title>
-    <link rel="stylesheet" href="/styles.css?v=20260725-14" />
+    <link rel="stylesheet" href="/styles.css?v=20260802-16" />
   </head>
   <body>
     <section id="access-gate" class="access-gate" hidden>
@@ -93,6 +93,24 @@
               <button id="history-close" class="icon-button mobile-only" type="button" aria-label="关闭历史">×</button>
             </div>
           </div>
+          <nav class="workspace-nav" aria-label="工作区页面">
+            <p class="workspace-nav-label">工作区</p>
+            <button type="button" class="workspace-nav-button active" data-view="chat">
+              <span class="nav-icon">⌁</span><span>对话</span><small>随时规划与调整</small>
+            </button>
+            <button type="button" class="workspace-nav-button" data-view="schedule">
+              <span class="nav-icon">▦</span><span>日程</span><small>日 · 周 · 月</small>
+            </button>
+            <button type="button" class="workspace-nav-button" data-view="timetable">
+              <span class="nav-icon">▤</span><span>我的课表</span><small>导入与校历</small>
+            </button>
+            <button type="button" class="workspace-nav-button" data-view="preferences">
+              <span class="nav-icon">♡</span><span>偏好</span><small>让安排越来越懂你</small>
+            </button>
+            <button type="button" class="workspace-nav-button" data-view="backup">
+              <span class="nav-icon">⇩</span><span>备份</span><small>换设备也不丢数据</small>
+            </button>
+          </nav>
           <div class="history-section-label">最近使用</div>
           <div id="history-list" class="history-list"></div>
           <p id="history-empty" class="history-empty">还没有对话。先告诉我今天要完成什么。</p>
@@ -102,7 +120,7 @@
           </div>
         </aside>
 
-        <section class="column response-column">
+        <section class="column response-column composer-column">
           <article class="panel composer-panel">
             <div class="panel-heading">
               <div>
@@ -127,9 +145,9 @@
 
           <nav class="quick-access" aria-label="快捷入口">
             <span class="quick-access-label">快速查看</span>
-            <button type="button" data-scroll-target="agenda-panel">今日安排</button>
-            <button type="button" data-scroll-target="weekly-panel">本周计划</button>
-            <button type="button" data-tool-target="timetable-panel">我的课表</button>
+            <button type="button" data-view="schedule">日程总览</button>
+            <button type="button" data-view="timetable">我的课表</button>
+            <button type="button" data-view="preferences">偏好设置</button>
           </nav>
 
         </section>
@@ -402,7 +420,7 @@
           </article>
         </aside>
 
-        <section class="column response-column">
+        <section class="column response-column content-column">
           <article class="panel assistant-panel">
             <div class="panel-heading">
               <div class="assistant-identity">
@@ -419,6 +437,33 @@
             </div>
             <div id="assistant-actions" class="assistant-actions"></div>
             <div id="freshness" class="source-tags"></div>
+          </article>
+
+          <article id="schedule-panel" class="panel schedule-panel" hidden>
+            <div class="schedule-heading">
+              <div>
+                <p class="step">日程总览</p>
+                <h2>一眼看清今天、这一周和整个月</h2>
+                <p class="schedule-caption">安排按时间顺序呈现，课程、任务、通勤和提醒各有颜色。</p>
+              </div>
+              <span id="schedule-state" class="campus-state">正在读取</span>
+            </div>
+            <div class="schedule-toolbar">
+              <div class="schedule-tabs" role="tablist" aria-label="日程视图">
+                <button type="button" class="schedule-tab active" data-schedule-view="day" role="tab" aria-selected="true">今天</button>
+                <button type="button" class="schedule-tab" data-schedule-view="week" role="tab" aria-selected="false">本周</button>
+                <button type="button" class="schedule-tab" data-schedule-view="month" role="tab" aria-selected="false">本月</button>
+              </div>
+              <div class="schedule-date-actions">
+                <button id="schedule-prev" type="button" class="icon-button" aria-label="上一个时间段">‹</button>
+                <button id="schedule-today" type="button" class="date-chip">回到今天</button>
+                <button id="schedule-next" type="button" class="icon-button" aria-label="下一个时间段">›</button>
+              </div>
+            </div>
+            <div id="schedule-period-label" class="schedule-period-label"></div>
+            <section id="schedule-day-view" class="schedule-view-content" aria-label="今日时间轴"></section>
+            <section id="schedule-week-view" class="schedule-view-content" aria-label="本周安排" hidden></section>
+            <section id="schedule-month-view" class="schedule-view-content" aria-label="本月安排" hidden></section>
           </article>
 
           <article class="panel agenda-panel">

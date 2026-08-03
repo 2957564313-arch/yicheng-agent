@@ -106,6 +106,29 @@ const toolsSidebar = $("#tools-sidebar");
 const toolsToggle = $("#tools-toggle");
 const toolsClose = $("#tools-close");
 const drawerBackdrop = $("#drawer-backdrop");
+const workspace = $(".workspace");
+const composerColumn = $(".composer-column");
+const contentColumn = $(".content-column");
+const composerPanel = $(".composer-panel");
+const assistantPanel = $(".assistant-panel");
+const schedulePanel = $("#schedule-panel");
+const scheduleState = $("#schedule-state");
+const schedulePeriodLabel = $("#schedule-period-label");
+const scheduleDayView = $("#schedule-day-view");
+const scheduleWeekView = $("#schedule-week-view");
+const scheduleMonthView = $("#schedule-month-view");
+const schedulePrev = $("#schedule-prev");
+const scheduleToday = $("#schedule-today");
+const scheduleNext = $("#schedule-next");
+const scheduleTabs = document.querySelectorAll("[data-schedule-view]");
+const viewButtons = document.querySelectorAll("[data-view]");
+const visualGrid = $(".visual-grid");
+const weeklyPanel = $(".weekly-panel");
+const agendaPanel = $(".agenda-panel");
+let activeWorkspaceView = "chat";
+let scheduleViewMode = "day";
+let scheduleCursorDate = null;
+let lastAgendaData = null;
 const consoleUserId = getOrCreateLocalIdentity(
   "yicheng_user_id",
   "visitor",
@@ -175,6 +198,173 @@ function recordConversationHistory(query, answerText) {
   renderConversationHistory();
 }
 
+function moveToolPanelsIntoWorkspace() {
+  if (!contentColumn) return;
+  [".timetable-panel", ".memory-panel", ".backup-panel", ".execution-panel"]
+    .map((selector) => document.querySelector(selector))
+    .filter(Boolean)
+    .forEach((panel) => {
+      if (panel.parentElement !== contentColumn) contentColumn.append(panel);
+    });
+}
+
+function setPanelHidden(panel, hidden) {
+  if (panel) panel.hidden = hidden;
+}
+
+function setActiveWorkspaceView(view = "chat") {
+  const supported = new Set([
+    "chat", "schedule", "timetable", "preferences", "backup", "weekly-planner",
+  ]);
+  activeWorkspaceView = supported.has(view) ? view : "chat";
+  workspace?.setAttribute("data-active-view", activeWorkspaceView);
+  viewButtons.forEach((button) => {
+    const active = button.dataset.view === activeWorkspaceView
+      || (activeWorkspaceView === "schedule" && button.dataset.view === "schedule");
+    button.classList.toggle("active", active);
+    if (button.dataset.view) button.setAttribute("aria-current", active ? "page" : "false");
+  });
+
+  const isChat = activeWorkspaceView === "chat";
+  const isSchedule = activeWorkspaceView === "schedule";
+  const isWeeklyPlanner = activeWorkspaceView === "weekly-planner";
+  const isToolPage = ["timetable", "preferences", "backup"].includes(activeWorkspaceView);
+
+  setPanelHidden(composerPanel, !isChat);
+  setPanelHidden(assistantPanel, !isChat);
+  setPanelHidden(visualGrid, !isChat);
+  setPanelHidden(document.querySelector(".adjustment-panel"), !isChat);
+  setPanelHidden(schedulePanel, !isSchedule);
+  setPanelHidden(agendaPanel, true);
+  setPanelHidden(weeklyPanel, !isWeeklyPlanner);
+  setPanelHidden(document.querySelector(".timetable-panel"), activeWorkspaceView !== "timetable");
+  setPanelHidden(document.querySelector(".memory-panel"), activeWorkspaceView !== "preferences");
+  setPanelHidden(document.querySelector(".backup-panel"), activeWorkspaceView !== "backup");
+  setPanelHidden(document.querySelector(".execution-panel"), true);
+  if (isSchedule) renderScheduleViews();
+  if (isToolPage) closeDrawers();
+}
+
+function scheduleDateValue(rawDate) {
+  const [year, month, day] = String(rawDate).split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12));
+}
+
+function scheduleDateString(value) {
+  return value.toISOString().slice(0, 10);
+}
+
+function scheduleShift(rawDate, offset, unit = "day") {
+  const value = scheduleDateValue(rawDate);
+  if (unit === "month") value.setUTCMonth(value.getUTCMonth() + offset);
+  else value.setUTCDate(value.getUTCDate() + offset);
+  return scheduleDateString(value);
+}
+
+function scheduleWeekStart(rawDate) {
+  const value = scheduleDateValue(rawDate);
+  const day = value.getUTCDay() || 7;
+  value.setUTCDate(value.getUTCDate() - day + 1);
+  return scheduleDateString(value);
+}
+
+function scheduleMonthStart(rawDate) {
+  const value = scheduleDateValue(rawDate);
+  value.setUTCDate(1);
+  return scheduleDateString(value);
+}
+
+function scheduleMonthEnd(rawDate) {
+  const value = scheduleDateValue(rawDate);
+  value.setUTCMonth(value.getUTCMonth() + 1, 0);
+  return scheduleDateString(value);
+}
+
+function scheduleItemsByDate() {
+  return (lastAgendaData?.items || []).reduce((result, item) => {
+    const date = agendaItemDate(item);
+    (result[date] ||= []).push(item);
+    return result;
+  }, {});
+}
+
+function scheduleItemMarkup(item, compact = false) {
+  return `
+    <article class="schedule-event ${escapeHtml(item.kind || "task")}" title="${escapeHtml(item.title || "日程")}">
+      <time>${escapeHtml(timePart(item.start_at))}${compact ? "" : ` — ${escapeHtml(timePart(item.end_at))}`}</time>
+      <div><strong>${escapeHtml(item.title || "未命名安排")}</strong>${compact ? "" : `<small>${escapeHtml(item.location_name || (item.kind === "travel" ? "通勤时间" : "个人安排"))}</small>`}</div>
+    </article>`;
+}
+
+function renderScheduleViews() {
+  if (!schedulePanel || !scheduleCursorDate) return;
+  const byDate = scheduleItemsByDate();
+  const selected = scheduleCursorDate;
+  const dayItems = (byDate[selected] || []).sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
+  const today = shanghaiDateString();
+  const startOfWeek = scheduleWeekStart(selected);
+  const monthStart = scheduleMonthStart(selected);
+  const monthEnd = scheduleMonthEnd(selected);
+  const monthFirst = scheduleDateValue(monthStart);
+  const firstWeekday = monthFirst.getUTCDay() || 7;
+  const daysInMonth = Number(monthEnd.slice(-2));
+
+  if (scheduleViewMode === "day") {
+    schedulePeriodLabel.textContent = selected === today ? "今天" : `${selected.slice(5).replace("-", "月")}日`;
+    scheduleDayView.innerHTML = dayItems.length
+      ? `<div class="schedule-day-timeline">${dayItems.map((item) => scheduleItemMarkup(item)).join("")}</div>`
+      : `<div class="schedule-empty"><strong>今天还没有固定安排</strong><span>可以在对话中告诉我想完成什么，或把时间留给休息和临时变化。</span></div>`;
+  }
+  if (scheduleViewMode === "week") {
+    const weekDates = Array.from({ length: 7 }, (_, index) => addWeeklyDays(startOfWeek, index));
+    schedulePeriodLabel.textContent = `${startOfWeek.slice(5).replace("-", "月")}日 — ${weekDates[6].slice(5).replace("-", "月")}日`;
+    scheduleWeekView.innerHTML = `<div class="schedule-week-grid">${weekDates.map((date) => {
+      const items = (byDate[date] || []).sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
+      const dateValue = scheduleDateValue(date);
+      const weekday = "一二三四五六日"[dateValue.getUTCDay() === 0 ? 6 : dateValue.getUTCDay() - 1];
+      return `<section class="schedule-week-day ${date === today ? "is-today" : ""}">
+        <header><span>周${weekday}</span><strong>${date.slice(8)}<small>日</small></strong><em>${items.length ? `${items.length}项` : "空闲"}</em></header>
+        <div>${items.length ? items.map((item) => scheduleItemMarkup(item, true)).join("") : `<p class="schedule-empty-mini">留作弹性时间</p>`}</div>
+      </section>`;
+    }).join("")}</div>`;
+  }
+  if (scheduleViewMode === "month") {
+    const monthLabel = new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "long" }).format(scheduleDateValue(selected));
+    schedulePeriodLabel.textContent = monthLabel;
+    const cells = [];
+    for (let index = 1; index < firstWeekday; index += 1) cells.push(`<div class="schedule-month-cell is-muted"></div>`);
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = `${monthStart.slice(0, 8)}${String(day).padStart(2, "0")}`;
+      const items = byDate[date] || [];
+      cells.push(`<button type="button" class="schedule-month-cell ${date === today ? "is-today" : ""} ${date === selected ? "is-selected" : ""}" data-schedule-date="${date}">
+        <span>${day}</span><small>${items.length ? `${items.length}项` : ""}</small><i>${items.slice(0, 3).map((item) => `<b class="${escapeHtml(item.kind || "task")}"></b>`).join("")}</i>
+      </button>`);
+    }
+    scheduleMonthView.innerHTML = `<div class="schedule-month-weekdays">${"一二三四五六日".split("").map((day) => `<span>周${day}</span>`).join("")}</div><div class="schedule-month-grid">${cells.join("")}</div>`;
+    scheduleMonthView.querySelectorAll("[data-schedule-date]").forEach((button) => {
+      button.addEventListener("click", () => {
+        scheduleCursorDate = button.dataset.scheduleDate;
+        scheduleViewMode = "day";
+        updateScheduleTabs();
+        loadAgenda(scheduleCursorDate).catch((error) => renderDebug(error));
+      });
+    });
+  }
+  [scheduleDayView, scheduleWeekView, scheduleMonthView].forEach((panel) => {
+    if (panel) panel.hidden = !panel.id.endsWith(`${scheduleViewMode}-view`);
+  });
+  if (scheduleState) scheduleState.textContent = `${dayItems.length} 项安排`;
+}
+
+function updateScheduleTabs() {
+  scheduleTabs.forEach((button) => {
+    const active = button.dataset.scheduleView === scheduleViewMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  renderScheduleViews();
+}
+
 function closeDrawers() {
   historySidebar?.classList.remove("mobile-open");
   toolsSidebar?.classList.remove("mobile-open");
@@ -202,6 +392,7 @@ function openDrawer(sidebar, toggle) {
 }
 
 function initializeWorkspaceNavigation() {
+  moveToolPanelsIntoWorkspace();
   historyToggle?.addEventListener("click", () => openDrawer(historySidebar, historyToggle));
   toolsToggle?.addEventListener("click", () => openDrawer(toolsSidebar, toolsToggle));
   historyClose?.addEventListener("click", closeDrawers);
@@ -226,6 +417,62 @@ function initializeWorkspaceNavigation() {
     queryInput.focus();
   });
 
+  viewButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setActiveWorkspaceView(button.dataset.view);
+      if (button.dataset.view === "schedule" && !scheduleCursorDate) {
+        scheduleCursorDate = agendaDate?.value || shanghaiDateString();
+        loadAgenda(scheduleCursorDate).catch((error) => renderDebug(error));
+      }
+      if (window.matchMedia("(max-width: 900px)").matches) closeDrawers();
+    });
+  });
+
+  scheduleTabs.forEach((button) => {
+    button.addEventListener("click", () => {
+      scheduleViewMode = button.dataset.scheduleView || "day";
+      updateScheduleTabs();
+      if (!scheduleCursorDate) scheduleCursorDate = agendaDate?.value || shanghaiDateString();
+      const rangeStart = scheduleViewMode === "month"
+        ? scheduleMonthStart(scheduleCursorDate)
+        : scheduleViewMode === "week"
+          ? scheduleWeekStart(scheduleCursorDate)
+          : scheduleCursorDate;
+      const rangeEnd = scheduleViewMode === "month"
+        ? scheduleMonthEnd(scheduleCursorDate)
+        : addWeeklyDays(rangeStart, 6);
+      loadAgendaRange(rangeStart, rangeEnd).catch((error) => renderDebug(error));
+    });
+  });
+  schedulePrev?.addEventListener("click", () => {
+    if (!scheduleCursorDate) scheduleCursorDate = agendaDate?.value || shanghaiDateString();
+    scheduleCursorDate = scheduleShift(
+      scheduleCursorDate,
+      scheduleViewMode === "month" ? -1 : scheduleViewMode === "week" ? -7 : -1,
+      scheduleViewMode === "month" ? "month" : "day",
+    );
+    const start = scheduleViewMode === "month" ? scheduleMonthStart(scheduleCursorDate) : scheduleViewMode === "week" ? scheduleWeekStart(scheduleCursorDate) : scheduleCursorDate;
+    const end = scheduleViewMode === "month" ? scheduleMonthEnd(scheduleCursorDate) : addWeeklyDays(start, 6);
+    loadAgendaRange(start, end).catch((error) => renderDebug(error));
+  });
+  scheduleNext?.addEventListener("click", () => {
+    if (!scheduleCursorDate) scheduleCursorDate = agendaDate?.value || shanghaiDateString();
+    scheduleCursorDate = scheduleShift(
+      scheduleCursorDate,
+      scheduleViewMode === "month" ? 1 : scheduleViewMode === "week" ? 7 : 1,
+      scheduleViewMode === "month" ? "month" : "day",
+    );
+    const start = scheduleViewMode === "month" ? scheduleMonthStart(scheduleCursorDate) : scheduleViewMode === "week" ? scheduleWeekStart(scheduleCursorDate) : scheduleCursorDate;
+    const end = scheduleViewMode === "month" ? scheduleMonthEnd(scheduleCursorDate) : addWeeklyDays(start, 6);
+    loadAgendaRange(start, end).catch((error) => renderDebug(error));
+  });
+  scheduleToday?.addEventListener("click", () => {
+    scheduleCursorDate = shanghaiDateString();
+    const start = scheduleViewMode === "month" ? scheduleMonthStart(scheduleCursorDate) : scheduleViewMode === "week" ? scheduleWeekStart(scheduleCursorDate) : scheduleCursorDate;
+    const end = scheduleViewMode === "month" ? scheduleMonthEnd(scheduleCursorDate) : addWeeklyDays(start, 6);
+    loadAgendaRange(start, end).catch((error) => renderDebug(error));
+  });
+
   document.querySelectorAll("[data-scroll-target]").forEach((button) => {
     button.addEventListener("click", () => {
       const target = document.querySelector(`.${button.dataset.scrollTarget}`);
@@ -243,6 +490,7 @@ function initializeWorkspaceNavigation() {
       if (open) target.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
+  setActiveWorkspaceView("chat");
 }
 
 function memoryBackupItems(items) {
@@ -1437,10 +1685,10 @@ function renderAgenda(data, selectedDate) {
   });
 }
 
-async function loadAgenda(selectedDate = shanghaiDateString()) {
+async function loadAgendaRange(startDate, endDate) {
+  const selectedDate = startDate;
   agendaDate.value = selectedDate;
   agendaState.textContent = "正在汇总";
-  const endDate = addWeeklyDays(selectedDate, 6);
   const response = await fetch(
     `/api/v1/users/${consoleUserId}/agenda/contextual`
       + `?start_date=${encodeURIComponent(selectedDate)}`
@@ -1453,8 +1701,15 @@ async function loadAgenda(selectedDate = shanghaiDateString()) {
   );
   const data = await response.json();
   if (!response.ok) throw data;
+  lastAgendaData = data;
   renderAgenda(data, selectedDate);
+  if (!scheduleCursorDate) scheduleCursorDate = selectedDate;
+  if (activeWorkspaceView === "schedule") renderScheduleViews();
   return data;
+}
+
+async function loadAgenda(selectedDate = shanghaiDateString()) {
+  return loadAgendaRange(selectedDate, addWeeklyDays(selectedDate, 6));
 }
 
 function renderReminderSettings(payload) {
@@ -1615,7 +1870,8 @@ function startReminderPolling() {
 }
 
 agendaToday.addEventListener("click", () => {
-  loadAgenda(shanghaiDateString()).catch((error) => renderDebug(error));
+  scheduleCursorDate = shanghaiDateString();
+  loadAgenda(scheduleCursorDate).catch((error) => renderDebug(error));
 });
 
 agendaRefresh.addEventListener("click", () => {
@@ -1625,6 +1881,7 @@ agendaRefresh.addEventListener("click", () => {
 
 agendaDate.addEventListener("change", () => {
   if (!agendaDate.value) return;
+  scheduleCursorDate = agendaDate.value;
   loadAgenda(agendaDate.value).catch((error) => renderDebug(error));
 });
 
@@ -2652,6 +2909,7 @@ async function initializeApp() {
   const accessGranted = await initializeAccess();
   if (!accessGranted) return;
   agendaDate.value = shanghaiDateString();
+  scheduleCursorDate = agendaDate.value;
   weeklyStart.value = nextWeeklyMonday();
   serviceWorkerRegistration().catch(() => {});
   loadReminderSettings().catch((error) => {
