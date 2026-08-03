@@ -874,17 +874,24 @@ def _merge_task_constraints(
             if use_rule_location
             else model_task.location_raw
         ),
-        "earliest_start": _later_datetime(
-            model_task.earliest_start,
-            rule_task.earliest_start,
+        # Explicit time anchors from the deterministic parser are hard user
+        # constraints. The model may infer a preference (for example,
+        # interpreting “18点前结束” as an 18:00 start), but that inference
+        # must not override an explicit “14点以后” boundary.
+        "earliest_start": (
+            rule_task.earliest_start
+            if rule_task.earliest_start is not None
+            else model_task.earliest_start
         ),
-        "latest_end": _earlier_datetime(
-            model_task.latest_end,
-            rule_task.latest_end,
+        "latest_end": (
+            rule_task.latest_end
+            if rule_task.latest_end is not None
+            else model_task.latest_end
         ),
-        "deadline": _earlier_datetime(
-            model_task.deadline,
-            rule_task.deadline,
+        "deadline": (
+            rule_task.deadline
+            if rule_task.deadline is not None
+            else model_task.deadline
         ),
         "importance": max(model_task.importance, rule_task.importance),
         "depends_on": list(
