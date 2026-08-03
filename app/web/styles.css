@@ -2021,6 +2021,17 @@ h2 { font-family: "PingFang SC", "Noto Sans SC", system-ui, sans-serif; }
 .quick-access button:hover, .quick-access button:focus-visible { border-color: #818cf8; color: #3730a3; background: #eef2ff; }
 
 .assistant-panel .answer { border-color: #e7e8f2; box-shadow: 0 8px 22px rgba(30,41,59,.04); }
+.conversation-stream { display: grid; gap: 16px; padding: 4px 2px; }
+.conversation-stream[hidden] { display: none; }
+.conversation-message { display: flex; align-items: flex-start; gap: 10px; width: min(88%, 760px); }
+.conversation-message.user-message { flex-direction: row-reverse; justify-self: end; width: min(82%, 700px); }
+.message-avatar { display: grid; flex: 0 0 32px; width: 32px; height: 32px; place-items: center; border-radius: 11px; color: #fff; background: #4f46e5; font-size: 12px; font-weight: 800; }
+.user-message .message-avatar { background: #c2415a; }
+.message-body { min-width: 0; }
+.message-role { margin: 0 0 5px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.user-message .message-role { text-align: right; }
+.message-content { padding: 13px 15px; border: 1px solid #e7e8f2; border-radius: 5px 16px 16px 16px; background: #fff; box-shadow: 0 6px 18px rgba(30,41,59,.04); line-height: 1.72; overflow-wrap: anywhere; white-space: pre-wrap; }
+.user-message .message-content { border-color: #dfe2ff; border-radius: 16px 5px 16px 16px; background: #eef2ff; }
 .content-column .tool-collapsible:not(.is-open) > *:not(.panel-heading) { display: block; }
 .content-column .tool-collapsible:not(.is-open) { padding: 20px; }
 .content-column .tool-collapsible:not(.is-open) .panel-heading { margin-bottom: 16px; cursor: default; }
@@ -2094,6 +2105,8 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
   .schedule-month-cell { min-height: 58px; padding: 6px; }
   .schedule-month-cell.is-muted { min-height: 58px; }
   .workspace-nav-button { grid-template-columns: 24px minmax(0,1fr) auto; padding: 11px 10px; }
+  .conversation-message,
+  .conversation-message.user-message { width: min(94%, 700px); }
 }
 
 /* Desktop keeps one quiet navigation rail and one focused work surface. */
