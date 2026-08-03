@@ -33,8 +33,8 @@
 - 个人数据迁移：一键备份和恢复课表、长期记忆、校历调整、提醒设置、
   当前计划及个性化习惯，不导出密码、登录凭证或 API 密钥；
 - 公网个人上下文：日程汇总、到点提醒和系统日历导出会携带当前浏览器的
-  课表、记忆、校历、提醒设置与计划快照；即使连续请求落到不同的 Vercel
-  临时实例，也不会因为实例切换漏掉个人数据；
+  课表、记忆、校历、提醒设置与计划快照；正式公网运行使用 ECS 持久化 SQLite，
+  不依赖临时实例文件系统；
 - 测试入口保护：可选固定测试账号登录，高成本接口使用短期签名凭证；
 - 周规划自然语言入口：可直接描述多个目标、总时长、阶段依赖、重复次数、
   截止时间、偏好时段和地点；信息不够时先追问；
@@ -55,18 +55,75 @@
 - 连续状态场景：15/15 通过；
 - 产品级公网旅程：8/8 通过；
 - 三个固定 Demo：全部通过；
-- 运行范围：本地版本与 Vercel 公网版本均可直接运行。
+- 运行范围：本地 D 盘开发环境与 `yichengapp.top` ECS 公网版本均可直接运行。
 
-公网测试入口：<https://yicheng-agent.vercel.app/>
+当前公网入口：<https://yichengapp.top/>
+
+公网健康检查：<https://yichengapp.top/api/v1/health>
 
 入口二维码：
 
 ![易程智策公网入口二维码](app/web/assets/yicheng-public-entry.png)
 
-当前 Vercel 版本用于跨网络体验和比赛测试。个人课表、记忆、提醒设置会在
-浏览器本机保留快照，每次长期日程请求都会使用该快照重建当前执行上下文，
-并可导出个人数据包迁移到新设备；正式长期运营前仍需迁移到具备持久化
-数据库的国内服务器。
+当前公网由 Cloudflare 代理域名流量，ECS 上的 Caddy 负责 HTTPS，
+systemd 运行单实例 FastAPI，`/srv/yicheng-agent/runtime/` 保存 SQLite
+数据。`www.yichengapp.top` 会永久重定向到根域名；生产代码只跟踪 GitHub
+`main` 分支，旧 Vercel 地址不再作为项目入口。
+
+## 公网部署
+
+公网部署链路如下：
+
+```text
+Cloudflare DNS/代理
+        ↓
+Caddy HTTPS（yichengapp.top）
+        ↓
+systemd yicheng-agent（127.0.0.1:8000）
+        ↓
+FastAPI + SQLite + 校园知识库
+```
+
+服务器上的部署脚本会拉取并部署最新 `origin/main`，保留 `.env` 和
+`runtime/` 数据：
+
+```powershell
+ssh -i 'D:\key\yicheng-ecs-2026.pem' `
+  ecs-user@120.26.65.5 "sudo /usr/local/sbin/yicheng-deploy"
+```
+
+发布前至少检查：
+
+1. 本地测试通过；
+2. PR 已合并到 `main`；
+3. 服务器健康检查返回 `status: ok`；
+4. 生产首页、三个固定 Demo 和登录流程可用。
+
+## 协作开发
+
+GitHub 仓库：<https://github.com/2957564313-arch/yicheng-agent>
+
+生产环境只部署 `main`，协作者不要直接提交 `main`。推荐流程：
+
+1. 从最新 `main` 创建分支：`feat/<功能>`、`fix/<问题>` 或 `docs/<文档>`；
+2. 在自己的分支开发并运行最小验收；
+3. 推送分支，提交 Pull Request，写清变更、测试结果和风险；
+4. 通过审查后合并到 `main`；
+5. 合并后由维护者执行上面的 ECS 部署命令并做公网验收。
+
+协作者首次配置：
+
+```powershell
+git clone https://github.com/2957564313-arch/yicheng-agent.git
+cd yicheng-agent
+$env:UV_CACHE_DIR = 'D:\APP\Dev\Python\uv-cache'
+$env:UV_PROJECT_ENVIRONMENT = 'D:\APP\Dev\Python\envs\yicheng-agent'
+uv sync
+```
+
+`.env`、`runtime/*.db`、API Key、测试密码和服务器私钥禁止提交。需要加入
+协作的人，在 GitHub 仓库 `Settings → Collaborators` 中添加为协作者；
+生产服务器的 SSH 部署密钥只保存在服务器和仓库 Deploy keys 中，不发给普通协作者。
 
 ## 本地启动
 
