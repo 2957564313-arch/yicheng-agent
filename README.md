@@ -1,242 +1,61 @@
 # 易程智策
 
-面向大学生学习生活的校园时空规划智能体。
+面向大学生的校园日程助手。输入课程、学习、出行、取件或运动安排后，系统会整理成可执行的计划，并支持课表、提醒、偏好和日/周/月日程查看。
 
-系统使用 LangGraph 组织“需求理解 → 校园信息补全 → 日程规划 →
-硬约束校验 → 结果输出”五步流程，以 FastAPI 提供网页和接口。千问负责
-自然语言理解，Python 负责时间计算、排程与校验，高德提供实时步行路线和
-天气，校园知识库提供制度与服务规则。
+## 当前线上版本
 
-## 当前状态
+- 网站：https://yichengapp.top/
+- 健康检查：https://yichengapp.top/api/v1/health
+- 代码仓库：https://github.com/2957564313-arch/yicheng-agent（`main`）
+- 生产环境：阿里云 ECS + Cloudflare Tunnel
+- 主工作区：`D:\APP\Dev\repos\yicheng-agent`
+- Vercel：已停用
 
-- 模型容错链：主模型不可用或额度耗尽时自动切换备用千问模型，
-  全部在线模型不可用时继续使用本地确定性解析；
-- 高德路线与天气：已真实联调；
-- 校园知识库：206 页学生手册 + 已核验校园服务时间知识；
-- 校园知识分块：370 个，按 PDF 页码和页内章节切分，避免跨章节串证据；
-- 检索：按规划/制度问答分域 + 同义问法归一 + 查询扩展 + 来源分级 +
-  候选召回/二阶段重排 + 数值答案优先 + 相似证据去重；
-- 检索证据：学生手册回答可追溯到原文件、页码和章节；
-- 长期记忆：支持前端增改、启停和删除，并可随个人数据包跨设备恢复；
-- 个人课表：每位用户可导入自己的杭电课表 PDF，也可使用 Excel、CSV、JSON；
-- 学期映射：按第一教学周周一换算周次、单双周和真实上课日期；
-- 校历约束：法定节假日、调休工作日与学校补课/停课分层处理；
-- 课程节次：个人课表和用户语言描述都会按已核验作息锁定为硬约束；
-- 本校知识底座：深入使用杭电节次、场馆、门禁、快递、长跑、医院、拥堵和学生手册；
-- 个性化数据：个人课表、长期偏好、常用地点和完成反馈由用户独立管理；
-- 个性化建议：用户主动开启后才识别重复行为，只征求确认、不自动加任务，
-  支持忽略冷却、重复拒绝降频和手动重置；
-- 作息关怀：按用户维护的就寝、起床时间与睡眠目标生成提醒，结合次日早课
-  和晚间安排提示作息冲突，并支持单独关闭；
-- 提醒落地：网页打开时可使用浏览器通知；导出的 90 天系统日历包含课程、
-  会议、学习和就寝闹钟，关闭网页后由手机或电脑系统日历继续提醒；
-- 个人数据迁移：一键备份和恢复课表、长期记忆、校历调整、提醒设置、
-  当前计划及个性化习惯，不导出密码、登录凭证或 API 密钥；
-- 公网个人上下文：日程汇总、到点提醒和系统日历导出会携带当前浏览器的
-  课表、记忆、校历、提醒设置与计划快照；正式公网运行使用 ECS 持久化 SQLite，
-  不依赖临时实例文件系统；
-- 测试入口保护：可选固定测试账号登录，高成本接口使用短期签名凭证；
-- 周规划自然语言入口：可直接描述多个目标、总时长、阶段依赖、重复次数、
-  截止时间、偏好时段和地点；信息不够时先追问；
-- 分层规划闭环：周层分配目标与阶段，日层再结合课表、校历、场馆开放、
-  通勤和天气落地；只有通过硬约束校验的日计划才会原子保存并绑定；
-- 事件滚动重排：完成、延期、新任务、固定事件或天气变化后生成新版本，
-  冻结已完成/锁定/当前执行中的时间块，部分完成只滚动剩余分钟；硬截止
-  新任务可最小驱逐柔性旧块，并输出移动数、保留率和跨版本血缘；
-- 日级最小扰动：采用有界全局搜索，按“任务完整 → 移动任务数 →
-  总位移 → 通勤与偏好代价”的词典序目标选择方案；
-- 自动化测试：296 项通过；
-- 真实知识库检索验收：36/36 通过，覆盖校园服务时间和学生手册制度；
-- 确定性综合评估：112/112 通过，覆盖知识问答、时间硬约束、关怀韧性及
-  12 类高频学习生活场景；
-- 规划算法冻结基准：24/24 可行、0 个硬约束违反、截止满足率 100%，
-  22 个明确不受影响任务的误移动率为 0；
-- 端到端场景：32/32 通过；
-- 连续状态场景：15/15 通过；
-- 产品级公网旅程：8/8 通过；
-- 三个固定 Demo：全部通过；
-- 运行范围：本地 D 盘开发环境与 `yichengapp.top` ECS 公网版本均可直接运行。
+## 当前使用的技术
 
-当前公网入口：<https://yichengapp.top/>
+- 后端：Python 3.12、FastAPI、Uvicorn
+- 数据：SQLite、JSON 校园数据、SQLite-Vec 本地检索
+- 前端：HTML、CSS、原生 JavaScript，无前端框架依赖
+- 在线服务：阿里云大模型接口、高德地图路线和天气接口
+- 可靠性：在线接口失败时使用确定性规划和本地数据兜底
+- 页面：左侧工作区导航；对话、课表、偏好、备份、日/周/月日程均为独立入口
 
-公网健康检查：<https://yichengapp.top/api/v1/health>
+## 本地运行（D 盘）
 
-入口二维码：
-
-![易程智策公网入口二维码](app/web/assets/yicheng-public-entry.png)
-
-当前公网由 Cloudflare 代理域名流量，ECS 上的 Caddy 负责 HTTPS，
-systemd 运行单实例 FastAPI，`/srv/yicheng-agent/runtime/` 保存 SQLite
-数据。`www.yichengapp.top` 会永久重定向到根域名；生产代码只跟踪 GitHub
-`main` 分支，旧 Vercel 地址不再作为项目入口。
-
-## 公网部署
-
-公网部署链路如下：
-
-```text
-Cloudflare DNS/代理
-        ↓
-Caddy HTTPS（yichengapp.top）
-        ↓
-systemd yicheng-agent（127.0.0.1:8000）
-        ↓
-FastAPI + SQLite + 校园知识库
+```powershell
+cd D:\APP\Dev\repos\yicheng-agent
+$env:UV_CACHE_DIR = 'D:\APP\Dev\Python\uv-cache'
+$env:UV_PROJECT_ENVIRONMENT = 'D:\APP\Dev\Python\envs\yicheng-agent'
+uv sync
+uv run python -m scripts.init_db
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-服务器上的部署脚本会拉取并部署最新 `origin/main`，保留 `.env` 和
-`runtime/` 数据：
+打开 http://127.0.0.1:8000/。
+
+## 协作流程
+
+1. 从 `main` 创建功能分支，例如 `feat/schedule-view`。
+2. 修改后运行 `uv run pytest -q`。
+3. 推送分支并提交 Pull Request。
+4. 审查通过后合并到 `main`，再发布公网。
+
+不要提交 `.env`、数据库、API Key、测试密码或 SSH 私钥。协作者在 GitHub 仓库的 Settings → Collaborators 中添加。
+
+## 发布与检查
+
+服务器已配置 GitHub deploy key。合并到 `main` 后，在 PowerShell 执行：
 
 ```powershell
 ssh -i 'D:\key\yicheng-ecs-2026.pem' `
   ecs-user@120.26.65.5 "sudo /usr/local/sbin/yicheng-deploy"
 ```
 
-发布前至少检查：
-
-1. 本地测试通过；
-2. PR 已合并到 `main`；
-3. 服务器健康检查返回 `status: ok`；
-4. 生产首页、三个固定 Demo 和登录流程可用。
-
-## 协作开发
-
-GitHub 仓库：<https://github.com/2957564313-arch/yicheng-agent>
-
-生产环境只部署 `main`，协作者不要直接提交 `main`。推荐流程：
-
-1. 从最新 `main` 创建分支：`feat/<功能>`、`fix/<问题>` 或 `docs/<文档>`；
-2. 在自己的分支开发并运行最小验收；
-3. 推送分支，提交 Pull Request，写清变更、测试结果和风险；
-4. 通过审查后合并到 `main`；
-5. 合并后由维护者执行上面的 ECS 部署命令并做公网验收。
-
-协作者首次配置：
+发布后检查网站和 `/api/v1/health`。完整测试：
 
 ```powershell
-git clone https://github.com/2957564313-arch/yicheng-agent.git
-cd yicheng-agent
-$env:UV_CACHE_DIR = 'D:\APP\Dev\Python\uv-cache'
-$env:UV_PROJECT_ENVIRONMENT = 'D:\APP\Dev\Python\envs\yicheng-agent'
-uv sync
+uv run pytest -q
+uv run python scripts/validate_static_data.py
 ```
 
-`.env`、`runtime/*.db`、API Key、测试密码和服务器私钥禁止提交。需要加入
-协作的人，在 GitHub 仓库 `Settings → Collaborators` 中添加为协作者；
-生产服务器的 SSH 部署密钥只保存在服务器和仓库 Deploy keys 中，不发给普通协作者。
-
-## 本地启动
-
-双击：
-
-```text
-启动易程智策.command
-```
-
-或执行：
-
-```powershell
-& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe `
-  -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-浏览器访问：
-
-- 应用：<http://127.0.0.1:8000/>
-- 接口文档：<http://127.0.0.1:8000/docs>
-- 健康检查：<http://127.0.0.1:8000/api/v1/health>
-
-`localhost` 仅供开发，不可作为参赛应用入口。
-
-## 外部服务配置
-
-密钥仅保存在 `.env`，禁止提交或截图。当前推荐配置：
-
-```dotenv
-APP_ACCESS_ENABLED=false
-APP_TEST_USERNAME=
-APP_TEST_PASSWORD=
-APP_AUTH_SECRET=
-APP_ACCESS_HOURS=8
-
-LLM_ENABLED=true
-LLM_MODEL=qwen3.7-plus
-LLM_FALLBACK_MODELS=qwen-plus-2025-07-28,glm-5
-LLM_ENABLE_THINKING=false
-LLM_RENDER_ENABLED=true
-LLM_PLAN_RENDER_ENABLED=false
-LLM_TIMEOUT_SECONDS=10
-
-LIVE_ROUTE_ENABLED=true
-LIVE_WEATHER_ENABLED=true
-```
-
-高德天气城市编码默认从当前校园配置读取。模型不可用时依次切换备用模型
-和本地解析；路线接口失败时，只能根据当前学校已发现并缓存的地点坐标保守
-估算，且不会采用校园范围外的同名地点；天气没有可靠来源时明确标记未知。
-
-## 验收
-
-```powershell
-& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe scripts\validate_static_data.py
-& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe -m pytest -q
-& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe -m scripts.run_evaluation
-& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe -m scripts.run_planning_benchmark
-& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe -m scripts.demo_smoke
-node scripts/public_acceptance.mjs
-node scripts/public_stateful_acceptance.mjs
-node scripts/public_product_acceptance.mjs
-```
-
-真实接口检查：
-
-```powershell
-& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe scripts\live_llm_smoke.py
-& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe scripts\live_amap_smoke.py
-& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe scripts\live_end_to_end_smoke.py
-```
-
-这些脚本不会打印 API Key。
-
-## 杭电知识配置
-
-学校差异集中在 `data/`：
-
-```text
-campus_profile.json
-locations.json
-travel_times.json
-opening_hours.json
-campus_rules.json
-class_periods.json
-knowledge/
-```
-
-当前公开页面固定使用杭州电子科技大学下沙校区知识库，并据此查询路线和
-天气。上述文件共同提供本校地点、课程节次、开放时间、活动有效时段、
-校园拥堵和学生手册依据。个人课表、长期偏好和完成记录则按用户分别保存，
-不会写入学校公共知识。
-
-## 文档
-
-- PPT 当前实测数据：[`docs/易程智策_当前工程与PPT实测数据.md`](docs/易程智策_当前工程与PPT实测数据.md)
-- 当前交付状态：[`docs/plans/项目交付清单与待办.md`](docs/plans/项目交付清单与待办.md)
-- 完整工程方案：[`docs/plans/新版工程执行计划.md`](docs/plans/新版工程执行计划.md)
-- 周规划与滚动重排：[`docs/WEEKLY_PLANNING.md`](docs/WEEKLY_PLANNING.md)
-- 国二等奖技术交接：[`docs/TECHNICAL_HANDOFF_NATIONAL_SECOND.md`](docs/TECHNICAL_HANDOFF_NATIONAL_SECOND.md)
-- 规划基线与消融：[`docs/TECHNICAL_BENCHMARK.md`](docs/TECHNICAL_BENCHMARK.md)
-- RAG 验收（2026-07-25 历史快照，不作为当前数字口径）：
-  [`reports/rag_acceptance.md`](reports/rag_acceptance.md)
-- 队友方案吸收记录：[`reports/teammate_integration_review.md`](reports/teammate_integration_review.md)
-- 本校知识底座：[`docs/CAMPUS_PROFILE.md`](docs/CAMPUS_PROFILE.md)
-- 环境：[`docs/environment.md`](docs/environment.md)
-- API：[`docs/api.md`](docs/api.md)
-- 演示：[`docs/demo_script.md`](docs/demo_script.md)
-- 部署：[`docs/deployment.md`](docs/deployment.md)
-- 发布检查（2026-07-25 历史快照，所列待办不代表当前状态）：
-  [`reports/release_checklist.md`](reports/release_checklist.md)
-- 评估报告：[`reports/evaluation.md`](reports/evaluation.md)
-- 公网产品验收（2026-07-25 历史快照；当前以本页、技术交接书和
-  `reports/evaluation.md` 为准）：
-  [`reports/product_acceptance.md`](reports/product_acceptance.md)
-- 公网入口二维码：[`app/web/assets/yicheng-public-entry.png`](app/web/assets/yicheng-public-entry.png)
+天气接口只提供当前及近期预报；历史演示日期使用 `data/weather_fallback.json` 中的明确演示数据，并会标记为演示来源，不冒充实时天气。

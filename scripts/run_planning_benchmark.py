@@ -72,7 +72,11 @@ class PreparedCase:
 
 
 def fixture_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    # Keep the frozen hash stable across Windows checkouts (CRLF) and
+    # Unix deployments (LF). The JSON fixture is text, so line-ending
+    # normalization does not change its meaning or benchmark inputs.
+    canonical = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(canonical).hexdigest()
 
 
 def load_suite(

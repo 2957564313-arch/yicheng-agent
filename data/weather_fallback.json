@@ -10,5 +10,42 @@
       "temperature_c": 29
     }
   ],
-  "source": "demo_fixture"
+  "source": "demo_fixture",
+  "fixtures": [
+    {
+      "fixture_date": "2026-07-24",
+      "location_id": "campus_main",
+      "periods": [
+        {
+          "period": "after_17",
+          "condition": "rain",
+          "rain_probability": 0.85,
+          "risk_start_at": "2026-07-24T17:00:00+08:00",
+          "temperature_c": 29
+        }
+      ],
+      "source": "demo_fixture"
+    },
+    {
+      "fixture_date": "2026-04-15",
+      "location_id": "campus_main",
+      "periods": [
+        {
+          "period": "day",
+          "condition": "cloudy",
+          "rain_probability": 0.1,
+          "temperature_c": 22
+        },
+        {
+          "period": "after_17",
+          "condition": "light_rain",
+          "rain_probability": 0.45,
+          "risk_start_at": "2026-04-15T17:00:00+08:00",
+          "temperature_c": 19
+        }
+      ],
+      "source": "demo_fixture",
+      "note": "Synthetic regression snapshot; replace with an imported historical observation before presenting as real weather."
+    }
+  ]
 }

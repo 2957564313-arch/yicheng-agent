@@ -776,6 +776,14 @@ def _merge_llm_with_rule_constraints(
         update={
             "requested_date": rule_result.requested_date,
             "tasks": merged,
+            # An explicit overall deadline leaves no room for the model's
+            # generic anti-rush buffer. Preserve inferred preferences only
+            # when no hard deadline was stated.
+            "preferences": (
+                rule_result.preferences
+                if rule_result.preferences.buffer_min == 0
+                else llm_result.preferences
+            ),
             "clarifications": clarifications,
             "confidence": max(
                 llm_result.confidence,
@@ -874,17 +882,45 @@ def _merge_task_constraints(
             if use_rule_location
             else model_task.location_raw
         ),
-        "earliest_start": _later_datetime(
-            model_task.earliest_start,
-            rule_task.earliest_start,
+        # The rule parser owns explicit time anchors.  Taking the later
+        # model value here turns a model's inferred preference (for example,
+        # treating any exercise as an evening activity) into a hard
+        # constraint and can incorrectly drop an otherwise feasible task.
+        # Let the model fill a field only when the deterministic parser did
+        # not find a value in the user's request.
+        "earliest_start": (
+            rule_task.earliest_start
+            if rule_task.earliest_start is not None
+            else model_task.earliest_start
         ),
-        "latest_end": _earlier_datetime(
-            model_task.latest_end,
-            rule_task.latest_end,
+        "latest_end": (
+            rule_task.latest_end
+            if rule_task.latest_end is not None
+            else model_task.latest_end
         ),
-        "deadline": _earlier_datetime(
-            model_task.deadline,
-            rule_task.deadline,
+        "deadline": (
+            rule_task.deadline
+            if rule_task.deadline is not None
+            else model_task.deadline
+        ),
+        # A model-only period is a soft preference at best. When the rule
+        # parser found explicit clock anchors but no matching period phrase,
+        # drop the model's guessed period so it cannot become a hard window.
+        "preferred_period": (
+            rule_task.preferred_period
+            if rule_task.preferred_period is not None
+            else (
+                None
+                if any(
+                    value is not None
+                    for value in (
+                        rule_task.earliest_start,
+                        rule_task.latest_end,
+                        rule_task.deadline,
+                    )
+                )
+                else model_task.preferred_period
+            )
         ),
         "importance": max(model_task.importance, rule_task.importance),
         "depends_on": list(

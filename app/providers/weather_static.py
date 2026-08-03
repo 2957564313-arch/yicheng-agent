@@ -30,20 +30,35 @@ class StaticWeatherProvider:
                 )
             ]
 
-        fixture_date = date.fromisoformat(self._payload["fixture_date"])
-        if fixture_date != target_date:
+        # Keep the original single-fixture format compatible, while allowing
+        # an explicitly labelled set of historical regression snapshots.
+        fixtures = self._payload.get("fixtures")
+        if not isinstance(fixtures, list):
+            fixtures = [self._payload]
+        for fixture in fixtures:
+            if not isinstance(fixture, dict):
+                continue
+            try:
+                fixture_date = date.fromisoformat(fixture["fixture_date"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            fixture_location = str(fixture.get("location_id") or "").strip()
+            if fixture_date != target_date or (
+                fixture_location and fixture_location != location_id
+            ):
+                continue
             return [
                 WeatherContext(
                     date=target_date,
-                    period="day",
-                    source=DataSource.UNKNOWN,
+                    source=DataSource.DEMO_FIXTURE,
+                    **period,
                 )
+                for period in fixture.get("periods", [])
             ]
         return [
             WeatherContext(
                 date=target_date,
-                source=DataSource.DEMO_FIXTURE,
-                **period,
+                period="day",
+                source=DataSource.UNKNOWN,
             )
-            for period in self._payload.get("periods", [])
         ]

@@ -8,7 +8,7 @@
       content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
     <title>易程智策 · 我的校园日程</title>
-    <link rel="stylesheet" href="/styles.css?v=20260725-14" />
+    <link rel="stylesheet" href="/styles.css?v=20260802-16" />
   </head>
   <body>
     <section id="access-gate" class="access-gate" hidden>
@@ -50,7 +50,7 @@
         <div>
           <p class="eyebrow">杭电个性化校园日程助手</p>
           <h1>易程智策</h1>
-          <p class="subtitle">安排日程、记住习惯、按时提醒、关照生活</p>
+          <p class="subtitle">安排日程、记住习惯、按时提醒</p>
         </div>
       </div>
       <div class="header-status">
@@ -59,7 +59,17 @@
         <span id="save-state" class="status subtle">尚未生成当前计划</span>
         <button id="logout" class="status subtle" hidden>退出测试</button>
       </div>
+      <div class="mobile-header-actions" aria-label="工作区菜单">
+        <button id="history-toggle" class="icon-button" type="button" aria-controls="history-sidebar" aria-expanded="false">
+          历史
+        </button>
+        <button id="tools-toggle" class="icon-button" type="button" aria-controls="tools-sidebar" aria-expanded="false">
+          工具
+        </button>
+      </div>
     </header>
+
+    <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
 
     <main>
       <section class="demo-strip" aria-label="比赛演示案例">
@@ -72,11 +82,50 @@
       </section>
 
       <section class="workspace">
-        <aside class="column controls-column">
-          <article class="panel">
+        <aside id="history-sidebar" class="history-sidebar" aria-label="对话历史">
+          <div class="history-heading">
+            <div>
+              <p class="step">Workspace</p>
+              <h2>对话历史</h2>
+            </div>
+            <div class="history-heading-actions">
+              <button id="new-conversation" class="icon-button" type="button" title="清空当前输入">＋</button>
+              <button id="history-close" class="icon-button mobile-only" type="button" aria-label="关闭历史">×</button>
+            </div>
+          </div>
+          <nav class="workspace-nav" aria-label="工作区页面">
+            <p class="workspace-nav-label">工作区</p>
+            <button type="button" class="workspace-nav-button active" data-view="chat">
+              <span class="nav-icon">⌁</span><span>对话</span><small>随时规划与调整</small>
+            </button>
+            <button type="button" class="workspace-nav-button" data-view="schedule">
+              <span class="nav-icon">▦</span><span>日程</span><small>日 · 周 · 月</small>
+            </button>
+            <button type="button" class="workspace-nav-button" data-view="timetable">
+              <span class="nav-icon">▤</span><span>我的课表</span><small>导入与校历</small>
+            </button>
+            <button type="button" class="workspace-nav-button" data-view="preferences">
+              <span class="nav-icon">♡</span><span>偏好</span><small>让安排越来越懂你</small>
+            </button>
+            <button type="button" class="workspace-nav-button" data-view="backup">
+              <span class="nav-icon">⇩</span><span>备份</span><small>换设备也不丢数据</small>
+            </button>
+          </nav>
+          <div class="history-section-label">最近使用</div>
+          <div id="history-list" class="history-list"></div>
+          <p id="history-empty" class="history-empty">还没有对话。先告诉我今天要完成什么。</p>
+          <div class="history-footer">
+            <span class="history-dot"></span>
+            <span>本机保存最近输入</span>
+          </div>
+        </aside>
+
+        <div class="workspace-main">
+        <section class="column response-column composer-column">
+          <article class="panel composer-panel">
             <div class="panel-heading">
               <div>
-                <p class="step">告诉我你的安排</p>
+                <p class="step">新对话</p>
                 <h2>今天想完成什么？</h2>
               </div>
               <select id="mode" aria-label="运行模式">
@@ -86,13 +135,42 @@
             </div>
             <textarea
               id="query"
-              rows="7"
+              rows="4"
               placeholder="例如：14点以后去图书馆学习2小时，取快递，再跑步30分钟，18点前结束。"
             ></textarea>
-            <button id="submit" class="primary">交给易程智策</button>
+            <div class="composer-footer">
+              <span>按你的课表、时间和地点安排</span>
+              <button id="submit" class="primary">发送给易程智策</button>
+            </div>
           </article>
 
-          <article class="panel campus-panel">
+          <nav class="quick-access" aria-label="快捷入口">
+            <span class="quick-access-label">快速查看</span>
+            <button type="button" data-view="schedule">日程总览</button>
+            <button type="button" data-view="timetable">我的课表</button>
+            <button type="button" data-view="preferences">偏好设置</button>
+          </nav>
+
+        </section>
+
+        <aside id="tools-sidebar" class="column controls-column tools-sidebar" aria-label="工作区工具">
+          <div class="tools-heading">
+            <div>
+              <p class="step">Workspace</p>
+              <h2>工作区导航</h2>
+            </div>
+            <button id="tools-close" class="icon-button mobile-only" type="button" aria-label="关闭工具">×</button>
+          </div>
+          <nav class="tools-nav" aria-label="工作区导航选项">
+            <button type="button" class="tool-nav-button" data-view="schedule" data-schedule-mode="day"><span>▣</span>今日计划</button>
+            <button type="button" class="tool-nav-button" data-view="schedule" data-schedule-mode="week"><span>◷</span>本周安排</button>
+            <button type="button" class="tool-nav-button" data-view="timetable"><span>▤</span>我的课表</button>
+            <button type="button" class="tool-nav-button" data-view="preferences"><span>♡</span>偏好与习惯</button>
+            <button type="button" class="tool-nav-button" data-view="backup"><span>⇩</span>数据备份</button>
+          </nav>
+          <div class="tools-hint">需要时展开一项，重点始终留在中间对话区。</div>
+
+          <article class="panel campus-panel" hidden>
             <div class="panel-heading compact">
               <div>
                 <p class="step">本校知识底座</p>
@@ -130,7 +208,7 @@
             </button>
           </article>
 
-          <article class="panel execution-panel">
+          <article class="panel execution-panel tool-collapsible">
             <div class="panel-heading compact">
               <div>
                 <p class="step">思考过程</p>
@@ -142,7 +220,7 @@
             </div>
           </article>
 
-          <article class="panel timetable-panel">
+          <article class="panel timetable-panel tool-collapsible">
             <div class="panel-heading compact">
               <div>
                 <p class="step">个人课表</p>
@@ -238,7 +316,7 @@
             </p>
           </article>
 
-          <article class="panel memory-panel">
+          <article class="panel memory-panel tool-collapsible">
             <div class="panel-heading compact">
               <div>
                 <p class="step">长期记忆</p>
@@ -303,7 +381,7 @@
             </div>
           </article>
 
-          <article class="panel backup-panel">
+          <article class="panel backup-panel tool-collapsible">
             <div class="panel-heading compact">
               <div>
                 <p class="step">个人数据</p>
@@ -342,7 +420,7 @@
           </article>
         </aside>
 
-        <section class="column response-column">
+        <section class="column response-column content-column">
           <article class="panel assistant-panel">
             <div class="panel-heading">
               <div class="assistant-identity">
@@ -359,6 +437,33 @@
             </div>
             <div id="assistant-actions" class="assistant-actions"></div>
             <div id="freshness" class="source-tags"></div>
+          </article>
+
+          <article id="schedule-panel" class="panel schedule-panel" hidden>
+            <div class="schedule-heading">
+              <div>
+                <p class="step">日程总览</p>
+                <h2>一眼看清今天、这一周和整个月</h2>
+                <p class="schedule-caption">安排按时间顺序呈现，课程、任务、通勤和提醒各有颜色。</p>
+              </div>
+              <span id="schedule-state" class="campus-state">正在读取</span>
+            </div>
+            <div class="schedule-toolbar">
+              <div class="schedule-tabs" role="tablist" aria-label="日程视图">
+                <button type="button" class="schedule-tab active" data-schedule-view="day" role="tab" aria-selected="true">今天</button>
+                <button type="button" class="schedule-tab" data-schedule-view="week" role="tab" aria-selected="false">本周</button>
+                <button type="button" class="schedule-tab" data-schedule-view="month" role="tab" aria-selected="false">本月</button>
+              </div>
+              <div class="schedule-date-actions">
+                <button id="schedule-prev" type="button" class="icon-button" aria-label="上一个时间段">‹</button>
+                <button id="schedule-today" type="button" class="date-chip">回到今天</button>
+                <button id="schedule-next" type="button" class="icon-button" aria-label="下一个时间段">›</button>
+              </div>
+            </div>
+            <div id="schedule-period-label" class="schedule-period-label"></div>
+            <section id="schedule-day-view" class="schedule-view-content" aria-label="今日时间轴"></section>
+            <section id="schedule-week-view" class="schedule-view-content" aria-label="本周安排" hidden></section>
+            <section id="schedule-month-view" class="schedule-view-content" aria-label="本月安排" hidden></section>
           </article>
 
           <article class="panel agenda-panel">
@@ -502,7 +607,7 @@
               <div id="task-statuses" class="task-statuses"></div>
             </article>
 
-            <div class="column evidence-column">
+            <div class="column evidence-column" hidden>
               <article class="panel">
                 <div class="panel-heading compact">
                   <div>
@@ -552,6 +657,7 @@
             <div id="diff" class="diff-list"></div>
           </article>
         </section>
+        </div>
       </section>
     </main>
 
@@ -566,6 +672,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260725-14" defer></script>
+    <script src="/app.js?v=20260802-18" defer></script>
   </body>
 </html>

@@ -48,9 +48,11 @@ class Settings(BaseSettings):
     app_access_hours: int = Field(default=8, ge=1, le=72)
 
     llm_enabled: bool = False
-    llm_model: str = "qwen3.7-plus"
+    llm_model: str = "qwen3.8-max"
     llm_fallback_models: str = (
-        "qwen-plus-2025-07-28,glm-5"
+        "deepseek-v4-flash-0731,glm-5.2-fast-preview,"
+        "qwen3.7-flash-2026-07-15,qwen3.6-plus,"
+        "qwen-plus-2025-12-01,glm-5.1,glm-5"
     )
     llm_base_url: str = ""
     llm_api_key: str = Field(default="", repr=False)
