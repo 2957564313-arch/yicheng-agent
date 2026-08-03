@@ -10,19 +10,33 @@
 - 密钥只通过环境变量注入，禁止写进仓库；
 - 每次发布前备份 `runtime/app.db`。
 
-## Vercel 预览版
+## 当前生产部署：Cloudflare + Alibaba ECS
 
-仓库根目录的 `server.py` 是 Vercel 识别 FastAPI 应用的入口。Vercel
-运行时只允许把临时文件写到 `/tmp`，因此预览版会把 SQLite 数据库放在
-`/tmp/yicheng-agent/`。这种数据会在冷启动、实例切换或重新部署后丢失，
-只适合公开体验和功能测试，不应作为长期记忆的最终存储。
+当前公网入口为 <https://yichengapp.top/>，生产链路为：
 
-Vercel 预览版无需配置额外启动命令。导入 GitHub 仓库后，框架保持自动
-识别，根目录保持仓库根目录。首次部署可以先不开启外部 API，确认首页、
-健康检查和三个可复现 Demo 均可访问，再配置模型、高德路线和天气环境变量。
+```text
+Cloudflare DNS/代理 → Caddy HTTPS → systemd → FastAPI 127.0.0.1:8000
+```
 
-需要长期保存个人课表、计划、记忆和完成记录时，应把 SQLite 迁移到
-PostgreSQL；杭电知识文件可继续随版本发布，或迁移到对象存储。
+- 域名：`yichengapp.top`；`www.yichengapp.top` 永久重定向到根域名；
+- 服务目录：`/srv/yicheng-agent`；
+- 持久化数据：`/srv/yicheng-agent/runtime/`；
+- 服务名：`yicheng-agent.service`；
+- 健康检查：`https://yichengapp.top/api/v1/health`；
+- 发布来源：GitHub `main` 分支，当前不从其他分支直接上线。
+
+服务器上的 `/usr/local/sbin/yicheng-deploy` 会执行以下动作：拉取
+`origin/main`、同步锁定依赖、保留 `.env` 和 `runtime/`、重启服务并等待
+健康检查成功。执行命令：
+
+```powershell
+ssh -i 'D:\key\yicheng-ecs-2026.pem' `
+  ecs-user@120.26.65.5 "sudo /usr/local/sbin/yicheng-deploy"
+```
+
+首次部署或更换服务器时，必须先配置 GitHub 仓库 Deploy key、Cloudflare
+DNS 和 ECS 安全组的 80/443 端口；SSH 仅用于维护，不应在 README、PPT 或
+协作群中传播私钥。
 
 ## 启动命令
 
@@ -108,17 +122,14 @@ APP_ACCESS_HOURS=8
 - 服务器具有固定出口 IP 后，可以把该 IP 加入高德 Key 白名单；
 - 若托管平台出口 IP 不固定，暂不配置 IP 白名单，但必须保管好 Key。
 
-## 当前公网平台
+## 发布分支与协作
 
-当前公开测试版部署在 Vercel。后续切换国内云服务器和自有域名时必须满足：
+生产只跟踪 `main`。协作者使用 `feat/*`、`fix/*` 或 `docs/*` 分支，通过
+Pull Request 合并；不要直接向 `main` 推送未验收代码。合并后由维护者执行
+部署命令，再检查首页、健康接口、登录和固定 Demo。
 
-- 能运行 Python 3.12 和 FastAPI；
-- 能配置环境变量；
-- 能挂载持久化磁盘；
-- 能提供 HTTPS；
-- 能长期运行单实例服务；
-- 能从中国大陆稳定访问百炼和高德；
-- 能提供固定或可查的公网地址。
+密钥、`.env`、`runtime/*.db` 和服务器私钥不得进入 Git。GitHub 仓库协作者
+在 `Settings → Collaborators` 管理；ECS Deploy key 只授予仓库只读拉取权限。
 
 不能把纯静态网页托管当作完整部署，因为模型、SQLite、RAG、地图和天气均
 运行在服务端。
