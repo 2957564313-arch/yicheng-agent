@@ -19,6 +19,7 @@ const timeline = $("#timeline");
 const planTitle = $("#plan-title");
 const taskStatuses = $("#task-statuses");
 const answer = $("#answer");
+const conversationStream = $("#conversation-stream");
 const assistantActions = $("#assistant-actions");
 const warnings = $("#warnings");
 const freshness = $("#freshness");
@@ -130,6 +131,8 @@ let activeWorkspaceView = "chat";
 let scheduleViewMode = "day";
 let scheduleCursorDate = null;
 let lastAgendaData = null;
+let activeConversationQuery = "";
+let activeConversationAnswer = "";
 const consoleUserId = getOrCreateLocalIdentity(
   "yicheng_user_id",
   "visitor",
@@ -177,8 +180,8 @@ function renderConversationHistory() {
     .filter((item) => item && item.query)
     .slice(0, 24);
   historyEmpty.hidden = items.length > 0;
-  historyList.innerHTML = items.map((item) => `
-    <button class="history-item" type="button" data-history-query="${escapeHtml(item.query)}">
+  historyList.innerHTML = items.map((item, index) => `
+    <button class="history-item" type="button" data-history-index="${index}" aria-label="打开历史对话：${escapeHtml(item.query)}">
       <strong>${escapeHtml(item.query)}</strong>
       <small>${escapeHtml(item.answer || "已生成计划")}</small>
     </button>
@@ -197,6 +200,54 @@ function recordConversationHistory(query, answerText) {
   });
   writeLocalSnapshot(conversationHistoryKey, current.slice(0, 24));
   renderConversationHistory();
+}
+
+function appendConversationMessage(role, text) {
+  if (!conversationStream || !String(text || "").trim()) return;
+  const isUser = role === "user";
+  conversationStream.hidden = false;
+  conversationStream.insertAdjacentHTML(
+    "beforeend",
+    `<article class="conversation-message ${isUser ? "user-message" : "assistant-message"}">
+      <span class="message-avatar" aria-hidden="true">${isUser ? "你" : "易"}</span>
+      <div class="message-body">
+        <p class="message-role">${isUser ? "你" : "易程智策"}</p>
+        <div class="message-content">${escapeHtml(String(text))}</div>
+      </div>
+    </article>`,
+  );
+}
+
+function clearConversationStream() {
+  conversationStream?.replaceChildren();
+  if (conversationStream) conversationStream.hidden = true;
+  activeConversationQuery = "";
+  activeConversationAnswer = "";
+}
+
+function beginConversationTurn(query) {
+  if (activeConversationQuery && activeConversationAnswer) {
+    appendConversationMessage("assistant", activeConversationAnswer);
+  }
+  appendConversationMessage("user", query);
+  activeConversationQuery = String(query || "").trim();
+  activeConversationAnswer = "";
+  answer.textContent = "正在结合你的课表、时间和地点认真规划…";
+  answer.classList.add("muted");
+  assistantActions.innerHTML = "";
+  freshness.innerHTML = "";
+}
+
+function completeConversationTurn(answerText) {
+  if (!activeConversationQuery) return;
+  activeConversationAnswer = String(answerText || "").trim();
+}
+
+function restoreConversationSnapshot(query, answerText) {
+  clearConversationStream();
+  appendConversationMessage("user", query);
+  activeConversationQuery = String(query || "").trim();
+  activeConversationAnswer = String(answerText || "").trim();
 }
 
 function moveToolPanelsIntoWorkspace() {
@@ -234,6 +285,7 @@ function setActiveWorkspaceView(view = "chat") {
   setPanelHidden(composerColumn, !isChat);
   setPanelHidden(composerPanel, !isChat);
   setPanelHidden(quickAccess, !isChat);
+  setPanelHidden(conversationStream, !isChat);
   setPanelHidden(assistantPanel, !isChat);
   setPanelHidden(visualGrid, !isChat);
   setPanelHidden(document.querySelector(".adjustment-panel"), !isChat);
@@ -403,6 +455,8 @@ function initializeWorkspaceNavigation() {
   drawerBackdrop?.addEventListener("click", closeDrawers);
 
   newConversation?.addEventListener("click", () => {
+    setActiveWorkspaceView("chat");
+    clearConversationStream();
     queryInput.value = "";
     answer.textContent = "把课程、自习、取快递、吃饭或运动告诉我，我会先判断能否全部完成；如果时间不够，也会说明原因并给你可选方案。";
     answer.classList.add("muted");
@@ -413,11 +467,22 @@ function initializeWorkspaceNavigation() {
   });
 
   historyList?.addEventListener("click", (event) => {
-    const item = event.target.closest("[data-history-query]");
+    const button = event.target.closest("[data-history-index]");
+    if (!button) return;
+    const items = readLocalSnapshot(conversationHistoryKey, [])
+      .filter((item) => item && item.query)
+      .slice(0, 24);
+    const item = items[Number(button.dataset.historyIndex)];
     if (!item) return;
-    queryInput.value = item.dataset.historyQuery || "";
+    setActiveWorkspaceView("chat");
+    queryInput.value = item.query;
+    restoreConversationSnapshot(item.query, item.answer);
+    answer.textContent = item.answer || "这条历史对话没有保存回答摘要。";
+    answer.classList.toggle("muted", !item.answer);
+    assistantActions.innerHTML = "";
+    freshness.innerHTML = '<span class="source-tag">本机历史摘要</span>';
     closeDrawers();
-    queryInput.focus();
+    answer.scrollIntoView({ behavior: "smooth", block: "center" });
   });
 
   viewButtons.forEach((button) => {
@@ -1530,6 +1595,7 @@ function renderResponse(data) {
   recordBehaviorHistory(data);
   answer.textContent = data.answer;
   answer.classList.remove("muted");
+  completeConversationTurn(data.answer);
   saveState.textContent = data.current_plan_saved
     ? "当前计划已保存"
     : data.plan ? "结果未写入当前计划" : "尚未生成当前计划";
@@ -1951,6 +2017,7 @@ function renderError(error) {
   const body = error?.error || {};
   answer.textContent = body.message || "请求失败，请稍后重试。";
   answer.classList.remove("muted");
+  completeConversationTurn(answer.textContent);
   warnings.innerHTML = `
     <div class="warning error">
       <strong>请求未完成</strong>
@@ -1995,6 +2062,8 @@ async function submitQuery(rawQuery) {
       queryInput.value = action.query;
     }
   }
+  beginConversationTurn(query);
+  queryInput.value = "";
   const data = await runRequest("/api/v1/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2013,12 +2082,20 @@ submitButton.addEventListener("click", async () => {
   await submitQuery(queryInput.value);
 });
 
+queryInput.addEventListener("keydown", async (event) => {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+  event.preventDefault();
+  if (submitButton.disabled) return;
+  await submitQuery(queryInput.value);
+});
+
 resetButton.addEventListener("click", async () => {
   setLoading(true);
   try {
     const response = await fetch("/api/v1/demos/reset", { method: "POST" });
     const data = await response.json();
     if (!response.ok) throw data;
+    clearConversationStream();
     queryInput.value = "";
     timeline.className = "timeline empty";
     timeline.textContent = "演示已复位，请从案例一开始。";
@@ -2060,6 +2137,7 @@ async function loadDemos() {
       const demo = demos.find((item) => item.id === button.dataset.demo);
       queryInput.value = demo.query;
       modeSelect.value = "auto";
+      beginConversationTurn(demo.query);
       demoButtons.querySelectorAll("button")
         .forEach((item) => item.classList.toggle("active", item === button));
       await runRequest(`/api/v1/demos/${demo.id}/run`, {

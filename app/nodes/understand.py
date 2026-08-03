@@ -777,8 +777,9 @@ def _merge_llm_with_rule_constraints(
             "requested_date": rule_result.requested_date,
             "tasks": merged,
             # An explicit overall deadline leaves no room for the model's
-            # generic anti-rush buffer. Preserve inferred preferences only
-            # when no hard deadline was stated.
+            # generic anti-rush buffer. Keep any saved/user preference when
+            # no deadline was stated, but never make a feasible hard window
+            # infeasible by adding an inferred 10-minute buffer.
             "preferences": (
                 rule_result.preferences
                 if rule_result.preferences.buffer_min == 0
@@ -882,12 +883,10 @@ def _merge_task_constraints(
             if use_rule_location
             else model_task.location_raw
         ),
-        # The rule parser owns explicit time anchors.  Taking the later
-        # model value here turns a model's inferred preference (for example,
-        # treating any exercise as an evening activity) into a hard
-        # constraint and can incorrectly drop an otherwise feasible task.
-        # Let the model fill a field only when the deterministic parser did
-        # not find a value in the user's request.
+        # Explicit time anchors from the deterministic parser are hard user
+        # constraints. The model may infer a preference (for example,
+        # interpreting “18点前结束” as an 18:00 start), but that inference
+        # must not override an explicit “14点以后” boundary.
         "earliest_start": (
             rule_task.earliest_start
             if rule_task.earliest_start is not None
@@ -905,7 +904,8 @@ def _merge_task_constraints(
         ),
         # A model-only period is a soft preference at best. When the rule
         # parser found explicit clock anchors but no matching period phrase,
-        # drop the model's guessed period so it cannot become a hard window.
+        # drop the model's guessed period (e.g. “evening” for a generic run)
+        # so it cannot turn a preference into an impossible hard window.
         "preferred_period": (
             rule_task.preferred_period
             if rule_task.preferred_period is not None
