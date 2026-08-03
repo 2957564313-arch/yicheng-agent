@@ -108,6 +108,7 @@ const toolsClose = $("#tools-close");
 const drawerBackdrop = $("#drawer-backdrop");
 const workspace = $(".workspace");
 const composerColumn = $(".composer-column");
+const quickAccess = $(".quick-access");
 const contentColumn = $(".content-column");
 const composerPanel = $(".composer-panel");
 const assistantPanel = $(".assistant-panel");
@@ -230,7 +231,9 @@ function setActiveWorkspaceView(view = "chat") {
   const isWeeklyPlanner = activeWorkspaceView === "weekly-planner";
   const isToolPage = ["timetable", "preferences", "backup"].includes(activeWorkspaceView);
 
+  setPanelHidden(composerColumn, !isChat);
   setPanelHidden(composerPanel, !isChat);
+  setPanelHidden(quickAccess, !isChat);
   setPanelHidden(assistantPanel, !isChat);
   setPanelHidden(visualGrid, !isChat);
   setPanelHidden(document.querySelector(".adjustment-panel"), !isChat);

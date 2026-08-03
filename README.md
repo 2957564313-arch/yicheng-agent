@@ -1,21 +1,29 @@
 # 易程智策
 
-面向大学生的日程规划助手：用一句话描述课程、学习、出行、取件或运动，系统会给出可执行的时间安排，并支持课表、提醒和个人偏好。
+面向大学生的校园日程助手。输入课程、学习、出行、取件或运动安排后，系统会整理成可执行的计划，并支持课表、提醒、偏好和日/周/月日程查看。
 
-## 当前情况
+## 当前线上版本
 
-- 公网地址：<https://yichengapp.top/>
-- 健康检查：<https://yichengapp.top/api/v1/health>
-- 生产环境：阿里云 ECS + Cloudflare + FastAPI + SQLite
-- 生产代码：GitHub `main` 分支
-- 旧 Vercel 地址：不再使用
-- 本地开发目录：`D:\APP\Dev\repos\yicheng-agent`
+- 网站：https://yichengapp.top/
+- 健康检查：https://yichengapp.top/api/v1/health
+- 代码仓库：https://github.com/2957564313-arch/yicheng-agent（`main`）
+- 生产环境：阿里云 ECS + Cloudflare Tunnel
+- 主工作区：`D:\APP\Dev\repos\yicheng-agent`
+- Vercel：已停用
 
-## 本地运行
+## 当前使用的技术
 
-需要 Python 3.12、`uv`。在项目目录执行：
+- 后端：Python 3.12、FastAPI、Uvicorn
+- 数据：SQLite、JSON 校园数据、SQLite-Vec 本地检索
+- 前端：HTML、CSS、原生 JavaScript，无前端框架依赖
+- 在线服务：阿里云大模型接口、高德地图路线和天气接口
+- 可靠性：在线接口失败时使用确定性规划和本地数据兜底
+- 页面：左侧工作区导航；对话、课表、偏好、备份、日/周/月日程均为独立入口
+
+## 本地运行（D 盘）
 
 ```powershell
+cd D:\APP\Dev\repos\yicheng-agent
 $env:UV_CACHE_DIR = 'D:\APP\Dev\Python\uv-cache'
 $env:UV_PROJECT_ENVIRONMENT = 'D:\APP\Dev\Python\envs\yicheng-agent'
 uv sync
@@ -23,47 +31,31 @@ uv run python -m scripts.init_db
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-然后打开 <http://127.0.0.1:8000/>。
+打开 http://127.0.0.1:8000/。
 
-也可以直接运行项目根目录的 `启动易程智策.command`。
+## 协作流程
 
-## 协作开发
+1. 从 `main` 创建功能分支，例如 `feat/schedule-view`。
+2. 修改后运行 `uv run pytest -q`。
+3. 推送分支并提交 Pull Request。
+4. 审查通过后合并到 `main`，再发布公网。
 
-仓库：<https://github.com/2957564313-arch/yicheng-agent>
+不要提交 `.env`、数据库、API Key、测试密码或 SSH 私钥。协作者在 GitHub 仓库的 Settings → Collaborators 中添加。
 
-1. 从最新 `main` 创建分支，例如 `feat/chat-ui`、`fix/login`、`docs/readme`。
-2. 在自己的分支修改并运行 `uv run pytest -q`。
-3. 推送分支，提交 Pull Request，写清改了什么和如何验证。
-4. 审查通过后合并到 `main`。
-5. 合并后再发布到公网。
+## 发布与检查
 
-协作者由仓库管理员在 GitHub 的 `Settings → Collaborators` 添加。不要提交 `.env`、数据库、API Key、测试密码或 SSH 私钥。
-
-## 发布公网
-
-确认 PR 已合并到 `main` 后，在 PowerShell 执行：
+服务器已配置 GitHub deploy key。合并到 `main` 后，在 PowerShell 执行：
 
 ```powershell
 ssh -i 'D:\key\yicheng-ecs-2026.pem' `
   ecs-user@120.26.65.5 "sudo /usr/local/sbin/yicheng-deploy"
 ```
 
-发布后检查：
-
-```text
-https://yichengapp.top/
-https://yichengapp.top/api/v1/health
-```
-
-服务器上的部署脚本会拉取最新 `main`，保留生产 `.env` 和 `runtime/` 数据。
-
-## 常用检查
+发布后检查网站和 `/api/v1/health`。完整测试：
 
 ```powershell
 uv run pytest -q
 uv run python scripts/validate_static_data.py
 ```
 
-接口文档：<http://127.0.0.1:8000/docs>
-
-更多部署细节见 [`docs/deployment.md`](docs/deployment.md)，演示流程见 [`docs/demo_script.md`](docs/demo_script.md)。
+天气接口只提供当前及近期预报；历史演示日期使用 `data/weather_fallback.json` 中的明确演示数据，并会标记为演示来源，不冒充实时天气。

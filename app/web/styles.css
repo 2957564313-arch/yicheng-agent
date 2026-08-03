@@ -2102,3 +2102,28 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
   .tools-sidebar { display: none; }
   #tools-toggle { display: none; }
 }
+
+/* Keep the composer and every subpage in the same central column.  The
+   history rail defines the workspace height; allowing sibling columns to
+   auto-place created a large empty grid row before the assistant response. */
+.workspace-main {
+  grid-column: 2;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-content: start;
+}
+.workspace-main .response-column,
+.workspace-main .tools-sidebar { grid-column: auto; }
+.workspace-main .response-column { width: 100%; }
+
+@media (max-width: 900px) {
+  .workspace-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    width: 100%;
+  }
+  .workspace-main .response-column { display: grid; gap: 12px; }
+}

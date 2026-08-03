@@ -67,6 +67,17 @@ class WeatherFallbackService:
                     return live
             except Exception:
                 pass
+            # Live forecast APIs only cover a short rolling window.  For a
+            # historical demo date (or a temporary upstream failure), use the
+            # configured fixture when one exists instead of discarding it.
+            if allow_static:
+                static = await self.static.get_forecast(
+                    target_date,
+                    location_id,
+                    city_adcode=city_adcode,
+                )
+                if any(item.source.value != "unknown" for item in static):
+                    return static
             return [
                 WeatherContext(
                     date=target_date,

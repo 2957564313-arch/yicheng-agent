@@ -26,17 +26,29 @@ class StaticRoute:
 
 
 class FailingWeather:
-    async def get_forecast(self, target_date, location_id):
+    async def get_forecast(self, target_date, location_id, **kwargs):
         raise TimeoutError("timeout")
 
 
 class StaticWeather:
-    async def get_forecast(self, target_date, location_id):
+    async def get_forecast(self, target_date, location_id, **kwargs):
         return [
             WeatherContext(
                 date=target_date,
                 period="day",
                 source=DataSource.UNKNOWN,
+            )
+        ]
+
+
+class FixtureWeather:
+    async def get_forecast(self, target_date, location_id, **kwargs):
+        return [
+            WeatherContext(
+                date=target_date,
+                period="day",
+                condition="多云",
+                source=DataSource.DEMO_FIXTURE,
             )
         ]
 
@@ -68,4 +80,19 @@ async def test_weather_falls_back_after_live_timeout():
         prefer_live=True,
     )
     assert result[0].source == DataSource.UNKNOWN
+
+
+@pytest.mark.asyncio
+async def test_weather_uses_fixture_when_live_forecast_has_no_historical_date():
+    service = WeatherFallbackService(
+        static=FixtureWeather(),
+        live=StaticWeather(),
+    )
+    result = await service.get_forecast(
+        date(2026, 7, 24),
+        "campus",
+        prefer_live=True,
+        allow_static=True,
+    )
+    assert result[0].source == DataSource.DEMO_FIXTURE
 
