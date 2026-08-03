@@ -96,6 +96,16 @@ const loginPassword = $("#login-password");
 const loginMessage = $("#login-message");
 const logoutButton = $("#logout");
 const adjustmentPanel = $(".adjustment-panel");
+const historySidebar = $("#history-sidebar");
+const historyList = $("#history-list");
+const historyEmpty = $("#history-empty");
+const historyToggle = $("#history-toggle");
+const historyClose = $("#history-close");
+const newConversation = $("#new-conversation");
+const toolsSidebar = $("#tools-sidebar");
+const toolsToggle = $("#tools-toggle");
+const toolsClose = $("#tools-close");
+const drawerBackdrop = $("#drawer-backdrop");
 const consoleUserId = getOrCreateLocalIdentity(
   "yicheng_user_id",
   "visitor",
@@ -119,6 +129,7 @@ const campusSnapshotKey = "yicheng_campus_snapshot";
 const behaviorHistoryKey = "yicheng_behavior_history";
 const suggestionFeedbackKey = "yicheng_suggestion_feedback";
 const personalizationEnabledKey = "yicheng_personalization_enabled";
+const conversationHistoryKey = "yicheng_conversation_history";
 const shownReminderKey = "yicheng_shown_reminders";
 const reminderSettingsSnapshotKey = "yicheng_reminder_settings_snapshot";
 let currentReminderSettings = null;
@@ -134,6 +145,104 @@ function readLocalSnapshot(key, fallback) {
 
 function writeLocalSnapshot(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
+}
+
+function renderConversationHistory() {
+  if (!historyList || !historyEmpty) return;
+  const items = readLocalSnapshot(conversationHistoryKey, [])
+    .filter((item) => item && item.query)
+    .slice(0, 24);
+  historyEmpty.hidden = items.length > 0;
+  historyList.innerHTML = items.map((item) => `
+    <button class="history-item" type="button" data-history-query="${escapeHtml(item.query)}">
+      <strong>${escapeHtml(item.query)}</strong>
+      <small>${escapeHtml(item.answer || "已生成计划")}</small>
+    </button>
+  `).join("");
+}
+
+function recordConversationHistory(query, answerText) {
+  const normalized = String(query || "").trim();
+  if (!normalized) return;
+  const current = readLocalSnapshot(conversationHistoryKey, [])
+    .filter((item) => item && item.query && item.query !== normalized);
+  current.unshift({
+    query: normalized,
+    answer: String(answerText || "").replace(/\s+/g, " ").slice(0, 120),
+    created_at: new Date().toISOString(),
+  });
+  writeLocalSnapshot(conversationHistoryKey, current.slice(0, 24));
+  renderConversationHistory();
+}
+
+function closeDrawers() {
+  historySidebar?.classList.remove("mobile-open");
+  toolsSidebar?.classList.remove("mobile-open");
+  document.body.classList.remove("drawer-open");
+  historyToggle?.setAttribute("aria-expanded", "false");
+  toolsToggle?.setAttribute("aria-expanded", "false");
+  if (drawerBackdrop) drawerBackdrop.hidden = true;
+}
+
+function openDrawer(sidebar, toggle) {
+  if (!sidebar) return;
+  const opening = !sidebar.classList.contains("mobile-open");
+  historySidebar?.classList.remove("mobile-open");
+  toolsSidebar?.classList.remove("mobile-open");
+  if (!opening) {
+    closeDrawers();
+    return;
+  }
+  sidebar.classList.add("mobile-open");
+  document.body.classList.add("drawer-open");
+  historyToggle?.setAttribute("aria-expanded", String(sidebar === historySidebar));
+  toolsToggle?.setAttribute("aria-expanded", String(sidebar === toolsSidebar));
+  if (drawerBackdrop) drawerBackdrop.hidden = false;
+  toggle?.focus();
+}
+
+function initializeWorkspaceNavigation() {
+  historyToggle?.addEventListener("click", () => openDrawer(historySidebar, historyToggle));
+  toolsToggle?.addEventListener("click", () => openDrawer(toolsSidebar, toolsToggle));
+  historyClose?.addEventListener("click", closeDrawers);
+  toolsClose?.addEventListener("click", closeDrawers);
+  drawerBackdrop?.addEventListener("click", closeDrawers);
+
+  newConversation?.addEventListener("click", () => {
+    queryInput.value = "";
+    answer.textContent = "把课程、自习、取快递、吃饭或运动告诉我，我会先判断能否全部完成；如果时间不够，也会说明原因并给你可选方案。";
+    answer.classList.add("muted");
+    assistantActions.innerHTML = "";
+    freshness.innerHTML = "";
+    closeDrawers();
+    queryInput.focus();
+  });
+
+  historyList?.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-history-query]");
+    if (!item) return;
+    queryInput.value = item.dataset.historyQuery || "";
+    closeDrawers();
+    queryInput.focus();
+  });
+
+  document.querySelectorAll("[data-scroll-target]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const target = document.querySelector(`.${button.dataset.scrollTarget}`);
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (window.matchMedia("(max-width: 900px)").matches) closeDrawers();
+    });
+  });
+
+  document.querySelectorAll("[data-tool-target]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const target = document.querySelector(`.${button.dataset.toolTarget}`);
+      if (!target) return;
+      const open = target.classList.toggle("is-open");
+      button.classList.toggle("active", open);
+      if (open) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
 }
 
 function memoryBackupItems(items) {
@@ -1598,7 +1707,7 @@ function renderError(error) {
 function setLoading(active) {
   submitButton.disabled = active;
   resetButton.disabled = active;
-  submitButton.textContent = active ? "正在认真规划…" : "交给易程智策";
+  submitButton.textContent = active ? "正在认真规划…" : "发送给易程智策";
 }
 
 async function runRequest(url, options = {}) {
@@ -1631,7 +1740,7 @@ async function submitQuery(rawQuery) {
       queryInput.value = action.query;
     }
   }
-  await runRequest("/api/v1/chat", {
+  const data = await runRequest("/api/v1/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1641,7 +1750,8 @@ async function submitQuery(rawQuery) {
       mode: modeSelect.value,
       client_context: clientContextSnapshot(),
     }),
-  }).catch(() => {});
+  }).catch(() => null);
+  if (data) recordConversationHistory(query, data.answer);
 }
 
 submitButton.addEventListener("click", async () => {
@@ -2525,6 +2635,8 @@ async function checkHealth() {
 }
 
 async function initializeApp() {
+  initializeWorkspaceNavigation();
+  renderConversationHistory();
   checkHealth();
   setInterval(renderClock, 30000);
   updateMemoryPlaceholder();
