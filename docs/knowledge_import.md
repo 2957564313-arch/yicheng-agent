@@ -10,26 +10,32 @@
 
 ## 1. 只读盘点
 
-```bash
-uv run python -m scripts.import_knowledge --zip /mnt/data/coze.zip
+```powershell
+$archive = 'D:\APP\Dev\imports\coze.zip'
+& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe `
+  -m scripts.import_knowledge --zip $archive
 ```
 
 检查 `docs/reference/knowledge_inventory.json`，确认分类结果。
 
 ## 2. 导入
 
-```bash
-uv run python -m scripts.import_knowledge --zip /mnt/data/coze.zip --apply
+```powershell
+$archive = 'D:\APP\Dev\imports\coze.zip'
+& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe `
+  -m scripts.import_knowledge --zip $archive --apply
 ```
 
 默认支持 Markdown、TXT、JSON、CSV、HTML、PDF、DOCX、PPTX 和 XLSX。
 平台 Prompt、工作流和插件元数据会被排除。默认只导入路径被识别为
 知识库的文件。盘点后确认其他普通文档也属于正式知识时，显式增加：
 
-```bash
-uv run python -m scripts.import_knowledge \
-  --zip /mnt/data/coze.zip \
-  --apply \
+```powershell
+$archive = 'D:\APP\Dev\imports\coze.zip'
+& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe `
+  -m scripts.import_knowledge `
+  --zip $archive `
+  --apply `
   --include-documents
 ```
 

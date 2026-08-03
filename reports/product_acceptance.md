@@ -1,5 +1,9 @@
 # 公网产品级验收报告
 
+> 历史快照：本文件记录 2026-07-25 对当时公网版本的验收，不代表当前代码
+> 或部署状态。当前以 `README.md`、`docs/TECHNICAL_HANDOFF_NATIONAL_SECOND.md`
+> 和最新 Git 提交为准。
+
 验收日期：2026-07-25  
 验收版本：`d801cc7`
 公网入口：https://yicheng-agent.vercel.app/  

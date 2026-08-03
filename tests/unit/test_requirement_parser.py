@@ -427,3 +427,65 @@ def test_explicit_calendar_date_does_not_hide_following_clock_time():
     assert str(parser._overall_start("7月24日19点去西北田径场长跑")) == "19:00:00"
     assert str(parser._overall_start("7月26日晚上23点30分回宿舍")) == "23:30:00"
     assert str(parser._overall_start("7月25日15点45分去综合馆打羽毛球")) == "15:45:00"
+
+
+def test_common_academic_tasks_are_supported_without_online_model():
+    result = parse(
+        "明天下午2点后在图书馆复习高数2小时，"
+        "然后写作业90分钟，晚上7点前全部完成。"
+    )
+
+    tasks = {task.id: task for task in result.tasks}
+    assert set(tasks) == {"review", "assignment"}
+    assert tasks["review"].duration_min == 120
+    assert tasks["review"].location_raw == "图书馆"
+    assert tasks["review"].earliest_start.isoformat() == (
+        "2026-07-24T14:00:00+08:00"
+    )
+    assert tasks["assignment"].duration_min == 90
+    assert tasks["assignment"].deadline.isoformat() == (
+        "2026-07-24T19:00:00+08:00"
+    )
+    assert tasks["assignment"].depends_on == ["review"]
+    assert "common_task_fallback" in tasks["review"].tags
+
+
+def test_common_daily_life_and_activity_tasks_keep_explicit_order():
+    result = parse(
+        "明天中午吃午饭45分钟，然后回宿舍洗衣服30分钟，"
+        "最后参加社团活动1小时。"
+    )
+
+    tasks = {task.id: task for task in result.tasks}
+    assert set(tasks) == {"lunch", "laundry", "club"}
+    assert tasks["lunch"].duration_min == 45
+    assert tasks["lunch"].location_raw == "食堂"
+    assert tasks["laundry"].duration_min == 30
+    assert tasks["laundry"].location_raw == "学生公寓"
+    assert tasks["laundry"].depends_on == ["lunch"]
+    assert tasks["club"].duration_min == 60
+    assert tasks["club"].depends_on == ["laundry"]
+
+
+def test_fixed_common_task_is_not_duplicated_by_fallback_catalog():
+    result = parse(
+        "明天下午3点到4点开组会，然后在图书馆复习2小时。"
+    )
+
+    fixed = [task for task in result.tasks if task.fixed_start]
+    assert len(fixed) == 1
+    assert "组会" in fixed[0].title
+    assert [task.id for task in result.tasks].count("meeting") == 0
+    assert [task.id for task in result.tasks].count("review") == 1
+
+
+def test_common_task_location_is_scoped_to_its_own_clause():
+    result = parse(
+        "明天下午在实验室写代码2小时，再回宿舍休息30分钟。"
+    )
+
+    tasks = {task.id: task for task in result.tasks}
+    assert tasks["project"].location_raw == "实验室"
+    assert tasks["project"].duration_min == 120
+    assert tasks["rest"].location_raw == "学生公寓"
+    assert tasks["rest"].duration_min == 30

@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
 import re
+from datetime import date, datetime, timedelta
 
 from app.container import AppContainer
 from app.nodes.common import append_trace
-from app.schemas.common import Issue, IssueSeverity
 from app.schemas.calendar import CalendarOverrideCreate
-from app.schemas.common import TaskFlexibility
+from app.schemas.common import Issue, IssueSeverity, TaskFlexibility
 from app.schemas.memory import MemoryCreate, MemoryItem
 from app.schemas.plan import Plan
-from app.schemas.task import UserPreferences
-from app.schemas.task import Task
+from app.schemas.task import Task, UserPreferences
 from app.schemas.timetable import CourseSessionCreate
 from app.schemas.understand import UnderstandResult
 from app.state import CampusAgentState
@@ -63,50 +61,44 @@ def make_understand_node(container: AppContainer):
                         for memory in memories
                     ],
                 )
-                if _can_apply_rule_guard(
+                result = _merge_llm_with_rule_constraints(
                     query=state["query"],
                     llm_result=llm_result,
                     rule_result=rule_result,
+                )
+                if (
+                    llm_result.clarifications
+                    and _can_apply_rule_guard(
+                        query=state["query"],
+                        llm_result=llm_result,
+                        rule_result=rule_result,
+                    )
                 ):
-                    result = rule_result.model_copy(
+                    result = result.model_copy(
                         update={
-                            "confidence": max(
-                                rule_result.confidence,
-                                llm_result.confidence,
-                            )
+                            "clarifications": list(
+                                rule_result.clarifications
+                            ),
                         }
                     )
-                    parser_name = "llm_with_rule_guard"
-                else:
-                    result = llm_result
-                    parser_name = "llm"
+                parser_name = "llm_with_rule_constraints"
             except Exception as exc:
                 result = rule_result
-                parser_name = "offline_rules_fallback"
+                parser_name = "deterministic_rules_fallback"
                 warnings.append(
                     Issue(
                         code="LLM_DEGRADED",
                         severity=IssueSeverity.WARNING,
                         message=(
-                            "大模型暂时不可用，已切换为本地规则继续处理"
+                            "大模型暂时不可用，已使用确定性约束层继续完成规划"
                         ),
-                        details={
-                            "error_type": type(exc).__name__,
-                            "error_code": getattr(exc, "code", None),
-                            "provider_error_type": (
-                                exc.details[0].get(
-                                    "provider_error_type"
-                                )
-                                if getattr(exc, "details", None)
-                                else None
-                            ),
-                        },
+                        details=_safe_llm_warning_details(exc),
                         recoverable=True,
                     ).model_dump(mode="json")
                 )
         else:
             result = rule_result
-            parser_name = "offline_rules"
+            parser_name = "deterministic_rules"
 
         result = _apply_explicit_date_guard(
             query=state["query"],
@@ -684,22 +676,296 @@ def _apply_preferred_locations(
 
 def _task_kind(title: str, location_raw: str | None) -> str | None:
     text = f"{title} {location_raw or ''}"
-    for kind, keywords in (
-        ("study", ("自习", "学习", "图书馆")),
-        ("parcel", ("快递", "驿站")),
-        ("dinner", ("吃饭", "晚饭", "食堂")),
-        ("clinic", ("校医院", "看医生", "就诊", "医务室")),
-        ("bath", ("洗澡", "洗漱", "热水", "学生公寓")),
-        ("badminton", ("羽毛球", "综合馆")),
-        ("table_tennis", ("乒乓球", "体育馆主馆")),
-        (
-            "run",
-            ("阳光长跑", "长跑", "跑步", "运动", "操场", "田径场", "跑道"),
-        ),
-    ):
+    for kind, keywords in _TASK_KIND_KEYWORDS:
         if any(keyword in text for keyword in keywords):
             return kind
     return None
+
+
+_TASK_KIND_KEYWORDS = (
+    ("study", ("自习", "学习", "复习", "图书馆")),
+    ("parcel", ("快递", "驿站")),
+    ("dinner", ("吃饭", "晚饭", "食堂")),
+    ("clinic", ("校医院", "看医生", "就诊", "医务室")),
+    ("bath", ("洗澡", "洗漱", "热水", "学生公寓")),
+    ("badminton", ("羽毛球", "综合馆")),
+    ("table_tennis", ("乒乓球", "体育馆主馆")),
+    (
+        "run",
+        ("阳光长跑", "长跑", "跑步", "运动", "操场", "田径场", "跑道"),
+    ),
+)
+
+
+def _merge_llm_with_rule_constraints(
+    *,
+    query: str,
+    llm_result: UnderstandResult,
+    rule_result: UnderstandResult,
+) -> UnderstandResult:
+    """Keep model semantics while enforcing facts recognized deterministically."""
+    if (
+        llm_result.intent.value != "plan"
+        or rule_result.intent.value != "plan"
+        or not rule_result.tasks
+    ):
+        return llm_result
+
+    merged = list(llm_result.tasks)
+    matched_indexes: set[int] = set()
+    id_remap: dict[str, str] = {}
+    appended_rule_tasks: list[Task] = []
+
+    for rule_task in rule_result.tasks:
+        match_index = _best_rule_task_match(
+            rule_task=rule_task,
+            llm_tasks=merged,
+            matched_indexes=matched_indexes,
+        )
+        if match_index is None:
+            if (
+                "common_task_fallback" not in rule_task.tags
+                or not llm_result.tasks
+            ):
+                appended_rule_tasks.append(rule_task)
+            continue
+
+        model_task = merged[match_index]
+        matched_indexes.add(match_index)
+        id_remap[model_task.id] = rule_task.id
+        merged[match_index] = _merge_task_constraints(
+            query=query,
+            model_task=model_task,
+            rule_task=rule_task,
+        )
+
+    merged.extend(appended_rule_tasks)
+    merged = [
+        task.model_copy(
+            update={
+                "depends_on": list(
+                    dict.fromkeys(
+                        id_remap.get(task_id, task_id)
+                        for task_id in task.depends_on
+                        if id_remap.get(task_id, task_id) != task.id
+                    )
+                )
+            }
+        )
+        for task in merged
+    ]
+    merged = [
+        task
+        for _, task in sorted(
+            enumerate(merged),
+            key=lambda item: (
+                _task_query_position(query, item[1]),
+                item[0],
+            ),
+        )
+    ]
+    clarifications = list(
+        dict.fromkeys(
+            [
+                *llm_result.clarifications,
+                *rule_result.clarifications,
+            ]
+        )
+    )
+    return llm_result.model_copy(
+        update={
+            "requested_date": rule_result.requested_date,
+            "tasks": merged,
+            "clarifications": clarifications,
+            "confidence": max(
+                llm_result.confidence,
+                rule_result.confidence,
+            ),
+        }
+    )
+
+
+def _best_rule_task_match(
+    *,
+    rule_task: Task,
+    llm_tasks: list[Task],
+    matched_indexes: set[int],
+) -> int | None:
+    best_index: int | None = None
+    best_score = 0
+    rule_kind = _task_kind(rule_task.title, rule_task.location_raw)
+    rule_title = _normalize_task_text(rule_task.title)
+    rule_location = _normalize_task_text(rule_task.location_raw or "")
+
+    for index, model_task in enumerate(llm_tasks):
+        if index in matched_indexes:
+            continue
+        score = 0
+        model_kind = _task_kind(model_task.title, model_task.location_raw)
+        model_title = _normalize_task_text(model_task.title)
+        model_location = _normalize_task_text(model_task.location_raw or "")
+        if model_task.id == rule_task.id:
+            score += 100
+        if rule_kind is not None and model_kind == rule_kind:
+            score += 60
+        elif (
+            rule_kind is not None
+            and model_kind is not None
+            and model_kind != rule_kind
+        ):
+            continue
+        if rule_title and model_title:
+            if rule_title == model_title:
+                score += 50
+            elif rule_title in model_title or model_title in rule_title:
+                score += 25
+        if rule_location and model_location:
+            if rule_location == model_location:
+                score += 30
+            elif rule_location in model_location or model_location in rule_location:
+                score += 15
+        if score > best_score:
+            best_index = index
+            best_score = score
+    return best_index
+
+
+def _merge_task_constraints(
+    *,
+    query: str,
+    model_task: Task,
+    rule_task: Task,
+) -> Task:
+    fixed_by_rule = rule_task.flexibility in {
+        TaskFlexibility.FIXED,
+        TaskFlexibility.LOCKED,
+    }
+    use_rule_location = bool(
+        rule_task.location_raw
+        and (
+            "hard_constraint" in rule_task.tags
+            or rule_task.location_raw in query
+        )
+    )
+    tags = list(dict.fromkeys([*model_task.tags, *rule_task.tags]))
+    notes = model_task.notes
+    if "hard_constraint" in rule_task.tags and rule_task.notes:
+        notes = (
+            rule_task.notes
+            if not notes or notes == rule_task.notes
+            else f"{notes}；{rule_task.notes}"
+        )
+
+    update = {
+        "id": rule_task.id,
+        "date": rule_task.date,
+        "duration_min": (
+            rule_task.duration_min
+            if fixed_by_rule
+            else model_task.duration_min
+        ),
+        "location_id": (
+            rule_task.location_id
+            if use_rule_location
+            else model_task.location_id
+        ),
+        "location_raw": (
+            rule_task.location_raw
+            if use_rule_location
+            else model_task.location_raw
+        ),
+        "earliest_start": _later_datetime(
+            model_task.earliest_start,
+            rule_task.earliest_start,
+        ),
+        "latest_end": _earlier_datetime(
+            model_task.latest_end,
+            rule_task.latest_end,
+        ),
+        "deadline": _earlier_datetime(
+            model_task.deadline,
+            rule_task.deadline,
+        ),
+        "importance": max(model_task.importance, rule_task.importance),
+        "depends_on": list(
+            dict.fromkeys(
+                [*model_task.depends_on, *rule_task.depends_on]
+            )
+        ),
+        "tags": tags,
+        "notes": notes,
+    }
+    if fixed_by_rule:
+        update.update(
+            {
+                "fixed_start": rule_task.fixed_start,
+                "fixed_end": rule_task.fixed_end,
+                "flexibility": rule_task.flexibility,
+            }
+        )
+    return model_task.model_copy(update=update)
+
+
+def _task_query_position(query: str, task: Task) -> int:
+    candidates = [task.title, task.location_raw or ""]
+    kind = _task_kind(task.title, task.location_raw)
+    candidates.extend(
+        values
+        for candidate, values in _TASK_KIND_KEYWORDS
+        if candidate == kind
+    )
+    flattened: list[str] = []
+    for value in candidates:
+        if isinstance(value, tuple):
+            flattened.extend(value)
+        elif value:
+            flattened.append(value)
+    positions = [
+        query.find(value)
+        for value in flattened
+        if value and query.find(value) >= 0
+    ]
+    return min(positions, default=len(query) + 1)
+
+
+def _normalize_task_text(value: str) -> str:
+    return re.sub(r"[\s，。；、,:：！？!?（）()\-—_]", "", value)
+
+
+def _later_datetime(
+    first: datetime | None,
+    second: datetime | None,
+) -> datetime | None:
+    values = [value for value in (first, second) if value is not None]
+    return max(values, default=None)
+
+
+def _earlier_datetime(
+    first: datetime | None,
+    second: datetime | None,
+) -> datetime | None:
+    values = [value for value in (first, second) if value is not None]
+    return min(values, default=None)
+
+
+def _safe_llm_warning_details(exc: Exception) -> dict:
+    details = {
+        "error_type": type(exc).__name__,
+        "error_code": getattr(exc, "code", None),
+    }
+    raw_details = getattr(exc, "details", None)
+    if not raw_details or not isinstance(raw_details[0], dict):
+        return details
+    for key in (
+        "provider_status_code",
+        "provider_error_code",
+        "provider_error_type",
+        "provider_exception_type",
+    ):
+        value = raw_details[0].get(key)
+        if value is not None:
+            details[key] = value
+    return details
 
 
 def _can_apply_rule_guard(

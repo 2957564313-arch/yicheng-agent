@@ -1,5 +1,9 @@
 # 发布验收清单
 
+> 历史快照：本文件记录 2026-07-25 当时的状态和待办，不作为当前发布结论。
+> 当前以 `README.md`、`docs/TECHNICAL_HANDOFF_NATIONAL_SECOND.md` 和
+> `reports/evaluation.md` 为准。
+
 更新时间：2026-07-25
 
 ## 已完成

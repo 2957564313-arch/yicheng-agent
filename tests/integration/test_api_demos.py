@@ -52,6 +52,12 @@ class MisleadingKnowledgeLLM:
 
 def test_health_and_demo_catalog(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
+        home = client.get("/")
+        assert home.status_code == 200
+        assert '<option value="auto">智能联网</option>' in home.text
+        assert '<option value="live">强制实时</option>' in home.text
+        assert 'option value="offline"' not in home.text
+
         health = client.get("/api/v1/health")
         assert health.status_code == 200
         assert health.json()["service"] == "yicheng-agent"

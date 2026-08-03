@@ -279,6 +279,16 @@ CREATE TABLE IF NOT EXISTS weekly_plan_versions (
 """
 
 
+class _ClosingConnection(sqlite3.Connection):
+    """Commit or roll back like sqlite3's context manager, then release the file."""
+
+    def __exit__(self, exc_type, exc_value, traceback) -> bool:
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
+
+
 class Database:
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -289,6 +299,7 @@ class Database:
             self.path,
             timeout=10,
             isolation_level=None,
+            factory=_ClosingConnection,
         )
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
@@ -297,8 +308,11 @@ class Database:
         return connection
 
     def initialize(self) -> None:
-        with self.connect() as connection:
+        connection = self.connect()
+        try:
             connection.executescript(SCHEMA_SQL)
+        finally:
+            connection.close()
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:

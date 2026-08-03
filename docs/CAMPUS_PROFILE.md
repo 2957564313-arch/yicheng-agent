@@ -78,9 +78,9 @@ POI 坐标；“实验室”“食堂”等泛称先结合本校地点别名，�
 
 更新本校知识后运行：
 
-```text
-.venv/bin/python scripts/validate_static_data.py
-.venv/bin/pytest -q
+```powershell
+& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe scripts\validate_static_data.py
+& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe -m pytest -q
 ```
 
 当前静态数据验收应至少保证：

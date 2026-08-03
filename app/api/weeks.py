@@ -1,32 +1,38 @@
 from __future__ import annotations
 
+import json
+import sqlite3
 from datetime import date, datetime, time
 from hashlib import sha256
-import json
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Query, Request, status
 
 from app.errors import AppError
+from app.repositories.exceptions import (
+    WeeklyGroundingSnapshotChanged,
+    WeeklyPlanSnapshotChanged,
+    WeeklyPlanSuperseded,
+)
 from app.schemas.memory import MemoryCreate
 from app.schemas.timetable import CourseSessionCreate
 from app.schemas.weekly import (
     CompletionEventCreate,
     CompletionEventResponse,
+    WeekdayAvailability,
+    WeeklyAvailabilityProfile,
     WeeklyCapacitySummary,
+    WeeklyClockWindow,
     WeeklyPlanCreateRequest,
     WeeklyPlanResponse,
     WeeklyPlanStatus,
     WeeklyPlanVersionsResponse,
-    WeeklyAvailabilityProfile,
-    WeeklyClockWindow,
-    WeeklyTextInterpretation,
+    WeeklyReplanRequest,
     WeeklyTextPlanRequest,
     WeeklyTriggerType,
-    WeekdayAvailability,
 )
+from app.schemas.weekly_grounding import WeeklyDailyGroundingResponse
 from app.services.weekly_request_parser import RuleBasedWeeklyRequestParser
-
 
 router = APIRouter(prefix="/api/v1/weeks", tags=["weekly-planning"])
 
@@ -202,7 +208,7 @@ async def create_weekly_plan_from_text(
             if model_result.goals and not model_result.clarifications:
                 interpretation = model_result
                 parser_name = "llm"
-        except Exception:
+        except Exception:  # noqa: BLE001
             # A weekly plan must remain usable when a model's free quota,
             # rate limit, or temporary availability changes.
             parser_name = "structured_rules_fallback"
@@ -308,6 +314,149 @@ def list_weekly_plan_versions(
 
 
 @router.post(
+    "/{plan_id}/days/{target_date}/materialize",
+    response_model=WeeklyDailyGroundingResponse,
+)
+async def materialize_weekly_day(
+    plan_id: str,
+    target_date: date,
+    request: Request,
+    user_id: str = Query(min_length=1, max_length=64),
+    prefer_live: bool = Query(default=True),
+) -> WeeklyDailyGroundingResponse:
+    container = request.app.state.container
+    _current_weekly_plan(
+        container=container,
+        plan_id=plan_id,
+        user_id=user_id,
+    )
+    try:
+        return await container.weekly_grounding.materialize_day(
+            plan_id=plan_id,
+            user_id=user_id,
+            target_date=target_date,
+            prefer_live=prefer_live,
+        )
+    except WeeklyPlanSuperseded as exc:
+        raise _weekly_plan_superseded_error(container, plan_id) from exc
+    except WeeklyGroundingSnapshotChanged as exc:
+        raise AppError(
+            "WEEKLY_GROUNDING_SNAPSHOT_CHANGED",
+            "周计划在生成日程期间发生了变化，请重试。",
+            status_code=409,
+            retryable=True,
+            details=[{"reason": str(exc)}],
+        ) from exc
+    except LookupError as exc:
+        raise AppError(
+            "WEEKLY_PLAN_NOT_FOUND",
+            "没有找到对应的周计划。",
+            status_code=404,
+        ) from exc
+    except ValueError as exc:
+        raise AppError(
+            "WEEKLY_DAY_OUTSIDE_PLAN",
+            "要落地的日期必须位于这份周计划内。",
+            status_code=422,
+            details=[{"reason": str(exc)}],
+        ) from exc
+
+
+@router.post(
+    "/{plan_id}/replan",
+    response_model=WeeklyPlanResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def replan_weekly_plan(
+    plan_id: str,
+    payload: WeeklyReplanRequest,
+    request: Request,
+    user_id: str = Query(min_length=1, max_length=64),
+) -> WeeklyPlanResponse:
+    container = request.app.state.container
+    baseline = _current_weekly_plan(
+        container=container,
+        plan_id=plan_id,
+        user_id=user_id,
+    )
+    baseline_fingerprint = (
+        container.weekly_plans.weekly_plan_fingerprint(baseline)
+    )
+
+    known_allocation_ids = {
+        allocation.id for allocation in baseline.allocations
+    }
+    unknown_allocation_ids = sorted(
+        set(payload.invalidated_allocation_ids)
+        - known_allocation_ids
+    )
+    if unknown_allocation_ids:
+        raise AppError(
+            "WEEKLY_ALLOCATION_NOT_FOUND",
+            "要失效的周计划块不存在，请刷新后重试。",
+            status_code=404,
+            details=[
+                {
+                    "allocation_ids": unknown_allocation_ids,
+                }
+            ],
+        )
+
+    capacities, capacity_summary = _resolve_replan_capacities(
+        payload=payload,
+        baseline=baseline,
+        container=container,
+    )
+    now = datetime.now(ZoneInfo(baseline.timezone))
+    try:
+        plan = container.weekly_replanner.replan(
+            baseline=baseline,
+            capacities=capacities,
+            trigger=payload.trigger_type,
+            now=now,
+            invalidated_allocation_ids=(
+                payload.invalidated_allocation_ids
+            ),
+            additional_goals=payload.additional_goals,
+        )
+        container.weekly_plans.save_replan(
+            plan,
+            baseline_plan_id=baseline.id,
+            baseline_fingerprint=baseline_fingerprint,
+        )
+    except WeeklyPlanSuperseded as exc:
+        raise _weekly_plan_superseded_error(container, plan_id) from exc
+    except WeeklyPlanSnapshotChanged as exc:
+        raise AppError(
+            "WEEKLY_REPLAN_SNAPSHOT_CHANGED",
+            "周计划在重排期间发生了变化，请基于最新进度重试。",
+            status_code=409,
+            retryable=True,
+            details=[{"reason": str(exc)}],
+        ) from exc
+    except ValueError as exc:
+        raise AppError(
+            "WEEKLY_REPLAN_INVALID",
+            "当前变化信息不足以生成可靠的周计划新版本。",
+            status_code=422,
+            details=[{"reason": str(exc)}],
+        ) from exc
+    except sqlite3.IntegrityError as exc:
+        raise AppError(
+            "WEEKLY_REPLAN_CONFLICT",
+            "周计划刚刚被另一项操作更新，请读取最新版本后重试。",
+            status_code=409,
+        ) from exc
+
+    return WeeklyPlanResponse(
+        status="completed",
+        answer=_replan_answer(plan),
+        weekly_plan=plan,
+        capacity_summary=capacity_summary,
+    )
+
+
+@router.post(
     "/{plan_id}/events",
     response_model=CompletionEventResponse,
 )
@@ -318,6 +467,11 @@ def record_weekly_event(
     user_id: str = Query(min_length=1, max_length=64),
 ) -> CompletionEventResponse:
     container = request.app.state.container
+    _current_weekly_plan(
+        container=container,
+        plan_id=plan_id,
+        user_id=user_id,
+    )
     now = datetime.now(ZoneInfo(container.settings.app_timezone))
     try:
         event, applied = container.weekly_plans.record_event(
@@ -326,6 +480,8 @@ def record_weekly_event(
             payload=payload,
             now=now,
         )
+    except WeeklyPlanSuperseded as exc:
+        raise _weekly_plan_superseded_error(container, plan_id) from exc
     except LookupError as exc:
         if str(exc) == "WEEKLY_ALLOCATION_NOT_FOUND":
             raise AppError(
@@ -358,6 +514,63 @@ def record_weekly_event(
     )
 
 
+def _current_weekly_plan(
+    *,
+    container,
+    plan_id: str,
+    user_id: str,
+):
+    plan = container.weekly_plans.get(plan_id)
+    if plan is None or plan.user_id != user_id:
+        raise AppError(
+            "WEEKLY_PLAN_NOT_FOUND",
+            "没有找到对应的周计划。",
+            status_code=404,
+        )
+    latest = container.weekly_plans.latest(
+        user_id=user_id,
+        campus_id=plan.campus_id,
+        week_start=plan.week_start,
+    )
+    if latest is None or latest.id != plan.id:
+        raise AppError(
+            "WEEKLY_PLAN_SUPERSEDED",
+            "这份周计划已有更新版本，请基于最新版本继续操作。",
+            status_code=409,
+            details=[
+                {
+                    "latest_plan_id": latest.id if latest else None,
+                    "latest_version": latest.version if latest else None,
+                }
+            ],
+        )
+    return plan
+
+
+def _weekly_plan_superseded_error(container, plan_id: str) -> AppError:
+    plan = container.weekly_plans.get(plan_id)
+    latest = (
+        container.weekly_plans.latest(
+            user_id=plan.user_id,
+            campus_id=plan.campus_id,
+            week_start=plan.week_start,
+        )
+        if plan is not None
+        else None
+    )
+    return AppError(
+        "WEEKLY_PLAN_SUPERSEDED",
+        "这份周计划已有更新版本，请基于最新版本继续操作。",
+        status_code=409,
+        details=[
+            {
+                "latest_plan_id": latest.id if latest else None,
+                "latest_version": latest.version if latest else None,
+            }
+        ],
+    )
+
+
 def _plan_answer(plan) -> str:
     allocated = plan.metrics.allocated_duration_min
     requested = plan.metrics.requested_duration_min
@@ -385,6 +598,45 @@ def _plan_answer(plan) -> str:
         "我没有隐藏或删除任何任务。建议先增加一个可用时段，"
         "或明确哪项任务可以延期，我再做最小幅度的调整。"
     )
+
+
+def _replan_answer(plan) -> str:
+    preservation = plan.metrics.preservation_rate
+    preservation_text = (
+        f"{preservation:.0%}" if preservation is not None else "无可比较旧块"
+    )
+    summary = (
+        f"已生成第 {plan.version} 版周计划：保留率 {preservation_text}，"
+        f"移动 {plan.metrics.moved_allocation_count} 个原时间块。"
+    )
+    if plan.status == WeeklyPlanStatus.VALID:
+        return summary + "所有剩余目标均已在当前硬约束内重新落位。"
+    return (
+        summary
+        + f"仍有 {plan.metrics.unallocated_duration_min} 分钟无法安全安排；"
+        "系统保留了冻结时间块，并在 issues 中给出具体冲突。"
+    )
+
+
+def _resolve_replan_capacities(
+    *,
+    payload: WeeklyReplanRequest,
+    baseline,
+    container,
+):
+    if payload.capacities:
+        return payload.capacities, WeeklyCapacitySummary(
+            source="manual",
+            notes=["按本次事件提供的最新可用时段执行最小扰动重排"],
+        )
+    profile = payload.availability or _default_weekly_availability()
+    result = container.weekly_capacity.build(
+        user_id=baseline.user_id,
+        week_start=baseline.week_start,
+        timezone_name=baseline.timezone,
+        profile=profile,
+    )
+    return result.capacities, result.summary
 
 
 def _resolve_capacities(

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import heapq
+import itertools
 import json
 import math
 from pathlib import Path
+from typing import ClassVar
 
 from app.providers.location_repository import LocationRepository
 from app.schemas.common import DataSource
@@ -13,7 +16,7 @@ class StaticRouteProvider:
     # These are physical-area anchors inside HDU. They are used only when a
     # venue has a verified name/rule but no cached unique coordinate yet.
     # Live mode still asks AMap first.
-    _HDU_ROUTE_ANCHORS = {
+    _HDU_ROUTE_ANCHORS: ClassVar[dict[str, str]] = {
         "library_floor_6_12": "library",
         "library_floor_7_11": "library",
         "sf_express": "parcel_station",
@@ -36,6 +39,7 @@ class StaticRouteProvider:
         self.data_quality = payload.get("data_quality", "unknown")
         self.locations = locations
         self._pairs: dict[tuple[str, str], dict] = {}
+        self._adjacency: dict[str, list[tuple[str, dict]]] = {}
         for pair in payload.get("pairs", []):
             origin = pair["origin_id"]
             destination = pair["destination_id"]
@@ -49,6 +53,8 @@ class StaticRouteProvider:
                 reverse["origin_id"] = destination
                 reverse["destination_id"] = origin
                 self._pairs[(destination, origin)] = reverse
+        for (origin, destination), pair in self._pairs.items():
+            self._adjacency.setdefault(origin, []).append((destination, pair))
 
     async def get_route(
         self,
@@ -185,7 +191,78 @@ class StaticRouteProvider:
                 confidence=0.45,
                 warning="未找到静态路线，当前结果由坐标直线距离估算",
             )
+
+        cached_path = self._find_cached_path(
+            anchor_origin,
+            anchor_destination,
+        )
+        if cached_path is not None:
+            walking_duration_min, distance_m, confidence = cached_path
+            duration_min = self._duration_for_mode(
+                mode=mode,
+                walking_duration_min=walking_duration_min,
+                distance_m=distance_m,
+            )
+            return TravelEstimate(
+                origin_id=origin_id,
+                destination_id=destination_id,
+                mode=mode,
+                distance_m=distance_m,
+                duration_min=duration_min,
+                base_duration_min=duration_min,
+                source=DataSource.ESTIMATED,
+                confidence=min(confidence, 0.4),
+                warning=(
+                    "实时路线不可用，当前按多段校内缓存路线保守估算；"
+                    "联网时将优先使用高德对应出行方式"
+                ),
+            )
         raise LookupError(f"route unavailable: {origin_id}->{destination_id}")
+
+    def _find_cached_path(
+        self,
+        origin_id: str,
+        destination_id: str,
+    ) -> tuple[int, int | None, float] | None:
+        """Find the shortest connected route using verified cached segments."""
+        counter = itertools.count()
+        queue: list[tuple[int, int, str, list[dict]]] = [
+            (0, next(counter), origin_id, [])
+        ]
+        best_duration = {origin_id: 0}
+
+        while queue:
+            duration, _, current, edges = heapq.heappop(queue)
+            if duration != best_duration.get(current):
+                continue
+            if current == destination_id:
+                distances = [edge.get("distance_m") for edge in edges]
+                distance_m = (
+                    sum(int(value) for value in distances)
+                    if distances and all(value is not None for value in distances)
+                    else None
+                )
+                confidence = min(
+                    (float(edge.get("confidence", 0.8)) for edge in edges),
+                    default=0.4,
+                )
+                return duration, distance_m, confidence
+
+            for neighbor, pair in self._adjacency.get(current, []):
+                next_duration = duration + int(pair["duration_min"])
+                if next_duration >= best_duration.get(neighbor, math.inf):
+                    continue
+                best_duration[neighbor] = next_duration
+                heapq.heappush(
+                    queue,
+                    (
+                        next_duration,
+                        next(counter),
+                        neighbor,
+                        [*edges, pair],
+                    ),
+                )
+        return None
 
     def _estimate_from_coordinates(
         self,

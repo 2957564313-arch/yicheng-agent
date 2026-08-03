@@ -1550,6 +1550,417 @@
     }
   },
   {
+    "case_id": "broad_academic_combo",
+    "category": "broad_student_scenarios",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_broad_academic_combo",
+      "query": "明天下午2点后在图书馆复习高数2小时，然后写作业90分钟，晚上7点前全部完成。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 2,
+      "warning_codes": [
+        "API_DEGRADED"
+      ],
+      "answer_contains": [],
+      "answer_not_contains": [],
+      "min_answer_length": 0,
+      "required_task_titles": [
+        "复习",
+        "作业"
+      ],
+      "forbidden_task_titles": [],
+      "required_travel_mode": null,
+      "min_congestion_delay_min": 0,
+      "target_date": null
+    }
+  },
+  {
+    "case_id": "broad_project_lab",
+    "category": "broad_student_scenarios",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_broad_project_lab",
+      "query": "明天下午2点后在实验室写代码2小时，晚上6点前完成。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 1,
+      "warning_codes": [
+        "API_DEGRADED"
+      ],
+      "answer_contains": [],
+      "answer_not_contains": [],
+      "min_answer_length": 0,
+      "required_task_titles": [
+        "项目"
+      ],
+      "forbidden_task_titles": [],
+      "required_travel_mode": null,
+      "min_congestion_delay_min": 0,
+      "target_date": null
+    }
+  },
+  {
+    "case_id": "broad_fixed_meeting",
+    "category": "broad_student_scenarios",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_broad_fixed_meeting",
+      "query": "明天下午3点到4点开组会，然后在图书馆复习1小时。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 2,
+      "warning_codes": [
+        "API_DEGRADED"
+      ],
+      "answer_contains": [],
+      "answer_not_contains": [],
+      "min_answer_length": 0,
+      "required_task_titles": [
+        "组会",
+        "复习"
+      ],
+      "forbidden_task_titles": [],
+      "required_travel_mode": null,
+      "min_congestion_delay_min": 0,
+      "target_date": null
+    }
+  },
+  {
+    "case_id": "broad_life_activity_sequence",
+    "category": "broad_student_scenarios",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_broad_life_activity_sequence",
+      "query": "明天中午吃午饭45分钟，然后回宿舍洗衣服30分钟，最后参加社团活动1小时。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 3,
+      "warning_codes": [
+        "API_DEGRADED"
+      ],
+      "answer_contains": [],
+      "answer_not_contains": [],
+      "min_answer_length": 0,
+      "required_task_titles": [
+        "午饭",
+        "洗衣",
+        "社团"
+      ],
+      "forbidden_task_titles": [],
+      "required_travel_mode": null,
+      "min_congestion_delay_min": 0,
+      "target_date": null
+    }
+  },
+  {
+    "case_id": "broad_three_meals",
+    "category": "broad_student_scenarios",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_broad_three_meals",
+      "query": "明天吃早餐30分钟，中午吃午饭45分钟，晚上吃晚饭45分钟。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 3,
+      "warning_codes": [
+        "API_DEGRADED"
+      ],
+      "answer_contains": [],
+      "answer_not_contains": [],
+      "min_answer_length": 0,
+      "required_task_titles": [
+        "早餐",
+        "午饭",
+        "晚饭"
+      ],
+      "forbidden_task_titles": [],
+      "required_travel_mode": null,
+      "min_congestion_delay_min": 0,
+      "target_date": null
+    }
+  },
+  {
+    "case_id": "broad_rest_and_call",
+    "category": "broad_student_scenarios",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_broad_rest_and_call",
+      "query": "明天下午写作业2小时，然后回宿舍休息30分钟，再打电话20分钟。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 3,
+      "warning_codes": [
+        "API_DEGRADED"
+      ],
+      "answer_contains": [],
+      "answer_not_contains": [],
+      "min_answer_length": 0,
+      "required_task_titles": [
+        "作业",
+        "休息",
+        "电话"
+      ],
+      "forbidden_task_titles": [],
+      "required_travel_mode": null,
+      "min_congestion_delay_min": 0,
+      "target_date": null
+    }
+  },
+  {
+    "case_id": "broad_scoped_admin_deadline",
+    "category": "broad_student_scenarios",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_broad_scoped_admin_deadline",
+      "query": "明天下午复习2小时，18点前提交材料30分钟，晚上参加社团活动1小时。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 3,
+      "warning_codes": [
+        "API_DEGRADED"
+      ],
+      "answer_contains": [],
+      "answer_not_contains": [],
+      "min_answer_length": 0,
+      "required_task_titles": [
+        "复习",
+        "校园事务",
+        "社团"
+      ],
+      "forbidden_task_titles": [],
+      "required_travel_mode": null,
+      "min_congestion_delay_min": 0,
+      "target_date": null
+    }
+  },
+  {
+    "case_id": "broad_location_scoping",
+    "category": "broad_student_scenarios",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_broad_location_scoping",
+      "query": "明天下午在实验室写代码2小时，再回宿舍休息30分钟。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 2,
+      "warning_codes": [
+        "API_DEGRADED"
+      ],
+      "answer_contains": [],
+      "answer_not_contains": [],
+      "min_answer_length": 0,
+      "required_task_titles": [
+        "项目",
+        "休息"
+      ],
+      "forbidden_task_titles": [],
+      "required_travel_mode": null,
+      "min_congestion_delay_min": 0,
+      "target_date": null
+    }
+  },
+  {
+    "case_id": "broad_shopping_laundry",
+    "category": "broad_student_scenarios",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_broad_shopping_laundry",
+      "query": "明天下午去超市买日用品45分钟，再回宿舍洗衣服30分钟。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 2,
+      "warning_codes": [
+        "API_DEGRADED"
+      ],
+      "answer_contains": [],
+      "answer_not_contains": [],
+      "min_answer_length": 0,
+      "required_task_titles": [
+        "采购",
+        "洗衣"
+      ],
+      "forbidden_task_titles": [],
+      "required_travel_mode": null,
+      "min_congestion_delay_min": 0,
+      "target_date": null
+    }
+  },
+  {
+    "case_id": "broad_exam_review",
+    "category": "broad_student_scenarios",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_broad_exam_review",
+      "query": "明天9点到11点考试，下午在图书馆复习2小时。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 2,
+      "warning_codes": [
+        "API_DEGRADED"
+      ],
+      "answer_contains": [],
+      "answer_not_contains": [],
+      "min_answer_length": 0,
+      "required_task_titles": [
+        "考试",
+        "复习"
+      ],
+      "forbidden_task_titles": [],
+      "required_travel_mode": null,
+      "min_congestion_delay_min": 0,
+      "target_date": null
+    }
+  },
+  {
+    "case_id": "broad_collaboration_report",
+    "category": "broad_student_scenarios",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_broad_collaboration_report",
+      "query": "明天下午小组讨论1小时，然后写实验报告2小时，18点前全部完成。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 2,
+      "warning_codes": [
+        "API_DEGRADED"
+      ],
+      "answer_contains": [],
+      "answer_not_contains": [],
+      "min_answer_length": 0,
+      "required_task_titles": [
+        "会议",
+        "作业"
+      ],
+      "forbidden_task_titles": [],
+      "required_travel_mode": null,
+      "min_congestion_delay_min": 0,
+      "target_date": null
+    }
+  },
+  {
+    "case_id": "broad_morning_admin",
+    "category": "broad_student_scenarios",
+    "endpoint": "chat",
+    "request": {
+      "user_id": "evaluation_user",
+      "thread_id": "thread_broad_morning_admin",
+      "query": "明天上午打印资料30分钟，再去图书馆预习1小时。",
+      "mode": "offline",
+      "client_context": {
+        "now": "2026-07-23T08:00:00+08:00"
+      }
+    },
+    "expected": {
+      "http_status": 200,
+      "status": "completed",
+      "plan_status": "valid",
+      "min_task_count": 2,
+      "warning_codes": [
+        "API_DEGRADED"
+      ],
+      "answer_contains": [],
+      "answer_not_contains": [],
+      "min_answer_length": 0,
+      "required_task_titles": [
+        "校园事务",
+        "复习"
+      ],
+      "forbidden_task_titles": [],
+      "required_travel_mode": null,
+      "min_congestion_delay_min": 0,
+      "target_date": null
+    }
+  },
+  {
     "case_id": "clarification_01",
     "category": "clarification",
     "endpoint": "chat",

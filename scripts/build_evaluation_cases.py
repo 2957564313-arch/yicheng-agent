@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from app.config import BASE_DIR
 
@@ -125,6 +124,109 @@ def build_cases() -> list[dict]:
                 warning_codes=["API_DEGRADED"],
             )
         )
+
+    broad_scenario_cases = [
+        chat_case(
+            "broad_academic_combo",
+            "broad_student_scenarios",
+            (
+                "明天下午2点后在图书馆复习高数2小时，然后写作业90分钟，"
+                "晚上7点前全部完成。"
+            ),
+            min_task_count=2,
+            required_task_titles=["复习", "作业"],
+        ),
+        chat_case(
+            "broad_project_lab",
+            "broad_student_scenarios",
+            "明天下午2点后在实验室写代码2小时，晚上6点前完成。",
+            min_task_count=1,
+            required_task_titles=["项目"],
+        ),
+        chat_case(
+            "broad_fixed_meeting",
+            "broad_student_scenarios",
+            "明天下午3点到4点开组会，然后在图书馆复习1小时。",
+            min_task_count=2,
+            required_task_titles=["组会", "复习"],
+        ),
+        chat_case(
+            "broad_life_activity_sequence",
+            "broad_student_scenarios",
+            (
+                "明天中午吃午饭45分钟，然后回宿舍洗衣服30分钟，"
+                "最后参加社团活动1小时。"
+            ),
+            min_task_count=3,
+            required_task_titles=["午饭", "洗衣", "社团"],
+        ),
+        chat_case(
+            "broad_three_meals",
+            "broad_student_scenarios",
+            "明天吃早餐30分钟，中午吃午饭45分钟，晚上吃晚饭45分钟。",
+            min_task_count=3,
+            required_task_titles=["早餐", "午饭", "晚饭"],
+        ),
+        chat_case(
+            "broad_rest_and_call",
+            "broad_student_scenarios",
+            (
+                "明天下午写作业2小时，然后回宿舍休息30分钟，"
+                "再打电话20分钟。"
+            ),
+            min_task_count=3,
+            required_task_titles=["作业", "休息", "电话"],
+        ),
+        chat_case(
+            "broad_scoped_admin_deadline",
+            "broad_student_scenarios",
+            (
+                "明天下午复习2小时，18点前提交材料30分钟，"
+                "晚上参加社团活动1小时。"
+            ),
+            min_task_count=3,
+            required_task_titles=["复习", "校园事务", "社团"],
+        ),
+        chat_case(
+            "broad_location_scoping",
+            "broad_student_scenarios",
+            "明天下午在实验室写代码2小时，再回宿舍休息30分钟。",
+            min_task_count=2,
+            required_task_titles=["项目", "休息"],
+        ),
+        chat_case(
+            "broad_shopping_laundry",
+            "broad_student_scenarios",
+            "明天下午去超市买日用品45分钟，再回宿舍洗衣服30分钟。",
+            min_task_count=2,
+            required_task_titles=["采购", "洗衣"],
+        ),
+        chat_case(
+            "broad_exam_review",
+            "broad_student_scenarios",
+            "明天9点到11点考试，下午在图书馆复习2小时。",
+            min_task_count=2,
+            required_task_titles=["考试", "复习"],
+        ),
+        chat_case(
+            "broad_collaboration_report",
+            "broad_student_scenarios",
+            (
+                "明天下午小组讨论1小时，然后写实验报告2小时，"
+                "18点前全部完成。"
+            ),
+            min_task_count=2,
+            required_task_titles=["会议", "作业"],
+        ),
+        chat_case(
+            "broad_morning_admin",
+            "broad_student_scenarios",
+            "明天上午打印资料30分钟，再去图书馆预习1小时。",
+            min_task_count=2,
+            required_task_titles=["校园事务", "复习"],
+        ),
+    ]
+    cases.extend(broad_scenario_cases)
 
     for index in range(5):
         cases.append(
@@ -529,7 +631,7 @@ def build_cases() -> list[dict]:
     ]
     cases.extend(resilience_cases)
 
-    assert len(cases) == 100
+    assert len(cases) == 112
     return cases
 
 
@@ -540,7 +642,7 @@ def main() -> None:
         json.dumps(build_cases(), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    print(f"wrote 100 cases: {output}")
+    print(f"wrote {len(build_cases())} cases: {output}")
 
 
 if __name__ == "__main__":

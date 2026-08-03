@@ -15,7 +15,7 @@ warnings.filterwarnings(
     category=StarletteDeprecationWarning,
 )
 
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi.testclient import TestClient
 
 from app.config import BASE_DIR, Settings
 from app.main import create_app
@@ -50,7 +50,7 @@ def run_case(client: TestClient, case: dict) -> dict:
         )
     expected_plan_status = expected.get("plan_status")
     if expected_plan_status:
-        actual = payload.get("plan", {}).get("status")
+        actual = (payload.get("plan") or {}).get("status")
         if actual != expected_plan_status:
             failures.append(
                 f"plan_status={actual}, expected={expected_plan_status}"
@@ -193,7 +193,7 @@ def main() -> None:
     )
     summary = {
         "generated_at": datetime.now(UTC).isoformat(),
-        "suite": "offline_mvp",
+        "suite": "deterministic_regression",
         "total": len(results),
         "passed": passed,
         "pass_rate": passed / len(results),
@@ -218,7 +218,7 @@ def main() -> None:
         encoding="utf-8",
     )
     markdown = [
-        "# 离线 MVP 评估报告",
+        "# 确定性综合回归评估报告",
         "",
         f"- 总案例：{summary['total']}",
         f"- 通过：{summary['passed']}",

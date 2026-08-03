@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -11,7 +12,6 @@ from app.schemas.common import Intent, TaskFlexibility, TransportMode
 from app.schemas.plan import Plan
 from app.schemas.task import Task, UserPreferences
 from app.schemas.understand import UnderstandResult
-
 
 CHINESE_NUMBER_HOURS = {
     "半": 0.5,
@@ -40,6 +40,199 @@ CHINESE_PERIOD_NUMBERS = {
     "十二": 12,
     "十三": 13,
 }
+
+
+@dataclass(frozen=True)
+class CommonTaskSpec:
+    """Deterministic fallback for frequent student tasks."""
+
+    id: str
+    title: str
+    keywords: tuple[str, ...]
+    default_duration_min: int
+    default_location: str | None
+    earliest: time
+    latest: time
+    importance: int
+    tags: tuple[str, ...]
+    preferred_period: str | None = None
+
+
+COMMON_TASK_SPECS = (
+    CommonTaskSpec(
+        "breakfast",
+        "吃早餐",
+        ("吃早餐", "吃早饭", "早餐", "早饭"),
+        30,
+        "食堂",
+        time(6, 30),
+        time(10, 0),
+        3,
+        ("meal", "daily_life"),
+        "morning",
+    ),
+    CommonTaskSpec(
+        "lunch",
+        "吃午饭",
+        ("吃午饭", "吃午餐", "午饭", "午餐"),
+        45,
+        "食堂",
+        time(11, 0),
+        time(14, 0),
+        3,
+        ("meal", "daily_life"),
+    ),
+    CommonTaskSpec(
+        "review",
+        "课程复习",
+        ("复习", "备考", "刷题", "背单词", "预习"),
+        90,
+        "图书馆",
+        time(8, 0),
+        time(22, 30),
+        4,
+        ("study", "academic"),
+    ),
+    CommonTaskSpec(
+        "assignment",
+        "完成作业",
+        ("写实验报告", "完成作业", "写作业", "做作业", "赶作业", "写报告"),
+        90,
+        "图书馆",
+        time(8, 0),
+        time(22, 30),
+        5,
+        ("study", "academic", "deliverable"),
+    ),
+    CommonTaskSpec(
+        "project",
+        "推进项目",
+        ("项目开发", "做项目", "写代码", "编程", "调试"),
+        120,
+        "实验室",
+        time(8, 0),
+        time(22, 0),
+        4,
+        ("study", "project"),
+    ),
+    CommonTaskSpec(
+        "meeting",
+        "参加会议",
+        ("小组讨论", "项目讨论", "社团例会", "组会", "班会", "开会", "会议"),
+        60,
+        None,
+        time(8, 0),
+        time(22, 0),
+        4,
+        ("meeting", "collaboration"),
+    ),
+    CommonTaskSpec(
+        "admin",
+        "处理校园事务",
+        (
+            "提交材料",
+            "打印资料",
+            "打印材料",
+            "复印资料",
+            "办手续",
+            "填表",
+            "报销",
+            "缴费",
+        ),
+        30,
+        None,
+        time(8, 0),
+        time(21, 0),
+        4,
+        ("administrative", "errand"),
+    ),
+    CommonTaskSpec(
+        "laundry",
+        "洗衣服",
+        ("洗衣服", "洗衣", "晾衣服", "取衣服"),
+        45,
+        "学生公寓",
+        time(8, 0),
+        time(23, 0),
+        2,
+        ("daily_life", "dormitory"),
+    ),
+    CommonTaskSpec(
+        "shopping",
+        "采购生活用品",
+        ("买日用品", "采购", "买东西", "去超市"),
+        45,
+        None,
+        time(8, 0),
+        time(21, 30),
+        2,
+        ("daily_life", "errand"),
+    ),
+    CommonTaskSpec(
+        "club",
+        "参加社团活动",
+        ("学生会活动", "志愿活动", "社团活动"),
+        90,
+        None,
+        time(8, 0),
+        time(22, 0),
+        3,
+        ("activity", "collaboration"),
+    ),
+    CommonTaskSpec(
+        "rest",
+        "休息",
+        ("睡午觉", "午休", "休息"),
+        30,
+        "学生公寓",
+        time(11, 30),
+        time(23, 0),
+        2,
+        ("rest", "wellbeing"),
+    ),
+    CommonTaskSpec(
+        "call",
+        "处理电话",
+        ("视频通话", "回电话", "打电话"),
+        30,
+        None,
+        time(8, 0),
+        time(23, 0),
+        3,
+        ("communication",),
+    ),
+)
+
+COMMON_TASK_KEYWORDS = tuple(
+    dict.fromkeys(
+        keyword
+        for spec in COMMON_TASK_SPECS
+        for keyword in spec.keywords
+    )
+)
+
+COMMON_LOCATION_ALIASES = (
+    ("图书馆十二层", "图书馆十二层"),
+    ("图书馆十一层", "图书馆十一层"),
+    ("图书馆七楼", "图书馆七层"),
+    ("图书馆六楼", "图书馆六层"),
+    ("第六教学楼", "第六教学楼"),
+    ("体育馆主馆", "体育馆主馆"),
+    ("学生公寓", "学生公寓"),
+    ("菜鸟驿站", "菜鸟驿站"),
+    ("西北田径场", "西北田径场"),
+    ("东操场", "东操场"),
+    ("校医院", "校医院"),
+    ("实验室", "实验室"),
+    ("综合馆", "综合馆"),
+    ("图书馆", "图书馆"),
+    ("快递站", "快递站"),
+    ("体育馆", "体育馆主馆"),
+    ("宿舍", "学生公寓"),
+    ("寝室", "学生公寓"),
+    ("六教", "第六教学楼"),
+    ("食堂", "食堂"),
+)
 
 
 class RuleBasedRequirementParser:
@@ -384,11 +577,10 @@ class RuleBasedRequirementParser:
             current_monday = now.date() - timedelta(days=now.weekday())
             prefix = weekday_match.group(1)
             target = current_monday + timedelta(days=target_weekday)
-            if prefix in {"下周", "下星期"}:
+            if prefix in {"下周", "下星期"} or (
+                prefix in {"周", "星期"} and target < now.date()
+            ):
                 target += timedelta(days=7)
-            elif prefix in {"周", "星期"}:
-                if target < now.date():
-                    target += timedelta(days=7)
             return target
         return now.date()
 
@@ -827,6 +1019,16 @@ class RuleBasedRequirementParser:
                 }
             )
 
+        tasks.extend(
+            self._common_catalog_tasks(
+                query=query,
+                target_date=target_date,
+                fixed_tasks=fixed_tasks,
+                existing_tasks=tasks,
+                overall_start=overall_start,
+                overall_deadline=overall_deadline,
+            )
+        )
         tasks = self._apply_explicit_order(query, tasks)
         tasks = self._link_movables_across_fixed_tasks(
             query,
@@ -838,6 +1040,168 @@ class RuleBasedRequirementParser:
             transport_mode=self.transport_mode_from_query(query),
             avoid_congestion=self.avoid_congestion_from_query(query),
         )
+
+    def _common_catalog_tasks(
+        self,
+        *,
+        query: str,
+        target_date: date,
+        fixed_tasks: list[Task],
+        existing_tasks: list[Task],
+        overall_start: time | None,
+        overall_deadline: datetime | None,
+    ) -> list[Task]:
+        """Extract frequent student tasks when the online model is unavailable."""
+        fixed_text = " ".join(task.title for task in fixed_tasks)
+        existing_ids = {task.id for task in existing_tasks}
+        tasks: list[Task] = []
+
+        for spec in COMMON_TASK_SPECS:
+            if spec.id in existing_ids:
+                continue
+            matches = [
+                keyword
+                for keyword in spec.keywords
+                if keyword in query
+            ]
+            if not matches:
+                continue
+            if any(keyword in fixed_text for keyword in spec.keywords):
+                # A concrete clock interval already owns this task.
+                continue
+
+            keyword = min(matches, key=lambda item: query.find(item))
+            clause = self._clause_around_keyword(query, keyword)
+            task_deadline = self._task_deadline(
+                query,
+                target_date,
+                spec.keywords,
+            )
+            task_limit = task_deadline or overall_deadline
+            preferred_period = self._period_from_clause(clause)
+            location = (
+                self._location_from_clause(clause)
+                or spec.default_location
+            )
+            task = self._movable_task(
+                task_id=spec.id,
+                title=spec.title,
+                target_date=target_date,
+                duration=self._duration_near(
+                    query,
+                    keyword,
+                    default=spec.default_duration_min,
+                ),
+                location_raw=location,
+                earliest=(
+                    overall_start
+                    or self._period_start(preferred_period)
+                    or spec.earliest
+                ),
+                latest=(
+                    task_limit.time()
+                    if task_limit
+                    else spec.latest
+                ),
+                deadline=(
+                    task_limit.time()
+                    if task_limit
+                    else None
+                ),
+                preferred_period=preferred_period or spec.preferred_period,
+                importance=spec.importance,
+            )
+            tasks.append(
+                task.model_copy(
+                    update={
+                        "tags": [
+                            "common_task_fallback",
+                            *spec.tags,
+                        ],
+                        "notes": (
+                            "在线模型不可用时由高频校园任务目录识别；"
+                            "时长未明示时使用可调整默认值"
+                        ),
+                    }
+                )
+            )
+        return tasks
+
+    @staticmethod
+    def _clause_around_keyword(query: str, keyword: str) -> str:
+        position = query.find(keyword)
+        if position < 0:
+            return query
+        separators = (
+            "，",
+            "。",
+            "；",
+            ",",
+            ";",
+            "然后",
+            "接着",
+            "随后",
+            "最后",
+            "再去",
+            "再到",
+            "再回",
+        )
+        start = max(
+            (
+                found + len(separator)
+                for separator in separators
+                if (found := query.rfind(separator, 0, position)) >= 0
+            ),
+            default=0,
+        )
+        end = min(
+            (
+                found
+                for separator in separators
+                if (
+                    found := query.find(
+                        separator,
+                        position + len(keyword),
+                    )
+                )
+                >= 0
+            ),
+            default=len(query),
+        )
+        return query[start:end].strip()
+
+    @staticmethod
+    def _location_from_clause(clause: str) -> str | None:
+        return next(
+            (
+                canonical
+                for alias, canonical in COMMON_LOCATION_ALIASES
+                if alias in clause
+            ),
+            None,
+        )
+
+    @staticmethod
+    def _period_from_clause(clause: str) -> str | None:
+        for marker, period in (
+            ("早上", "morning"),
+            ("上午", "morning"),
+            ("中午", "afternoon"),
+            ("下午", "afternoon"),
+            ("傍晚", "evening"),
+            ("晚上", "evening"),
+        ):
+            if marker in clause:
+                return period
+        return None
+
+    @staticmethod
+    def _period_start(period: str | None) -> time | None:
+        return {
+            "morning": time(8, 0),
+            "afternoon": time(13, 0),
+            "evening": time(18, 0),
+        }.get(period)
 
     @staticmethod
     def _link_movables_across_fixed_tasks(
@@ -870,6 +1234,12 @@ class RuleBasedRequirementParser:
             "table_tennis": ("乒乓球",),
             "run": ("阳光长跑", "长跑", "跑步", "运动"),
         }
+        known_keywords.update(
+            {
+                spec.id: spec.keywords
+                for spec in COMMON_TASK_SPECS
+            }
+        )
 
         def position(task: Task) -> int:
             candidates = list(known_keywords.get(task.id, ()))
@@ -984,6 +1354,7 @@ class RuleBasedRequirementParser:
             "洗漱",
             "羽毛球",
             "乒乓球",
+            *COMMON_TASK_KEYWORDS,
         )
         tasks: list[Task] = []
         for index, match in enumerate(pattern.finditer(query), start=1):
@@ -1081,9 +1452,11 @@ class RuleBasedRequirementParser:
             or match.group(f"minute_point{suffix}")
             or 0
         )
-        if period in {"下午", "晚上"} and 1 <= hour <= 11:
-            hour += 12
-        elif period == "中午" and 1 <= hour <= 10:
+        if (
+            period in {"下午", "晚上"} and 1 <= hour <= 11
+        ) or (
+            period == "中午" and 1 <= hour <= 10
+        ):
             hour += 12
         elif period == "上午" and hour == 12:
             hour = 0
@@ -1879,7 +2252,7 @@ class RuleBasedRequirementParser:
         title: str,
         target_date: date,
         duration: int,
-        location_raw: str,
+        location_raw: str | None,
         earliest: time,
         latest: time,
         importance: int,
@@ -2091,7 +2464,9 @@ class RuleBasedRequirementParser:
         target_date: date,
     ) -> datetime | None:
         time_pattern = (
-            r"(\d{1,2})(?:\s*[:：]\s*(\d{1,2}))?\s*点?\s*前"
+            r"(?:(?P<period>凌晨|早上|上午|中午|下午|傍晚|晚上)\s*)?"
+            r"(?P<hour>\d{1,2})"
+            r"(?:\s*[:：]\s*(?P<minute>\d{1,2}))?\s*点?\s*前"
         )
         collective = re.search(
             time_pattern
@@ -2126,7 +2501,9 @@ class RuleBasedRequirementParser:
         """
         keyword_pattern = "|".join(re.escape(item) for item in keywords)
         time_pattern = (
-            r"(\d{1,2})(?:\s*[:：]\s*(\d{1,2}))?\s*点?\s*前"
+            r"(?:(?P<period>凌晨|早上|上午|中午|下午|傍晚|晚上)\s*)?"
+            r"(?P<hour>\d{1,2})"
+            r"(?:\s*[:：]\s*(?P<minute>\d{1,2}))?\s*点?\s*前"
         )
         before_task = re.search(
             rf"{time_pattern}[^，。；、]{{0,16}}(?:{keyword_pattern})",
@@ -2141,30 +2518,16 @@ class RuleBasedRequirementParser:
             query,
         )
         if task_then_deadline_clause:
-            hour = int(task_then_deadline_clause.group(1))
-            minute = int(task_then_deadline_clause.group(2) or 0)
-            if 0 <= hour <= 23 and 0 <= minute <= 59:
-                return datetime.combine(
-                    target_date,
-                    time(hour, minute),
-                    self.timezone,
-                )
+            return self._deadline_from_match(
+                task_then_deadline_clause,
+                target_date,
+            )
 
         task_before = re.search(
             rf"(?:{keyword_pattern})[^，。；、]{{0,16}}?{time_pattern}",
             query,
         )
-        if not task_before:
-            return None
-        hour = int(task_before.group(1))
-        minute = int(task_before.group(2) or 0)
-        if not (0 <= hour <= 23 and 0 <= minute <= 59):
-            return None
-        return datetime.combine(
-            target_date,
-            time(hour, minute),
-            self.timezone,
-        )
+        return self._deadline_from_match(task_before, target_date)
 
     def _deadline_from_match(
         self,
@@ -2173,12 +2536,25 @@ class RuleBasedRequirementParser:
     ) -> datetime | None:
         if not match:
             return None
-        hour = int(match.group(1))
-        minute = int(match.group(2) or 0)
+        hour = int(match.group("hour"))
+        minute = int(match.group("minute") or 0)
+        period = match.group("period")
+        day_offset = 0
+        if (
+            period in {"下午", "傍晚", "晚上"} and hour < 12
+        ) or (
+            period == "中午" and hour < 11
+        ):
+            hour += 12
+        elif period in {"凌晨", "早上", "上午"} and hour == 12:
+            hour = 0
+        elif period == "晚上" and hour == 12:
+            hour = 0
+            day_offset = 1
         if not (0 <= hour <= 23 and 0 <= minute <= 59):
             return None
         return datetime.combine(
-            target_date,
+            target_date + timedelta(days=day_offset),
             time(hour, minute),
             self.timezone,
         )
@@ -2214,6 +2590,12 @@ class RuleBasedRequirementParser:
             "table_tennis": ("乒乓球",),
             "run": ("阳光长跑", "长跑", "跑步", "运动"),
         }
+        keywords.update(
+            {
+                spec.id: spec.keywords
+                for spec in COMMON_TASK_SPECS
+            }
+        )
 
         def position(task: Task) -> int:
             positions = [

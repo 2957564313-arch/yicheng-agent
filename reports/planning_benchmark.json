@@ -1,0 +1,2975 @@
+{
+  "algorithms": {
+    "constraint_scheduler_min_disruption": {
+      "cases": [
+        {
+          "case_id": "P01_deadline_priority",
+          "category": "deadline",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "urgent_print"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证高紧迫度任务不会被输入顺序靠前的长任务挤出截止窗口。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "long_project": {
+              "end_at": "2026-09-14T11:40:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:40:00+08:00"
+            },
+            "urgent_print": {
+              "end_at": "2026-09-14T08:30:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P02_fixed_course_control",
+          "category": "control",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "提供一个基础时间约束即可解决的对照场景，避免冻结集只包含对基线不利的案例。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "course": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "review": {
+              "end_at": "2026-09-14T11:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:10:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P03_route_buffer",
+          "category": "travel",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "study"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证跨地点任务之间预留步行和缓冲时间。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "class": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": "teaching_a",
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "study": {
+              "end_at": "2026-09-14T10:30:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T09:30:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P04_venue_opening",
+          "category": "opening_hours",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证任务只能进入场馆的已核验开放时段。",
+          "requested_task_count": 1,
+          "scheduled_task_count": 1,
+          "task_intervals": {
+            "library_reading": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T09:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P05_activity_window",
+          "category": "activity_window",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证校内活动的专属有效时段优先于通用空闲时间。",
+          "requested_task_count": 1,
+          "scheduled_task_count": 1,
+          "task_intervals": {
+            "training": {
+              "end_at": "2026-09-14T19:15:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T18:30:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P06_weather_reordering",
+          "category": "weather",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证降雨硬边界前优先安排室外任务，而不是机械保持输入顺序。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "assignment": {
+              "end_at": "2026-09-14T17:25:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T15:55:00+08:00"
+            },
+            "run": {
+              "end_at": "2026-09-14T15:45:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T15:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P07_congestion_route",
+          "category": "congestion",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "study"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证校园集中通行时段会扩张路线耗时并参与排程。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "lab": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": "laboratory",
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "study": {
+              "end_at": "2026-09-14T11:10:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T10:40:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P08_dependency_pair",
+          "category": "dependency",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证显式先后依赖不受用户输入顺序影响。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "analysis": {
+              "end_at": "2026-09-14T10:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:10:00+08:00"
+            },
+            "collect": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P09_dependency_chain",
+          "category": "dependency",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "submit"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证三阶段任务链按依赖拓扑安排。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "draft": {
+              "end_at": "2026-09-14T09:30:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "review": {
+              "end_at": "2026-09-14T10:40:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:40:00+08:00"
+            },
+            "submit": {
+              "end_at": "2026-09-14T11:20:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:50:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P10_multi_stop_travel",
+          "category": "travel",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "parcel"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证连续跨三个校园地点时，每一段路线都进入可行性判断。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "course": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": "classroom",
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "parcel": {
+              "end_at": "2026-09-14T09:55:00+08:00",
+              "location_id": "parcel_station",
+              "start_at": "2026-09-14T09:25:00+08:00"
+            },
+            "study": {
+              "end_at": "2026-09-14T11:25:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T10:25:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P11_competing_deadlines",
+          "category": "deadline",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 2,
+          "deadline_met_ids": [
+            "print_form",
+            "submit_form"
+          ],
+          "deadline_task_count": 2,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证多个早截止短任务优先于无紧迫性的长任务。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "long_reading": {
+              "end_at": "2026-09-14T12:20:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:20:00+08:00"
+            },
+            "print_form": {
+              "end_at": "2026-09-14T08:30:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "submit_form": {
+              "end_at": "2026-09-14T09:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:40:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P12_basic_control",
+          "category": "control",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证没有校园附加约束时，复杂策略不会损害基础排程可行性。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "exercise": {
+              "end_at": "2026-09-14T08:45:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "reading": {
+              "end_at": "2026-09-14T09:55:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:55:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "R01_class_insertion",
+          "category": "minimal_disruption",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 2,
+          "preserved_task_ids": [
+            "task_a",
+            "task_c"
+          ],
+          "purpose": "临时课程只迫使冲突任务移动，其余早晚任务应保持原时段。",
+          "requested_task_count": 4,
+          "scheduled_task_count": 4,
+          "task_intervals": {
+            "new_class": {
+              "end_at": "2026-09-14T15:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T14:00:00+08:00"
+            },
+            "task_a": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T16:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T15:10:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T19:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T18:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 70,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R02_morning_meeting",
+          "category": "minimal_disruption",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 2,
+          "preserved_task_ids": [
+            "task_b",
+            "task_c"
+          ],
+          "purpose": "上午临时会议影响晨间任务时，下午和晚间任务保持不动。",
+          "requested_task_count": 4,
+          "scheduled_task_count": 4,
+          "task_intervals": {
+            "meeting": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            },
+            "task_a": {
+              "end_at": "2026-09-14T12:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T11:10:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T15:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T14:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T19:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T18:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 70,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R03_opening_delayed",
+          "category": "opening_hours",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 2,
+          "preserved_task_ids": [
+            "task_b",
+            "task_c"
+          ],
+          "purpose": "场馆开放时间推迟时只调整该场馆任务。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "library_task": {
+              "end_at": "2026-09-14T13:00:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T12:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T15:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T14:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T19:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T18:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 180,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R04_rain_boundary",
+          "category": "weather",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 2,
+          "preserved_task_ids": [
+            "dinner",
+            "study"
+          ],
+          "purpose": "新增降雨边界只提前室外任务，已可行的室内任务保持。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "dinner": {
+              "end_at": "2026-09-14T17:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T16:00:00+08:00"
+            },
+            "run": {
+              "end_at": "2026-09-14T15:50:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T15:05:00+08:00"
+            },
+            "study": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 175,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R05_new_urgent_task",
+          "category": "deadline",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "urgent"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 3,
+          "preserved_task_ids": [
+            "task_a",
+            "task_b",
+            "task_c"
+          ],
+          "purpose": "新增早截止任务时保留原计划并利用真正空档，而不是从头洗牌。",
+          "requested_task_count": 4,
+          "scheduled_task_count": 4,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T15:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T14:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T19:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T18:00:00+08:00"
+            },
+            "urgent": {
+              "end_at": "2026-09-14T08:30:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 3
+        },
+        {
+          "case_id": "R06_duration_expansion",
+          "category": "minimal_disruption",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 3,
+          "preserved_task_ids": [
+            "task_a",
+            "task_b",
+            "task_c"
+          ],
+          "purpose": "任务时长增加只改变该任务结束时间，不移动无关任务。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T16:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T14:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T19:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T18:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R07_activity_window_shift",
+          "category": "activity_window",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 2,
+          "preserved_task_ids": [
+            "task_a",
+            "task_c"
+          ],
+          "purpose": "活动有效时段改变时只移动受影响活动。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T16:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T15:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T19:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T18:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 60,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R08_route_time_changed",
+          "category": "travel",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 2,
+          "preserved_task_ids": [
+            "task_b",
+            "task_c"
+          ],
+          "purpose": "路线耗时增长时只调整直接通勤链，独立晚间任务保持。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T10:40:00+08:00",
+              "location_id": "dorm",
+              "start_at": "2026-09-14T09:40:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T12:20:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T11:20:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T19:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T18:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 20,
+          "unaffected_task_count": 1
+        },
+        {
+          "case_id": "R09_congestion_changed",
+          "category": "congestion",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 2,
+          "preserved_task_ids": [
+            "task_b",
+            "task_c"
+          ],
+          "purpose": "新出现的通行高峰只调整直接通勤链，独立晚间任务保持。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T09:50:00+08:00",
+              "location_id": "building_a",
+              "start_at": "2026-09-14T08:50:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": "building_b",
+              "start_at": "2026-09-14T10:30:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T19:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T18:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 10,
+          "unaffected_task_count": 1
+        },
+        {
+          "case_id": "R10_dependency_changed",
+          "category": "dependency",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 2,
+          "preserved_task_ids": [
+            "task_a",
+            "task_c"
+          ],
+          "purpose": "新增先后依赖时移动依赖链，独立晚间任务保持。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T15:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T14:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T16:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T15:10:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T19:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T18:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 310,
+          "unaffected_task_count": 1
+        },
+        {
+          "case_id": "R11_locked_task",
+          "category": "locked_task",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 2,
+          "preserved_task_ids": [
+            "locked_run",
+            "task_a"
+          ],
+          "purpose": "显式锁定任务和不受影响任务均应保留。",
+          "requested_task_count": 4,
+          "scheduled_task_count": 4,
+          "task_intervals": {
+            "locked_run": {
+              "end_at": "2026-09-14T19:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T18:00:00+08:00"
+            },
+            "new_event": {
+              "end_at": "2026-09-14T15:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T14:00:00+08:00"
+            },
+            "task_a": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T16:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T15:10:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 70,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R12_two_fixed_events",
+          "category": "minimal_disruption",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 2,
+          "preserved_task_ids": [
+            "task_a",
+            "task_c"
+          ],
+          "purpose": "两个新增固定事件下仍只移动真正冲突的中间任务。",
+          "requested_task_count": 5,
+          "scheduled_task_count": 5,
+          "task_intervals": {
+            "event_one": {
+              "end_at": "2026-09-14T13:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T12:00:00+08:00"
+            },
+            "event_two": {
+              "end_at": "2026-09-14T15:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T14:00:00+08:00"
+            },
+            "task_a": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T16:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T15:10:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T19:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T18:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 70,
+          "unaffected_task_count": 2
+        }
+      ],
+      "definition": "完整当前策略：约束排程与校验；重排案例额外使用旧计划位移成本，并保留锁定任务。",
+      "summary": {
+        "case_count": 24,
+        "comparable_replan_task_count": 36,
+        "deadline_met_count": 8,
+        "deadline_satisfaction_rate": 1.0,
+        "deadline_task_count": 8,
+        "false_move_count": 0,
+        "false_move_rate": 0.0,
+        "feasible_case_count": 24,
+        "feasible_completion_rate": 1.0,
+        "hard_constraint_violation_count": 0,
+        "preservation_rate": 0.7222222222222222,
+        "preserved_task_count": 26,
+        "total_displacement_minutes": 1035,
+        "unaffected_task_count": 22
+      }
+    },
+    "constraint_scheduler_no_history": {
+      "cases": [
+        {
+          "case_id": "P01_deadline_priority",
+          "category": "deadline",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "urgent_print"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证高紧迫度任务不会被输入顺序靠前的长任务挤出截止窗口。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "long_project": {
+              "end_at": "2026-09-14T11:40:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:40:00+08:00"
+            },
+            "urgent_print": {
+              "end_at": "2026-09-14T08:30:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P02_fixed_course_control",
+          "category": "control",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "提供一个基础时间约束即可解决的对照场景，避免冻结集只包含对基线不利的案例。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "course": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "review": {
+              "end_at": "2026-09-14T11:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:10:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P03_route_buffer",
+          "category": "travel",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "study"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证跨地点任务之间预留步行和缓冲时间。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "class": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": "teaching_a",
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "study": {
+              "end_at": "2026-09-14T10:30:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T09:30:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P04_venue_opening",
+          "category": "opening_hours",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证任务只能进入场馆的已核验开放时段。",
+          "requested_task_count": 1,
+          "scheduled_task_count": 1,
+          "task_intervals": {
+            "library_reading": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T09:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P05_activity_window",
+          "category": "activity_window",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证校内活动的专属有效时段优先于通用空闲时间。",
+          "requested_task_count": 1,
+          "scheduled_task_count": 1,
+          "task_intervals": {
+            "training": {
+              "end_at": "2026-09-14T19:15:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T18:30:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P06_weather_reordering",
+          "category": "weather",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证降雨硬边界前优先安排室外任务，而不是机械保持输入顺序。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "assignment": {
+              "end_at": "2026-09-14T17:25:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T15:55:00+08:00"
+            },
+            "run": {
+              "end_at": "2026-09-14T15:45:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T15:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P07_congestion_route",
+          "category": "congestion",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "study"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证校园集中通行时段会扩张路线耗时并参与排程。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "lab": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": "laboratory",
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "study": {
+              "end_at": "2026-09-14T11:10:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T10:40:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P08_dependency_pair",
+          "category": "dependency",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证显式先后依赖不受用户输入顺序影响。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "analysis": {
+              "end_at": "2026-09-14T10:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:10:00+08:00"
+            },
+            "collect": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P09_dependency_chain",
+          "category": "dependency",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "submit"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证三阶段任务链按依赖拓扑安排。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "draft": {
+              "end_at": "2026-09-14T09:30:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "review": {
+              "end_at": "2026-09-14T10:40:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:40:00+08:00"
+            },
+            "submit": {
+              "end_at": "2026-09-14T11:20:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:50:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P10_multi_stop_travel",
+          "category": "travel",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "parcel"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证连续跨三个校园地点时，每一段路线都进入可行性判断。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "course": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": "classroom",
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "parcel": {
+              "end_at": "2026-09-14T09:55:00+08:00",
+              "location_id": "parcel_station",
+              "start_at": "2026-09-14T09:25:00+08:00"
+            },
+            "study": {
+              "end_at": "2026-09-14T11:25:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T10:25:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P11_competing_deadlines",
+          "category": "deadline",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 2,
+          "deadline_met_ids": [
+            "print_form",
+            "submit_form"
+          ],
+          "deadline_task_count": 2,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证多个早截止短任务优先于无紧迫性的长任务。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "long_reading": {
+              "end_at": "2026-09-14T12:20:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:20:00+08:00"
+            },
+            "print_form": {
+              "end_at": "2026-09-14T08:30:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "submit_form": {
+              "end_at": "2026-09-14T09:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:40:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P12_basic_control",
+          "category": "control",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证没有校园附加约束时，复杂策略不会损害基础排程可行性。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "exercise": {
+              "end_at": "2026-09-14T08:45:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "reading": {
+              "end_at": "2026-09-14T09:55:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:55:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "R01_class_insertion",
+          "category": "minimal_disruption",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 2,
+          "false_moved_task_ids": [
+            "task_a",
+            "task_c"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "临时课程只迫使冲突任务移动，其余早晚任务应保持原时段。",
+          "requested_task_count": 4,
+          "scheduled_task_count": 4,
+          "task_intervals": {
+            "new_class": {
+              "end_at": "2026-09-14T15:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T14:00:00+08:00"
+            },
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T10:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:10:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T11:20:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:20:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 870,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R02_morning_meeting",
+          "category": "minimal_disruption",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 2,
+          "false_moved_task_ids": [
+            "task_b",
+            "task_c"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "上午临时会议影响晨间任务时，下午和晚间任务保持不动。",
+          "requested_task_count": 4,
+          "scheduled_task_count": 4,
+          "task_intervals": {
+            "meeting": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            },
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T12:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T11:10:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T13:20:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T12:20:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 630,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R03_opening_delayed",
+          "category": "opening_hours",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 2,
+          "false_moved_task_ids": [
+            "task_b",
+            "task_c"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "场馆开放时间推迟时只调整该场馆任务。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "library_task": {
+              "end_at": "2026-09-14T13:00:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T12:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T10:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:10:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 1070,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R04_rain_boundary",
+          "category": "weather",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 2,
+          "false_moved_task_ids": [
+            "dinner",
+            "study"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "新增降雨边界只提前室外任务，已可行的室内任务保持。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "dinner": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "run": {
+              "end_at": "2026-09-14T09:55:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:10:00+08:00"
+            },
+            "study": {
+              "end_at": "2026-09-14T11:05:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:05:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 1015,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R05_new_urgent_task",
+          "category": "deadline",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "urgent"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 3,
+          "false_moved_task_ids": [
+            "task_a",
+            "task_b",
+            "task_c"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "新增早截止任务时保留原计划并利用真正空档，而不是从头洗牌。",
+          "requested_task_count": 4,
+          "scheduled_task_count": 4,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T09:40:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:40:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T10:50:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:50:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T12:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T11:00:00+08:00"
+            },
+            "urgent": {
+              "end_at": "2026-09-14T08:30:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 750,
+          "unaffected_task_count": 3
+        },
+        {
+          "case_id": "R06_duration_expansion",
+          "category": "minimal_disruption",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 2,
+          "false_moved_task_ids": [
+            "task_a",
+            "task_c"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "任务时长增加只改变该任务结束时间，不移动无关任务。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T15:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T13:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T10:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:10:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 710,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R07_activity_window_shift",
+          "category": "activity_window",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 2,
+          "false_moved_task_ids": [
+            "task_a",
+            "task_c"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "活动有效时段改变时只移动受影响活动。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T16:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T15:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T10:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:10:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 710,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R08_route_time_changed",
+          "category": "travel",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 1,
+          "false_moved_task_ids": [
+            "task_c"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "路线耗时增长时只调整直接通勤链，独立晚间任务保持。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": "dorm",
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T10:40:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T09:40:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T11:50:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:50:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 650,
+          "unaffected_task_count": 1
+        },
+        {
+          "case_id": "R09_congestion_changed",
+          "category": "congestion",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 1,
+          "false_moved_task_ids": [
+            "task_c"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "新出现的通行高峰只调整直接通勤链，独立晚间任务保持。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": "building_a",
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T09:55:00+08:00",
+              "location_id": "building_b",
+              "start_at": "2026-09-14T09:25:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T11:05:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:05:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 600,
+          "unaffected_task_count": 1
+        },
+        {
+          "case_id": "R10_dependency_changed",
+          "category": "dependency",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 1,
+          "false_moved_task_ids": [
+            "task_c"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "新增先后依赖时移动依赖链，独立晚间任务保持。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T10:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:10:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T11:20:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:20:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 870,
+          "unaffected_task_count": 1
+        },
+        {
+          "case_id": "R11_locked_task",
+          "category": "locked_task",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 1,
+          "false_moved_task_ids": [
+            "task_a"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 1,
+          "preserved_task_ids": [
+            "locked_run"
+          ],
+          "purpose": "显式锁定任务和不受影响任务均应保留。",
+          "requested_task_count": 4,
+          "scheduled_task_count": 4,
+          "task_intervals": {
+            "locked_run": {
+              "end_at": "2026-09-14T19:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T18:00:00+08:00"
+            },
+            "new_event": {
+              "end_at": "2026-09-14T15:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T14:00:00+08:00"
+            },
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T10:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:10:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 410,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R12_two_fixed_events",
+          "category": "minimal_disruption",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 2,
+          "false_moved_task_ids": [
+            "task_a",
+            "task_c"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "两个新增固定事件下仍只移动真正冲突的中间任务。",
+          "requested_task_count": 5,
+          "scheduled_task_count": 5,
+          "task_intervals": {
+            "event_one": {
+              "end_at": "2026-09-14T13:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T12:00:00+08:00"
+            },
+            "event_two": {
+              "end_at": "2026-09-14T15:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T14:00:00+08:00"
+            },
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T10:10:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:10:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T11:20:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:20:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 870,
+          "unaffected_task_count": 2
+        }
+      ],
+      "definition": "使用当前确定性约束排程器，但在重排案例中移除旧计划历史；这是“关闭最小扰动目标”的消融组。",
+      "summary": {
+        "case_count": 24,
+        "comparable_replan_task_count": 36,
+        "deadline_met_count": 8,
+        "deadline_satisfaction_rate": 1.0,
+        "deadline_task_count": 8,
+        "false_move_count": 21,
+        "false_move_rate": 0.9545454545454546,
+        "feasible_case_count": 24,
+        "feasible_completion_rate": 1.0,
+        "hard_constraint_violation_count": 0,
+        "preservation_rate": 0.027777777777777776,
+        "preserved_task_count": 1,
+        "total_displacement_minutes": 9155,
+        "unaffected_task_count": 22
+      }
+    },
+    "greedy_first_fit": {
+      "cases": [
+        {
+          "case_id": "P01_deadline_priority",
+          "category": "deadline",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "TASK_UNSCHEDULED"
+          ],
+          "hard_constraint_violation_count": 1,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证高紧迫度任务不会被输入顺序靠前的长任务挤出截止窗口。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 1,
+          "task_intervals": {
+            "long_project": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P02_fixed_course_control",
+          "category": "control",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "提供一个基础时间约束即可解决的对照场景，避免冻结集只包含对基线不利的案例。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "course": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "review": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P03_route_buffer",
+          "category": "travel",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "study"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "INSUFFICIENT_TRAVEL_TIME"
+          ],
+          "hard_constraint_violation_count": 1,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证跨地点任务之间预留步行和缓冲时间。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "class": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": "teaching_a",
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "study": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T09:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P04_venue_opening",
+          "category": "opening_hours",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "OUTSIDE_OPENING_HOURS"
+          ],
+          "hard_constraint_violation_count": 1,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证任务只能进入场馆的已核验开放时段。",
+          "requested_task_count": 1,
+          "scheduled_task_count": 1,
+          "task_intervals": {
+            "library_reading": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T08:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P05_activity_window",
+          "category": "activity_window",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "OUTSIDE_OPENING_HOURS"
+          ],
+          "hard_constraint_violation_count": 1,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证校内活动的专属有效时段优先于通用空闲时间。",
+          "requested_task_count": 1,
+          "scheduled_task_count": 1,
+          "task_intervals": {
+            "training": {
+              "end_at": "2026-09-14T08:45:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P06_weather_reordering",
+          "category": "weather",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "WEATHER_RISK"
+          ],
+          "hard_constraint_violation_count": 1,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证降雨硬边界前优先安排室外任务，而不是机械保持输入顺序。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "assignment": {
+              "end_at": "2026-09-14T16:30:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T15:00:00+08:00"
+            },
+            "run": {
+              "end_at": "2026-09-14T17:15:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T16:30:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P07_congestion_route",
+          "category": "congestion",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "study"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "INSUFFICIENT_TRAVEL_TIME"
+          ],
+          "hard_constraint_violation_count": 1,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证校园集中通行时段会扩张路线耗时并参与排程。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "lab": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": "laboratory",
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "study": {
+              "end_at": "2026-09-14T10:30:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T10:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P08_dependency_pair",
+          "category": "dependency",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "DEPENDENCY_ORDER_VIOLATION"
+          ],
+          "hard_constraint_violation_count": 1,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证显式先后依赖不受用户输入顺序影响。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "analysis": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "collect": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P09_dependency_chain",
+          "category": "dependency",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "submit"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "DEPENDENCY_ORDER_VIOLATION",
+            "DEPENDENCY_ORDER_VIOLATION"
+          ],
+          "hard_constraint_violation_count": 2,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证三阶段任务链按依赖拓扑安排。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "draft": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:30:00+08:00"
+            },
+            "review": {
+              "end_at": "2026-09-14T09:30:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:30:00+08:00"
+            },
+            "submit": {
+              "end_at": "2026-09-14T08:30:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P10_multi_stop_travel",
+          "category": "travel",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 1,
+          "deadline_met_ids": [
+            "parcel"
+          ],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "INSUFFICIENT_TRAVEL_TIME",
+            "INSUFFICIENT_TRAVEL_TIME"
+          ],
+          "hard_constraint_violation_count": 2,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证连续跨三个校园地点时，每一段路线都进入可行性判断。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "course": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": "classroom",
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "parcel": {
+              "end_at": "2026-09-14T09:30:00+08:00",
+              "location_id": "parcel_station",
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "study": {
+              "end_at": "2026-09-14T10:30:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T09:30:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P11_competing_deadlines",
+          "category": "deadline",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 2,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "TASK_UNSCHEDULED",
+            "TASK_UNSCHEDULED"
+          ],
+          "hard_constraint_violation_count": 2,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证多个早截止短任务优先于无紧迫性的长任务。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 1,
+          "task_intervals": {
+            "long_reading": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "P12_basic_control",
+          "category": "control",
+          "comparable_replan_task_count": 0,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 0,
+          "false_moved_task_ids": [],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "initial",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "验证没有校园附加约束时，复杂策略不会损害基础排程可行性。",
+          "requested_task_count": 2,
+          "scheduled_task_count": 2,
+          "task_intervals": {
+            "exercise": {
+              "end_at": "2026-09-14T09:45:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "reading": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 0,
+          "unaffected_task_count": 0
+        },
+        {
+          "case_id": "R01_class_insertion",
+          "category": "minimal_disruption",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 2,
+          "false_moved_task_ids": [
+            "task_a",
+            "task_c"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "临时课程只迫使冲突任务移动，其余早晚任务应保持原时段。",
+          "requested_task_count": 4,
+          "scheduled_task_count": 4,
+          "task_intervals": {
+            "new_class": {
+              "end_at": "2026-09-14T15:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T14:00:00+08:00"
+            },
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 900,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R02_morning_meeting",
+          "category": "minimal_disruption",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 2,
+          "false_moved_task_ids": [
+            "task_b",
+            "task_c"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "上午临时会议影响晨间任务时，下午和晚间任务保持不动。",
+          "requested_task_count": 4,
+          "scheduled_task_count": 4,
+          "task_intervals": {
+            "meeting": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            },
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T12:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T11:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 840,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R03_opening_delayed",
+          "category": "opening_hours",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 2,
+          "false_moved_task_ids": [
+            "task_b",
+            "task_c"
+          ],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "OUTSIDE_OPENING_HOURS"
+          ],
+          "hard_constraint_violation_count": 1,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "场馆开放时间推迟时只调整该场馆任务。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "library_task": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 840,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R04_rain_boundary",
+          "category": "weather",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 2,
+          "false_moved_task_ids": [
+            "dinner",
+            "study"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "新增降雨边界只提前室外任务，已可行的室内任务保持。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "dinner": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "run": {
+              "end_at": "2026-09-14T09:45:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "study": {
+              "end_at": "2026-09-14T10:45:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:45:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 1035,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R05_new_urgent_task",
+          "category": "deadline",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 1,
+          "expected_feasible": true,
+          "false_move_count": 3,
+          "false_moved_task_ids": [
+            "task_a",
+            "task_b",
+            "task_c"
+          ],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "TASK_UNSCHEDULED"
+          ],
+          "hard_constraint_violation_count": 1,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "新增早截止任务时保留原计划并利用真正空档，而不是从头洗牌。",
+          "requested_task_count": 4,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 900,
+          "unaffected_task_count": 3
+        },
+        {
+          "case_id": "R06_duration_expansion",
+          "category": "minimal_disruption",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 2,
+          "false_moved_task_ids": [
+            "task_a",
+            "task_c"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "任务时长增加只改变该任务结束时间，不移动无关任务。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T15:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T13:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 720,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R07_activity_window_shift",
+          "category": "activity_window",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 2,
+          "false_moved_task_ids": [
+            "task_a",
+            "task_c"
+          ],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "OUTSIDE_OPENING_HOURS"
+          ],
+          "hard_constraint_violation_count": 1,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "活动有效时段改变时只移动受影响活动。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 900,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R08_route_time_changed",
+          "category": "travel",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 1,
+          "false_moved_task_ids": [
+            "task_c"
+          ],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "INSUFFICIENT_TRAVEL_TIME"
+          ],
+          "hard_constraint_violation_count": 1,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "路线耗时增长时只调整直接通勤链，独立晚间任务保持。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": "dorm",
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": "library",
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 740,
+          "unaffected_task_count": 1
+        },
+        {
+          "case_id": "R09_congestion_changed",
+          "category": "congestion",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 1,
+          "false_moved_task_ids": [
+            "task_c"
+          ],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "INSUFFICIENT_TRAVEL_TIME"
+          ],
+          "hard_constraint_violation_count": 1,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "新出现的通行高峰只调整直接通勤链，独立晚间任务保持。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": "building_a",
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T09:30:00+08:00",
+              "location_id": "building_b",
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T10:30:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:30:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 660,
+          "unaffected_task_count": 1
+        },
+        {
+          "case_id": "R10_dependency_changed",
+          "category": "dependency",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 1,
+          "false_moved_task_ids": [
+            "task_c"
+          ],
+          "feasible_complete": false,
+          "hard_constraint_violation_codes": [
+            "DEPENDENCY_ORDER_VIOLATION"
+          ],
+          "hard_constraint_violation_count": 1,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "新增先后依赖时移动依赖链，独立晚间任务保持。",
+          "requested_task_count": 3,
+          "scheduled_task_count": 3,
+          "task_intervals": {
+            "task_a": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 900,
+          "unaffected_task_count": 1
+        },
+        {
+          "case_id": "R11_locked_task",
+          "category": "locked_task",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 1,
+          "false_moved_task_ids": [
+            "task_a"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 1,
+          "preserved_task_ids": [
+            "locked_run"
+          ],
+          "purpose": "显式锁定任务和不受影响任务均应保留。",
+          "requested_task_count": 4,
+          "scheduled_task_count": 4,
+          "task_intervals": {
+            "locked_run": {
+              "end_at": "2026-09-14T19:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T18:00:00+08:00"
+            },
+            "new_event": {
+              "end_at": "2026-09-14T15:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T14:00:00+08:00"
+            },
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 420,
+          "unaffected_task_count": 2
+        },
+        {
+          "case_id": "R12_two_fixed_events",
+          "category": "minimal_disruption",
+          "comparable_replan_task_count": 3,
+          "deadline_met_count": 0,
+          "deadline_met_ids": [],
+          "deadline_task_count": 0,
+          "expected_feasible": true,
+          "false_move_count": 2,
+          "false_moved_task_ids": [
+            "task_a",
+            "task_c"
+          ],
+          "feasible_complete": true,
+          "hard_constraint_violation_codes": [],
+          "hard_constraint_violation_count": 0,
+          "kind": "replan",
+          "preserved_task_count": 0,
+          "preserved_task_ids": [],
+          "purpose": "两个新增固定事件下仍只移动真正冲突的中间任务。",
+          "requested_task_count": 5,
+          "scheduled_task_count": 5,
+          "task_intervals": {
+            "event_one": {
+              "end_at": "2026-09-14T13:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T12:00:00+08:00"
+            },
+            "event_two": {
+              "end_at": "2026-09-14T15:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T14:00:00+08:00"
+            },
+            "task_a": {
+              "end_at": "2026-09-14T09:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T08:00:00+08:00"
+            },
+            "task_b": {
+              "end_at": "2026-09-14T10:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T09:00:00+08:00"
+            },
+            "task_c": {
+              "end_at": "2026-09-14T11:00:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T10:00:00+08:00"
+            }
+          },
+          "total_displacement_minutes": 900,
+          "unaffected_task_count": 2
+        }
+      ],
+      "definition": "按输入顺序把任务放入最早的非重叠五分钟时隙；只处理固定时间、最早开始、最晚结束和截止时间，不读取路线、场馆、天气、依赖或旧计划。",
+      "summary": {
+        "case_count": 24,
+        "comparable_replan_task_count": 36,
+        "deadline_met_count": 4,
+        "deadline_satisfaction_rate": 0.5,
+        "deadline_task_count": 8,
+        "false_move_count": 21,
+        "false_move_rate": 0.9545454545454546,
+        "feasible_case_count": 8,
+        "feasible_completion_rate": 0.3333333333333333,
+        "hard_constraint_violation_count": 19,
+        "preservation_rate": 0.027777777777777776,
+        "preserved_task_count": 1,
+        "total_displacement_minutes": 9755,
+        "unaffected_task_count": 22
+      }
+    }
+  },
+  "case_count": 24,
+  "deterministic": true,
+  "fixture_sha256": "ee8a013111212982d83080c94a43b69377b3e053eb7aeb0147414da748356e5f",
+  "fixture_version": "2026.07.29-v1",
+  "limitations": [
+    "这些是可审计的确定性合成场景，不代表真实用户满意度或真实世界分布。",
+    "基准不调用大模型、地图或天气网络接口，因此不能替代线上端到端验收。",
+    "误移动仅针对每个重排案例明确标注、且原时段仍应保留的 unaffected_task_ids。",
+    "结果适合证明算法行为和回归稳定性，不应包装成真人试用结果。"
+  ],
+  "random_seed": 20260729,
+  "schema_version": 1,
+  "scope": "24个冻结的合成校园日程场景，用于比较通用最早插入、当前约束排程，以及关闭/开启旧计划历史后的最小扰动差异。",
+  "suite": "yicheng_deterministic_planning_benchmark"
+}

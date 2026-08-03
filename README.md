@@ -38,9 +38,19 @@
 - 测试入口保护：可选固定测试账号登录，高成本接口使用短期签名凭证；
 - 周规划自然语言入口：可直接描述多个目标、总时长、阶段依赖、重复次数、
   截止时间、偏好时段和地点；信息不够时先追问；
-- 自动化测试：251 项通过；
+- 分层规划闭环：周层分配目标与阶段，日层再结合课表、校历、场馆开放、
+  通勤和天气落地；只有通过硬约束校验的日计划才会原子保存并绑定；
+- 事件滚动重排：完成、延期、新任务、固定事件或天气变化后生成新版本，
+  冻结已完成/锁定/当前执行中的时间块，部分完成只滚动剩余分钟；硬截止
+  新任务可最小驱逐柔性旧块，并输出移动数、保留率和跨版本血缘；
+- 日级最小扰动：采用有界全局搜索，按“任务完整 → 移动任务数 →
+  总位移 → 通勤与偏好代价”的词典序目标选择方案；
+- 自动化测试：296 项通过；
 - 真实知识库检索验收：36/36 通过，覆盖校园服务时间和学生手册制度；
-- 离线评估：100/100 通过，覆盖知识问答、时间硬约束与关怀韧性；
+- 确定性综合评估：112/112 通过，覆盖知识问答、时间硬约束、关怀韧性及
+  12 类高频学习生活场景；
+- 规划算法冻结基准：24/24 可行、0 个硬约束违反、截止满足率 100%，
+  22 个明确不受影响任务的误移动率为 0；
 - 端到端场景：32/32 通过；
 - 连续状态场景：15/15 通过；
 - 产品级公网旅程：8/8 通过；
@@ -68,8 +78,9 @@
 
 或执行：
 
-```bash
-.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+```powershell
+& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe `
+  -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 浏览器访问：
@@ -109,11 +120,12 @@ LIVE_WEATHER_ENABLED=true
 
 ## 验收
 
-```bash
-.venv/bin/python scripts/validate_static_data.py
-.venv/bin/pytest -q
-.venv/bin/python scripts/run_evaluation.py
-.venv/bin/python scripts/demo_smoke.py
+```powershell
+& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe scripts\validate_static_data.py
+& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe -m pytest -q
+& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe -m scripts.run_evaluation
+& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe -m scripts.run_planning_benchmark
+& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe -m scripts.demo_smoke
 node scripts/public_acceptance.mjs
 node scripts/public_stateful_acceptance.mjs
 node scripts/public_product_acceptance.mjs
@@ -121,10 +133,10 @@ node scripts/public_product_acceptance.mjs
 
 真实接口检查：
 
-```bash
-.venv/bin/python scripts/live_llm_smoke.py
-.venv/bin/python scripts/live_amap_smoke.py
-.venv/bin/python scripts/live_end_to_end_smoke.py
+```powershell
+& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe scripts\live_llm_smoke.py
+& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe scripts\live_amap_smoke.py
+& D:\APP\Dev\Python\envs\yicheng-agent\Scripts\python.exe scripts\live_end_to_end_smoke.py
 ```
 
 这些脚本不会打印 API Key。
@@ -154,14 +166,20 @@ knowledge/
 - 当前交付状态：[`docs/plans/项目交付清单与待办.md`](docs/plans/项目交付清单与待办.md)
 - 完整工程方案：[`docs/plans/新版工程执行计划.md`](docs/plans/新版工程执行计划.md)
 - 周规划与滚动重排：[`docs/WEEKLY_PLANNING.md`](docs/WEEKLY_PLANNING.md)
-- RAG 验收：[`reports/rag_acceptance.md`](reports/rag_acceptance.md)
+- 国二等奖技术交接：[`docs/TECHNICAL_HANDOFF_NATIONAL_SECOND.md`](docs/TECHNICAL_HANDOFF_NATIONAL_SECOND.md)
+- 规划基线与消融：[`docs/TECHNICAL_BENCHMARK.md`](docs/TECHNICAL_BENCHMARK.md)
+- RAG 验收（2026-07-25 历史快照，不作为当前数字口径）：
+  [`reports/rag_acceptance.md`](reports/rag_acceptance.md)
 - 队友方案吸收记录：[`reports/teammate_integration_review.md`](reports/teammate_integration_review.md)
 - 本校知识底座：[`docs/CAMPUS_PROFILE.md`](docs/CAMPUS_PROFILE.md)
 - 环境：[`docs/environment.md`](docs/environment.md)
 - API：[`docs/api.md`](docs/api.md)
 - 演示：[`docs/demo_script.md`](docs/demo_script.md)
 - 部署：[`docs/deployment.md`](docs/deployment.md)
-- 发布检查：[`reports/release_checklist.md`](reports/release_checklist.md)
+- 发布检查（2026-07-25 历史快照，所列待办不代表当前状态）：
+  [`reports/release_checklist.md`](reports/release_checklist.md)
 - 评估报告：[`reports/evaluation.md`](reports/evaluation.md)
-- 公网产品验收：[`reports/product_acceptance.md`](reports/product_acceptance.md)
+- 公网产品验收（2026-07-25 历史快照；当前以本页、技术交接书和
+  `reports/evaluation.md` 为准）：
+  [`reports/product_acceptance.md`](reports/product_acceptance.md)
 - 公网入口二维码：[`app/web/assets/yicheng-public-entry.png`](app/web/assets/yicheng-public-entry.png)

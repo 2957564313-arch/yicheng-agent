@@ -1,0 +1,1061 @@
+{
+  "suite": "yicheng_deterministic_planning_benchmark",
+  "schema_version": 1,
+  "fixture_version": "2026.07.29-v1",
+  "random_seed": 20260729,
+  "scope": "24个冻结的合成校园日程场景，用于比较通用最早插入、当前约束排程，以及关闭/开启旧计划历史后的最小扰动差异。",
+  "limitations": [
+    "这些是可审计的确定性合成场景，不代表真实用户满意度或真实世界分布。",
+    "基准不调用大模型、地图或天气网络接口，因此不能替代线上端到端验收。",
+    "误移动仅针对每个重排案例明确标注、且原时段仍应保留的 unaffected_task_ids。",
+    "结果适合证明算法行为和回归稳定性，不应包装成真人试用结果。"
+  ],
+  "defaults": {
+    "timezone": "Asia/Shanghai",
+    "target_date": "2026-09-14",
+    "now": "2026-09-13T20:00:00+08:00",
+    "day_start": "08:00",
+    "day_end": "22:00",
+    "preferences": {
+      "buffer_min": 10,
+      "avoid_rain": true
+    },
+    "expected_feasible": true
+  },
+  "cases": [
+    {
+      "id": "P01_deadline_priority",
+      "kind": "initial",
+      "category": "deadline",
+      "purpose": "验证高紧迫度任务不会被输入顺序靠前的长任务挤出截止窗口。",
+      "tasks": [
+        {
+          "id": "long_project",
+          "title": "课程项目",
+          "duration_min": 180,
+          "earliest_start": "2026-09-14T08:00:00+08:00",
+          "latest_end": "2026-09-14T18:00:00+08:00",
+          "importance": 2
+        },
+        {
+          "id": "urgent_print",
+          "title": "打印并提交材料",
+          "duration_min": 30,
+          "earliest_start": "2026-09-14T08:00:00+08:00",
+          "deadline": "2026-09-14T09:00:00+08:00",
+          "importance": 5
+        }
+      ]
+    },
+    {
+      "id": "P02_fixed_course_control",
+      "kind": "initial",
+      "category": "control",
+      "purpose": "提供一个基础时间约束即可解决的对照场景，避免冻结集只包含对基线不利的案例。",
+      "tasks": [
+        {
+          "id": "course",
+          "title": "固定课程",
+          "duration_min": 60,
+          "fixed_start": "2026-09-14T09:00:00+08:00",
+          "fixed_end": "2026-09-14T10:00:00+08:00",
+          "flexibility": "fixed"
+        },
+        {
+          "id": "review",
+          "title": "课后复习",
+          "duration_min": 60,
+          "earliest_start": "2026-09-14T10:00:00+08:00",
+          "latest_end": "2026-09-14T12:00:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "P03_route_buffer",
+      "kind": "initial",
+      "category": "travel",
+      "purpose": "验证跨地点任务之间预留步行和缓冲时间。",
+      "routes": [
+        {
+          "origin": "teaching_a",
+          "destination": "library",
+          "minutes": 20
+        }
+      ],
+      "tasks": [
+        {
+          "id": "class",
+          "title": "教学楼上课",
+          "duration_min": 60,
+          "location_id": "teaching_a",
+          "fixed_start": "2026-09-14T08:00:00+08:00",
+          "fixed_end": "2026-09-14T09:00:00+08:00",
+          "flexibility": "fixed"
+        },
+        {
+          "id": "study",
+          "title": "图书馆自习",
+          "duration_min": 60,
+          "location_id": "library",
+          "earliest_start": "2026-09-14T09:00:00+08:00",
+          "deadline": "2026-09-14T11:00:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "P04_venue_opening",
+      "kind": "initial",
+      "category": "opening_hours",
+      "purpose": "验证任务只能进入场馆的已核验开放时段。",
+      "opening_windows": {
+        "library": [
+          [
+            "2026-09-14T09:00:00+08:00",
+            "2026-09-14T22:00:00+08:00"
+          ]
+        ]
+      },
+      "tasks": [
+        {
+          "id": "library_reading",
+          "title": "图书馆阅读",
+          "duration_min": 60,
+          "location_id": "library",
+          "earliest_start": "2026-09-14T08:00:00+08:00",
+          "latest_end": "2026-09-14T12:00:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "P05_activity_window",
+      "kind": "initial",
+      "category": "activity_window",
+      "purpose": "验证校内活动的专属有效时段优先于通用空闲时间。",
+      "task_windows": {
+        "training": [
+          [
+            "2026-09-14T18:30:00+08:00",
+            "2026-09-14T20:30:00+08:00"
+          ]
+        ]
+      },
+      "tasks": [
+        {
+          "id": "training",
+          "title": "阳光长跑训练",
+          "duration_min": 45,
+          "earliest_start": "2026-09-14T08:00:00+08:00",
+          "latest_end": "2026-09-14T21:00:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "P06_weather_reordering",
+      "kind": "initial",
+      "category": "weather",
+      "purpose": "验证降雨硬边界前优先安排室外任务，而不是机械保持输入顺序。",
+      "enforce_weather": true,
+      "weather": [
+        {
+          "period": "afternoon",
+          "condition": "rain",
+          "rain_probability": 0.9,
+          "risk_start_at": "2026-09-14T17:00:00+08:00"
+        }
+      ],
+      "tasks": [
+        {
+          "id": "assignment",
+          "title": "完成作业",
+          "duration_min": 90,
+          "earliest_start": "2026-09-14T15:00:00+08:00",
+          "latest_end": "2026-09-14T19:00:00+08:00",
+          "importance": 2
+        },
+        {
+          "id": "run",
+          "title": "室外跑步",
+          "duration_min": 45,
+          "earliest_start": "2026-09-14T15:00:00+08:00",
+          "latest_end": "2026-09-14T20:00:00+08:00",
+          "importance": 5,
+          "tags": [
+            "outdoor"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P07_congestion_route",
+      "kind": "initial",
+      "category": "congestion",
+      "purpose": "验证校园集中通行时段会扩张路线耗时并参与排程。",
+      "routes": [
+        {
+          "origin": "laboratory",
+          "destination": "library",
+          "minutes": 20
+        }
+      ],
+      "congestion_windows": [
+        {
+          "start_at": "2026-09-14T09:30:00+08:00",
+          "end_at": "2026-09-14T10:30:00+08:00",
+          "duration_multiplier": 1.5,
+          "minimum_extra_min": 5
+        }
+      ],
+      "tasks": [
+        {
+          "id": "lab",
+          "title": "实验课",
+          "duration_min": 60,
+          "location_id": "laboratory",
+          "fixed_start": "2026-09-14T09:00:00+08:00",
+          "fixed_end": "2026-09-14T10:00:00+08:00",
+          "flexibility": "fixed"
+        },
+        {
+          "id": "study",
+          "title": "图书馆整理报告",
+          "duration_min": 30,
+          "location_id": "library",
+          "earliest_start": "2026-09-14T10:00:00+08:00",
+          "deadline": "2026-09-14T12:00:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "P08_dependency_pair",
+      "kind": "initial",
+      "category": "dependency",
+      "purpose": "验证显式先后依赖不受用户输入顺序影响。",
+      "tasks": [
+        {
+          "id": "analysis",
+          "title": "分析实验数据",
+          "duration_min": 60,
+          "depends_on": [
+            "collect"
+          ]
+        },
+        {
+          "id": "collect",
+          "title": "采集实验数据",
+          "duration_min": 60
+        }
+      ]
+    },
+    {
+      "id": "P09_dependency_chain",
+      "kind": "initial",
+      "category": "dependency",
+      "purpose": "验证三阶段任务链按依赖拓扑安排。",
+      "tasks": [
+        {
+          "id": "submit",
+          "title": "提交报告",
+          "duration_min": 30,
+          "depends_on": [
+            "review"
+          ],
+          "deadline": "2026-09-14T12:00:00+08:00"
+        },
+        {
+          "id": "review",
+          "title": "检查报告",
+          "duration_min": 60,
+          "depends_on": [
+            "draft"
+          ]
+        },
+        {
+          "id": "draft",
+          "title": "撰写报告",
+          "duration_min": 90
+        }
+      ]
+    },
+    {
+      "id": "P10_multi_stop_travel",
+      "kind": "initial",
+      "category": "travel",
+      "purpose": "验证连续跨三个校园地点时，每一段路线都进入可行性判断。",
+      "routes": [
+        {
+          "origin": "classroom",
+          "destination": "parcel_station",
+          "minutes": 15
+        },
+        {
+          "origin": "parcel_station",
+          "destination": "library",
+          "minutes": 20
+        },
+        {
+          "origin": "classroom",
+          "destination": "library",
+          "minutes": 25
+        }
+      ],
+      "tasks": [
+        {
+          "id": "course",
+          "title": "上午课程",
+          "duration_min": 60,
+          "location_id": "classroom",
+          "fixed_start": "2026-09-14T08:00:00+08:00",
+          "fixed_end": "2026-09-14T09:00:00+08:00",
+          "flexibility": "fixed"
+        },
+        {
+          "id": "parcel",
+          "title": "取快递",
+          "duration_min": 30,
+          "location_id": "parcel_station",
+          "earliest_start": "2026-09-14T09:00:00+08:00",
+          "deadline": "2026-09-14T11:00:00+08:00",
+          "importance": 5
+        },
+        {
+          "id": "study",
+          "title": "图书馆自习",
+          "duration_min": 60,
+          "location_id": "library",
+          "earliest_start": "2026-09-14T09:00:00+08:00",
+          "latest_end": "2026-09-14T13:00:00+08:00",
+          "importance": 4
+        }
+      ]
+    },
+    {
+      "id": "P11_competing_deadlines",
+      "kind": "initial",
+      "category": "deadline",
+      "purpose": "验证多个早截止短任务优先于无紧迫性的长任务。",
+      "tasks": [
+        {
+          "id": "long_reading",
+          "title": "长篇阅读",
+          "duration_min": 180,
+          "earliest_start": "2026-09-14T08:00:00+08:00",
+          "latest_end": "2026-09-14T13:00:00+08:00",
+          "importance": 2
+        },
+        {
+          "id": "print_form",
+          "title": "打印表格",
+          "duration_min": 30,
+          "deadline": "2026-09-14T09:00:00+08:00",
+          "importance": 5
+        },
+        {
+          "id": "submit_form",
+          "title": "提交表格",
+          "duration_min": 30,
+          "deadline": "2026-09-14T09:30:00+08:00",
+          "importance": 5,
+          "depends_on": [
+            "print_form"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P12_basic_control",
+      "kind": "initial",
+      "category": "control",
+      "purpose": "验证没有校园附加约束时，复杂策略不会损害基础排程可行性。",
+      "tasks": [
+        {
+          "id": "reading",
+          "title": "阅读",
+          "duration_min": 60
+        },
+        {
+          "id": "exercise",
+          "title": "锻炼",
+          "duration_min": 45
+        }
+      ]
+    },
+    {
+      "id": "R01_class_insertion",
+      "kind": "replan",
+      "category": "minimal_disruption",
+      "purpose": "临时课程只迫使冲突任务移动，其余早晚任务应保持原时段。",
+      "unaffected_task_ids": [
+        "task_a",
+        "task_c"
+      ],
+      "tasks": [
+        {
+          "id": "task_a",
+          "title": "晨间阅读",
+          "duration_min": 60
+        },
+        {
+          "id": "task_b",
+          "title": "项目编码",
+          "duration_min": 60
+        },
+        {
+          "id": "task_c",
+          "title": "晚间复盘",
+          "duration_min": 60
+        },
+        {
+          "id": "new_class",
+          "title": "临时加课",
+          "duration_min": 60,
+          "fixed_start": "2026-09-14T14:00:00+08:00",
+          "fixed_end": "2026-09-14T15:00:00+08:00",
+          "flexibility": "fixed"
+        }
+      ],
+      "old_plan": [
+        {
+          "task_id": "task_a",
+          "title": "晨间阅读",
+          "start_at": "2026-09-14T10:00:00+08:00",
+          "end_at": "2026-09-14T11:00:00+08:00"
+        },
+        {
+          "task_id": "task_b",
+          "title": "项目编码",
+          "start_at": "2026-09-14T14:00:00+08:00",
+          "end_at": "2026-09-14T15:00:00+08:00"
+        },
+        {
+          "task_id": "task_c",
+          "title": "晚间复盘",
+          "start_at": "2026-09-14T18:00:00+08:00",
+          "end_at": "2026-09-14T19:00:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "R02_morning_meeting",
+      "kind": "replan",
+      "category": "minimal_disruption",
+      "purpose": "上午临时会议影响晨间任务时，下午和晚间任务保持不动。",
+      "unaffected_task_ids": [
+        "task_b",
+        "task_c"
+      ],
+      "tasks": [
+        {
+          "id": "task_a",
+          "title": "晨间阅读",
+          "duration_min": 60
+        },
+        {
+          "id": "task_b",
+          "title": "下午自习",
+          "duration_min": 60
+        },
+        {
+          "id": "task_c",
+          "title": "晚间锻炼",
+          "duration_min": 60
+        },
+        {
+          "id": "meeting",
+          "title": "临时会议",
+          "duration_min": 60,
+          "fixed_start": "2026-09-14T10:00:00+08:00",
+          "fixed_end": "2026-09-14T11:00:00+08:00",
+          "flexibility": "fixed"
+        }
+      ],
+      "old_plan": [
+        {
+          "task_id": "task_a",
+          "title": "晨间阅读",
+          "start_at": "2026-09-14T10:00:00+08:00",
+          "end_at": "2026-09-14T11:00:00+08:00"
+        },
+        {
+          "task_id": "task_b",
+          "title": "下午自习",
+          "start_at": "2026-09-14T14:00:00+08:00",
+          "end_at": "2026-09-14T15:00:00+08:00"
+        },
+        {
+          "task_id": "task_c",
+          "title": "晚间锻炼",
+          "start_at": "2026-09-14T18:00:00+08:00",
+          "end_at": "2026-09-14T19:00:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "R03_opening_delayed",
+      "kind": "replan",
+      "category": "opening_hours",
+      "purpose": "场馆开放时间推迟时只调整该场馆任务。",
+      "opening_windows": {
+        "library": [
+          [
+            "2026-09-14T12:00:00+08:00",
+            "2026-09-14T22:00:00+08:00"
+          ]
+        ]
+      },
+      "unaffected_task_ids": [
+        "task_b",
+        "task_c"
+      ],
+      "tasks": [
+        {
+          "id": "library_task",
+          "title": "图书馆阅读",
+          "duration_min": 60,
+          "location_id": "library"
+        },
+        {
+          "id": "task_b",
+          "title": "下午写作",
+          "duration_min": 60
+        },
+        {
+          "id": "task_c",
+          "title": "晚间复盘",
+          "duration_min": 60
+        }
+      ],
+      "old_plan": [
+        {
+          "task_id": "library_task",
+          "title": "图书馆阅读",
+          "start_at": "2026-09-14T09:00:00+08:00",
+          "end_at": "2026-09-14T10:00:00+08:00",
+          "location_id": "library"
+        },
+        {
+          "task_id": "task_b",
+          "title": "下午写作",
+          "start_at": "2026-09-14T14:00:00+08:00",
+          "end_at": "2026-09-14T15:00:00+08:00"
+        },
+        {
+          "task_id": "task_c",
+          "title": "晚间复盘",
+          "start_at": "2026-09-14T18:00:00+08:00",
+          "end_at": "2026-09-14T19:00:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "R04_rain_boundary",
+      "kind": "replan",
+      "category": "weather",
+      "purpose": "新增降雨边界只提前室外任务，已可行的室内任务保持。",
+      "enforce_weather": true,
+      "weather": [
+        {
+          "condition": "rain",
+          "rain_probability": 0.9,
+          "risk_start_at": "2026-09-14T17:00:00+08:00"
+        }
+      ],
+      "unaffected_task_ids": [
+        "dinner",
+        "study"
+      ],
+      "tasks": [
+        {
+          "id": "dinner",
+          "title": "晚餐",
+          "duration_min": 60,
+          "importance": 5
+        },
+        {
+          "id": "run",
+          "title": "室外跑步",
+          "duration_min": 45,
+          "importance": 5,
+          "tags": [
+            "outdoor"
+          ]
+        },
+        {
+          "id": "study",
+          "title": "室内学习",
+          "duration_min": 60
+        }
+      ],
+      "old_plan": [
+        {
+          "task_id": "study",
+          "title": "室内学习",
+          "start_at": "2026-09-14T10:00:00+08:00",
+          "end_at": "2026-09-14T11:00:00+08:00"
+        },
+        {
+          "task_id": "dinner",
+          "title": "晚餐",
+          "start_at": "2026-09-14T16:00:00+08:00",
+          "end_at": "2026-09-14T17:00:00+08:00"
+        },
+        {
+          "task_id": "run",
+          "title": "室外跑步",
+          "start_at": "2026-09-14T18:00:00+08:00",
+          "end_at": "2026-09-14T18:45:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "R05_new_urgent_task",
+      "kind": "replan",
+      "category": "deadline",
+      "purpose": "新增早截止任务时保留原计划并利用真正空档，而不是从头洗牌。",
+      "unaffected_task_ids": [
+        "task_a",
+        "task_b",
+        "task_c"
+      ],
+      "tasks": [
+        {
+          "id": "task_a",
+          "title": "阅读",
+          "duration_min": 60
+        },
+        {
+          "id": "task_b",
+          "title": "写作",
+          "duration_min": 60
+        },
+        {
+          "id": "task_c",
+          "title": "锻炼",
+          "duration_min": 60
+        },
+        {
+          "id": "urgent",
+          "title": "紧急提交",
+          "duration_min": 30,
+          "deadline": "2026-09-14T09:30:00+08:00",
+          "importance": 5
+        }
+      ],
+      "old_plan": [
+        {
+          "task_id": "task_a",
+          "title": "阅读",
+          "start_at": "2026-09-14T10:00:00+08:00",
+          "end_at": "2026-09-14T11:00:00+08:00"
+        },
+        {
+          "task_id": "task_b",
+          "title": "写作",
+          "start_at": "2026-09-14T14:00:00+08:00",
+          "end_at": "2026-09-14T15:00:00+08:00"
+        },
+        {
+          "task_id": "task_c",
+          "title": "锻炼",
+          "start_at": "2026-09-14T18:00:00+08:00",
+          "end_at": "2026-09-14T19:00:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "R06_duration_expansion",
+      "kind": "replan",
+      "category": "minimal_disruption",
+      "purpose": "任务时长增加只改变该任务结束时间，不移动无关任务。",
+      "unaffected_task_ids": [
+        "task_a",
+        "task_c"
+      ],
+      "tasks": [
+        {
+          "id": "task_a",
+          "title": "上午阅读",
+          "duration_min": 60
+        },
+        {
+          "id": "task_b",
+          "title": "扩展项目编码",
+          "duration_min": 120,
+          "earliest_start": "2026-09-14T13:00:00+08:00",
+          "latest_end": "2026-09-14T17:00:00+08:00"
+        },
+        {
+          "id": "task_c",
+          "title": "晚间复盘",
+          "duration_min": 60
+        }
+      ],
+      "old_plan": [
+        {
+          "task_id": "task_a",
+          "title": "上午阅读",
+          "start_at": "2026-09-14T10:00:00+08:00",
+          "end_at": "2026-09-14T11:00:00+08:00"
+        },
+        {
+          "task_id": "task_b",
+          "title": "项目编码",
+          "start_at": "2026-09-14T14:00:00+08:00",
+          "end_at": "2026-09-14T15:00:00+08:00"
+        },
+        {
+          "task_id": "task_c",
+          "title": "晚间复盘",
+          "start_at": "2026-09-14T18:00:00+08:00",
+          "end_at": "2026-09-14T19:00:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "R07_activity_window_shift",
+      "kind": "replan",
+      "category": "activity_window",
+      "purpose": "活动有效时段改变时只移动受影响活动。",
+      "task_windows": {
+        "task_b": [
+          [
+            "2026-09-14T15:00:00+08:00",
+            "2026-09-14T17:00:00+08:00"
+          ]
+        ]
+      },
+      "unaffected_task_ids": [
+        "task_a",
+        "task_c"
+      ],
+      "tasks": [
+        {
+          "id": "task_a",
+          "title": "上午阅读",
+          "duration_min": 60
+        },
+        {
+          "id": "task_b",
+          "title": "限时活动",
+          "duration_min": 60
+        },
+        {
+          "id": "task_c",
+          "title": "晚间复盘",
+          "duration_min": 60
+        }
+      ],
+      "old_plan": [
+        {
+          "task_id": "task_a",
+          "title": "上午阅读",
+          "start_at": "2026-09-14T10:00:00+08:00",
+          "end_at": "2026-09-14T11:00:00+08:00"
+        },
+        {
+          "task_id": "task_b",
+          "title": "限时活动",
+          "start_at": "2026-09-14T14:00:00+08:00",
+          "end_at": "2026-09-14T15:00:00+08:00"
+        },
+        {
+          "task_id": "task_c",
+          "title": "晚间复盘",
+          "start_at": "2026-09-14T18:00:00+08:00",
+          "end_at": "2026-09-14T19:00:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "R08_route_time_changed",
+      "kind": "replan",
+      "category": "travel",
+      "purpose": "路线耗时增长时只调整直接通勤链，独立晚间任务保持。",
+      "routes": [
+        {
+          "origin": "dorm",
+          "destination": "library",
+          "minutes": 30
+        }
+      ],
+      "unaffected_task_ids": [
+        "task_c"
+      ],
+      "tasks": [
+        {
+          "id": "task_a",
+          "title": "宿舍整理",
+          "duration_min": 60,
+          "location_id": "dorm"
+        },
+        {
+          "id": "task_b",
+          "title": "图书馆自习",
+          "duration_min": 60,
+          "location_id": "library"
+        },
+        {
+          "id": "task_c",
+          "title": "晚间复盘",
+          "duration_min": 60
+        }
+      ],
+      "old_plan": [
+        {
+          "task_id": "task_a",
+          "title": "宿舍整理",
+          "start_at": "2026-09-14T10:00:00+08:00",
+          "end_at": "2026-09-14T11:00:00+08:00",
+          "location_id": "dorm"
+        },
+        {
+          "task_id": "task_b",
+          "title": "图书馆自习",
+          "start_at": "2026-09-14T11:20:00+08:00",
+          "end_at": "2026-09-14T12:20:00+08:00",
+          "location_id": "library"
+        },
+        {
+          "task_id": "task_c",
+          "title": "晚间复盘",
+          "start_at": "2026-09-14T18:00:00+08:00",
+          "end_at": "2026-09-14T19:00:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "R09_congestion_changed",
+      "kind": "replan",
+      "category": "congestion",
+      "purpose": "新出现的通行高峰只调整直接通勤链，独立晚间任务保持。",
+      "routes": [
+        {
+          "origin": "building_a",
+          "destination": "building_b",
+          "minutes": 15
+        }
+      ],
+      "congestion_windows": [
+        {
+          "start_at": "2026-09-14T09:30:00+08:00",
+          "end_at": "2026-09-14T10:30:00+08:00",
+          "duration_multiplier": 2.0,
+          "minimum_extra_min": 10
+        }
+      ],
+      "unaffected_task_ids": [
+        "task_c"
+      ],
+      "tasks": [
+        {
+          "id": "task_a",
+          "title": "A楼实验",
+          "duration_min": 60,
+          "location_id": "building_a"
+        },
+        {
+          "id": "task_b",
+          "title": "B楼讨论",
+          "duration_min": 30,
+          "location_id": "building_b"
+        },
+        {
+          "id": "task_c",
+          "title": "晚间总结",
+          "duration_min": 60
+        }
+      ],
+      "old_plan": [
+        {
+          "task_id": "task_a",
+          "title": "A楼实验",
+          "start_at": "2026-09-14T09:00:00+08:00",
+          "end_at": "2026-09-14T10:00:00+08:00",
+          "location_id": "building_a"
+        },
+        {
+          "task_id": "task_b",
+          "title": "B楼讨论",
+          "start_at": "2026-09-14T10:30:00+08:00",
+          "end_at": "2026-09-14T11:00:00+08:00",
+          "location_id": "building_b"
+        },
+        {
+          "task_id": "task_c",
+          "title": "晚间总结",
+          "start_at": "2026-09-14T18:00:00+08:00",
+          "end_at": "2026-09-14T19:00:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "R10_dependency_changed",
+      "kind": "replan",
+      "category": "dependency",
+      "purpose": "新增先后依赖时移动依赖链，独立晚间任务保持。",
+      "unaffected_task_ids": [
+        "task_c"
+      ],
+      "tasks": [
+        {
+          "id": "task_b",
+          "title": "整理数据",
+          "duration_min": 60,
+          "depends_on": [
+            "task_a"
+          ]
+        },
+        {
+          "id": "task_a",
+          "title": "采集数据",
+          "duration_min": 60
+        },
+        {
+          "id": "task_c",
+          "title": "晚间锻炼",
+          "duration_min": 60
+        }
+      ],
+      "old_plan": [
+        {
+          "task_id": "task_b",
+          "title": "整理数据",
+          "start_at": "2026-09-14T10:00:00+08:00",
+          "end_at": "2026-09-14T11:00:00+08:00"
+        },
+        {
+          "task_id": "task_a",
+          "title": "采集数据",
+          "start_at": "2026-09-14T14:00:00+08:00",
+          "end_at": "2026-09-14T15:00:00+08:00"
+        },
+        {
+          "task_id": "task_c",
+          "title": "晚间锻炼",
+          "start_at": "2026-09-14T18:00:00+08:00",
+          "end_at": "2026-09-14T19:00:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "R11_locked_task",
+      "kind": "replan",
+      "category": "locked_task",
+      "purpose": "显式锁定任务和不受影响任务均应保留。",
+      "unaffected_task_ids": [
+        "locked_run",
+        "task_a"
+      ],
+      "tasks": [
+        {
+          "id": "task_a",
+          "title": "上午阅读",
+          "duration_min": 60
+        },
+        {
+          "id": "task_b",
+          "title": "下午写作",
+          "duration_min": 60
+        },
+        {
+          "id": "locked_run",
+          "title": "已锁定跑步",
+          "duration_min": 60,
+          "fixed_start": "2026-09-14T18:00:00+08:00",
+          "fixed_end": "2026-09-14T19:00:00+08:00",
+          "flexibility": "locked"
+        },
+        {
+          "id": "new_event",
+          "title": "临时活动",
+          "duration_min": 60,
+          "fixed_start": "2026-09-14T14:00:00+08:00",
+          "fixed_end": "2026-09-14T15:00:00+08:00",
+          "flexibility": "fixed"
+        }
+      ],
+      "old_plan": [
+        {
+          "task_id": "task_a",
+          "title": "上午阅读",
+          "start_at": "2026-09-14T10:00:00+08:00",
+          "end_at": "2026-09-14T11:00:00+08:00"
+        },
+        {
+          "task_id": "task_b",
+          "title": "下午写作",
+          "start_at": "2026-09-14T14:00:00+08:00",
+          "end_at": "2026-09-14T15:00:00+08:00"
+        },
+        {
+          "task_id": "locked_run",
+          "title": "已锁定跑步",
+          "start_at": "2026-09-14T18:00:00+08:00",
+          "end_at": "2026-09-14T19:00:00+08:00"
+        }
+      ]
+    },
+    {
+      "id": "R12_two_fixed_events",
+      "kind": "replan",
+      "category": "minimal_disruption",
+      "purpose": "两个新增固定事件下仍只移动真正冲突的中间任务。",
+      "unaffected_task_ids": [
+        "task_a",
+        "task_c"
+      ],
+      "tasks": [
+        {
+          "id": "task_a",
+          "title": "上午阅读",
+          "duration_min": 60
+        },
+        {
+          "id": "task_b",
+          "title": "下午写作",
+          "duration_min": 60
+        },
+        {
+          "id": "task_c",
+          "title": "晚间复盘",
+          "duration_min": 60
+        },
+        {
+          "id": "event_one",
+          "title": "固定讲座",
+          "duration_min": 60,
+          "fixed_start": "2026-09-14T12:00:00+08:00",
+          "fixed_end": "2026-09-14T13:00:00+08:00",
+          "flexibility": "fixed"
+        },
+        {
+          "id": "event_two",
+          "title": "固定会议",
+          "duration_min": 60,
+          "fixed_start": "2026-09-14T14:00:00+08:00",
+          "fixed_end": "2026-09-14T15:00:00+08:00",
+          "flexibility": "fixed"
+        }
+      ],
+      "old_plan": [
+        {
+          "task_id": "task_a",
+          "title": "上午阅读",
+          "start_at": "2026-09-14T10:00:00+08:00",
+          "end_at": "2026-09-14T11:00:00+08:00"
+        },
+        {
+          "task_id": "task_b",
+          "title": "下午写作",
+          "start_at": "2026-09-14T14:00:00+08:00",
+          "end_at": "2026-09-14T15:00:00+08:00"
+        },
+        {
+          "task_id": "task_c",
+          "title": "晚间复盘",
+          "start_at": "2026-09-14T18:00:00+08:00",
+          "end_at": "2026-09-14T19:00:00+08:00"
+        }
+      ]
+    }
+  ]
+}

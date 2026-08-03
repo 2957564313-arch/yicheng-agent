@@ -1694,7 +1694,7 @@ async function loadDemos() {
     button.addEventListener("click", async () => {
       const demo = demos.find((item) => item.id === button.dataset.demo);
       queryInput.value = demo.query;
-      modeSelect.value = "offline";
+      modeSelect.value = "auto";
       demoButtons.querySelectorAll("button")
         .forEach((item) => item.classList.toggle("active", item === button));
       await runRequest(`/api/v1/demos/${demo.id}/run`, {

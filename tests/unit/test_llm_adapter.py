@@ -185,3 +185,56 @@ async def test_malformed_provider_response_switches_model(
 
     assert await llm.polish_answer(draft="草稿", context={}) == "已恢复"
     assert llm.used_model_label == "qwen-backup"
+
+
+@pytest.mark.asyncio
+async def test_provider_failure_exposes_only_sanitized_diagnostics(
+    monkeypatch,
+    tmp_path: Path,
+):
+    (tmp_path / "respond.md").write_text("respond", encoding="utf-8")
+    llm = build_llm(tmp_path)
+    response = requests.Response()
+    response.status_code = 403
+    response.url = "https://model.example/v1/chat/completions?token=secret"
+    response._content = json.dumps(
+        {
+            "error": {
+                "code": "insufficient_quota",
+                "type": "insufficient_quota",
+                "message": "quota failed for test-key",
+            }
+        }
+    ).encode()
+    provider_error = requests.HTTPError(
+        "403 Client Error with secret response",
+        response=response,
+    )
+
+    def fail_post(
+        url: str,
+        body: dict,
+        headers: dict,
+        timeout_seconds: float,
+    ) -> dict:
+        raise provider_error
+
+    monkeypatch.setattr(llm, "_post_sync", fail_post)
+
+    with pytest.raises(AppError) as error:
+        await llm.polish_answer(draft="草稿", context={})
+
+    assert error.value.code == "LLM_PROVIDER_ERROR"
+    assert error.value.details == [
+        {
+            "attempted_model_count": 1,
+            "provider_error_type": "insufficient_quota",
+            "provider_exception_type": "HTTPError",
+            "provider_status_code": 403,
+            "provider_error_code": "insufficient_quota",
+        }
+    ]
+    serialized = json.dumps(error.value.details)
+    assert "test-key" not in serialized
+    assert "token=secret" not in serialized
+    assert "quota failed" not in serialized
