@@ -776,6 +776,15 @@ def _merge_llm_with_rule_constraints(
         update={
             "requested_date": rule_result.requested_date,
             "tasks": merged,
+            # An explicit overall deadline leaves no room for the model's
+            # generic anti-rush buffer. Keep any saved/user preference when
+            # no deadline was stated, but never make a feasible hard window
+            # infeasible by adding an inferred 10-minute buffer.
+            "preferences": (
+                rule_result.preferences
+                if rule_result.preferences.buffer_min == 0
+                else llm_result.preferences
+            ),
             "clarifications": clarifications,
             "confidence": max(
                 llm_result.confidence,

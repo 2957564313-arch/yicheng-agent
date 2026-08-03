@@ -26,7 +26,10 @@ def test_explicit_start_anchor_beats_model_inferred_evening_preference():
         update={
             "tasks": [
                 model_run if task.id == "run" else task for task in parsed.tasks
-            ]
+            ],
+            "preferences": parsed.preferences.model_copy(
+                update={"buffer_min": 10}
+            ),
         }
     )
 
@@ -38,3 +41,4 @@ def test_explicit_start_anchor_beats_model_inferred_evening_preference():
     assert merged_run.latest_end == rule_run.latest_end
     assert merged_run.deadline == rule_run.deadline
     assert merged_run.preferred_period is None
+    assert merged.preferences.buffer_min == 0
