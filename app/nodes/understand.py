@@ -893,6 +893,26 @@ def _merge_task_constraints(
             if rule_task.deadline is not None
             else model_task.deadline
         ),
+        # A model-only period is a soft preference at best. When the rule
+        # parser found explicit clock anchors but no matching period phrase,
+        # drop the model's guessed period (e.g. “evening” for a generic run)
+        # so it cannot turn a preference into an impossible hard window.
+        "preferred_period": (
+            rule_task.preferred_period
+            if rule_task.preferred_period is not None
+            else (
+                None
+                if any(
+                    value is not None
+                    for value in (
+                        rule_task.earliest_start,
+                        rule_task.latest_end,
+                        rule_task.deadline,
+                    )
+                )
+                else model_task.preferred_period
+            )
+        ),
         "importance": max(model_task.importance, rule_task.importance),
         "depends_on": list(
             dict.fromkeys(

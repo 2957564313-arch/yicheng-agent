@@ -17,7 +17,10 @@ def test_explicit_start_anchor_beats_model_inferred_evening_preference():
     parsed = RuleBasedRequirementParser("Asia/Shanghai").parse(query=query, now=NOW)
     rule_run = next(task for task in parsed.tasks if task.id == "run")
     model_run = rule_run.model_copy(
-        update={"earliest_start": datetime(2026, 7, 24, 18, 0, tzinfo=TZ)}
+        update={
+            "earliest_start": datetime(2026, 7, 24, 18, 0, tzinfo=TZ),
+            "preferred_period": "evening",
+        }
     )
     llm_result = parsed.model_copy(
         update={
@@ -34,3 +37,4 @@ def test_explicit_start_anchor_beats_model_inferred_evening_preference():
     assert merged_run.earliest_start == rule_run.earliest_start
     assert merged_run.latest_end == rule_run.latest_end
     assert merged_run.deadline == rule_run.deadline
+    assert merged_run.preferred_period is None
