@@ -22,7 +22,7 @@ def test_history_restore_and_keyboard_send_are_available() -> None:
 
     assert 'data-history-index="${index}"' in javascript
     assert "restoreConversationSnapshot(item.query, item.answer);" in javascript
-    assert "本机历史摘要" in javascript
+    assert "??????" in javascript
     assert 'queryInput.addEventListener("keydown"' in javascript
     assert 'event.key !== "Enter" || event.shiftKey || event.isComposing' in javascript
     assert "response: responseData || null" in javascript
@@ -52,8 +52,8 @@ def test_result_first_dashboard_keeps_key_plan_information_together() -> None:
     assert 'id="result-constraints"' in html
     assert 'id="result-sources"' in html
     assert "function renderResultDashboard(data)" in javascript
-    assert '[`${metrics.buffer_minutes || 0}分钟`' in javascript
-    assert '[`${metrics.travel_minutes || 0}分钟`' in javascript
+    assert '[`${metrics.buffer_minutes || 0}??`' in javascript
+    assert '[`${metrics.travel_minutes || 0}??`' in javascript
     assert 'document.body.classList.toggle("has-plan-result", active);' in javascript
     assert "body.has-plan-result .composer-column" in styles
     assert ".result-summary { grid-template-columns: repeat(6" in styles
@@ -65,7 +65,7 @@ def test_fresh_homepage_opens_with_a_result_showcase() -> None:
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
 
     assert '<body class="has-plan-result">' in html
-    assert "正在加载默认规划，请稍候…" in html
+    assert "?????????????" in html
     assert "async function loadDemos({ autoRun = false } = {})" in javascript
     assert "if (autoRun && demos.length)" in javascript
     assert 'await runDemo(demoButtons.querySelector("button"), demos[0]);' in javascript
@@ -92,7 +92,7 @@ def test_demo_scenarios_move_into_result_sidebar() -> None:
     styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
 
     assert 'id="sidebar-demo-buttons"' in html
-    assert '<h2>场景演示</h2>' in html
+    assert '<h2>????</h2>' in html
     assert "const sidebarDemoButtons" in javascript
     assert "sidebarDemoButtons.innerHTML = demoMarkup;" in javascript
     assert 'document.querySelectorAll("[data-demo]")' in javascript
@@ -120,8 +120,8 @@ def test_result_dashboard_has_icons_sources_and_four_quick_actions() -> None:
     assert 'id="result-quick-actions"' in html
     assert html.count("data-result-action=") == 4
     assert "function dashboardIcon(name" in javascript
-    assert 'name: "高德地图"' in javascript
-    assert 'name: "高德天气"' in javascript
+    assert 'name: "????"' in javascript
+    assert 'name: "????"' in javascript
     assert "const resultActionQueries" in javascript
     assert 'submitQuery(query, { keepResultMode: true })' in javascript
     assert ".timeline-kind-icon" in styles
@@ -131,7 +131,7 @@ def test_result_dashboard_has_icons_sources_and_four_quick_actions() -> None:
     assert ".result-action-status.is-unchanged" in styles
     assert ".result-quick-actions button:first-child" not in styles
     assert "function currentBaseRequirement()" in javascript
-    assert 'split(/\\n调整要求：/u, 1)' in javascript
+    assert 'split(/\\n?????/u, 1)' in javascript
     assert 'id="result-change-summary"' in html
     assert "const changesByTask = new Map" in javascript
     assert "timeline-change-badge" in javascript

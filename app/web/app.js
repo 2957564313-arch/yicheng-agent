@@ -220,9 +220,9 @@ function renderConversationHistory() {
     .slice(0, 24);
   historyEmpty.hidden = items.length > 0;
   historyList.innerHTML = items.map((item, index) => `
-    <button class="history-item" type="button" data-history-index="${index}" aria-label="打开历史对话：${escapeHtml(item.query)}">
+    <button class="history-item" type="button" data-history-index="${index}" aria-label="???????${escapeHtml(item.query)}">
       <strong>${escapeHtml(item.query)}</strong>
-      <small>${escapeHtml(item.answer || "已生成计划")}</small>
+      <small>${escapeHtml(item.answer || "?????")}</small>
     </button>
   `).join("");
 }
@@ -249,9 +249,9 @@ function appendConversationMessage(role, text) {
   conversationStream.insertAdjacentHTML(
     "beforeend",
     `<article class="conversation-message ${isUser ? "user-message" : "assistant-message"}">
-      <span class="message-avatar" aria-hidden="true">${isUser ? "你" : "易"}</span>
+      <span class="message-avatar" aria-hidden="true">${isUser ? "?" : "?"}</span>
       <div class="message-body">
-        <p class="message-role">${isUser ? "你" : "易程智策"}</p>
+        <p class="message-role">${isUser ? "?" : "????"}</p>
         <div class="message-content">${escapeHtml(String(text))}</div>
       </div>
     </article>`,
@@ -274,7 +274,7 @@ function beginConversationTurn(query, { keepResultMode = false } = {}) {
   lastResultQuery = activeConversationQuery;
   activeConversationAnswer = "";
   if (!keepResultMode) document.body.classList.remove("has-plan-result");
-  answer.textContent = "正在结合你的课表、时间和地点认真规划…";
+  answer.textContent = "???????????????????";
   answer.classList.add("muted");
   assistantActions.innerHTML = "";
   freshness.innerHTML = "";
@@ -387,9 +387,9 @@ function scheduleItemsByDate() {
 
 function scheduleItemMarkup(item, compact = false) {
   return `
-    <article class="schedule-event ${escapeHtml(item.kind || "task")}" title="${escapeHtml(item.title || "日程")}">
-      <time>${escapeHtml(timePart(item.start_at))}${compact ? "" : ` — ${escapeHtml(timePart(item.end_at))}`}</time>
-      <div><strong>${escapeHtml(item.title || "未命名安排")}</strong>${compact ? "" : `<small>${escapeHtml(item.location_name || (item.kind === "travel" ? "通勤时间" : "个人安排"))}</small>`}</div>
+    <article class="schedule-event ${escapeHtml(item.kind || "task")}" title="${escapeHtml(item.title || "??")}">
+      <time>${escapeHtml(timePart(item.start_at))}${compact ? "" : ` ? ${escapeHtml(timePart(item.end_at))}`}</time>
+      <div><strong>${escapeHtml(item.title || "?????")}</strong>${compact ? "" : `<small>${escapeHtml(item.location_name || (item.kind === "travel" ? "????" : "????"))}</small>`}</div>
     </article>`;
 }
 
@@ -407,21 +407,21 @@ function renderScheduleViews() {
   const daysInMonth = Number(monthEnd.slice(-2));
 
   if (scheduleViewMode === "day") {
-    schedulePeriodLabel.textContent = selected === today ? "今天" : `${selected.slice(5).replace("-", "月")}日`;
+    schedulePeriodLabel.textContent = selected === today ? "??" : `${selected.slice(5).replace("-", "?")}?`;
     scheduleDayView.innerHTML = dayItems.length
       ? `<div class="schedule-day-timeline">${dayItems.map((item) => scheduleItemMarkup(item)).join("")}</div>`
-      : `<div class="schedule-empty"><strong>今天还没有固定安排</strong><span>可以在对话中告诉我想完成什么，或把时间留给休息和临时变化。</span></div>`;
+      : `<div class="schedule-empty"><strong>?????????</strong><span>?????????????????????????????</span></div>`;
   }
   if (scheduleViewMode === "week") {
     const weekDates = Array.from({ length: 7 }, (_, index) => addWeeklyDays(startOfWeek, index));
-    schedulePeriodLabel.textContent = `${startOfWeek.slice(5).replace("-", "月")}日 — ${weekDates[6].slice(5).replace("-", "月")}日`;
+    schedulePeriodLabel.textContent = `${startOfWeek.slice(5).replace("-", "?")}? ? ${weekDates[6].slice(5).replace("-", "?")}?`;
     scheduleWeekView.innerHTML = `<div class="schedule-week-grid">${weekDates.map((date) => {
       const items = (byDate[date] || []).sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
       const dateValue = scheduleDateValue(date);
-      const weekday = "一二三四五六日"[dateValue.getUTCDay() === 0 ? 6 : dateValue.getUTCDay() - 1];
+      const weekday = "???????"[dateValue.getUTCDay() === 0 ? 6 : dateValue.getUTCDay() - 1];
       return `<section class="schedule-week-day ${date === today ? "is-today" : ""}">
-        <header><span>周${weekday}</span><strong>${date.slice(8)}<small>日</small></strong><em>${items.length ? `${items.length}项` : "空闲"}</em></header>
-        <div>${items.length ? items.map((item) => scheduleItemMarkup(item, true)).join("") : `<p class="schedule-empty-mini">留作弹性时间</p>`}</div>
+        <header><span>?${weekday}</span><strong>${date.slice(8)}<small>?</small></strong><em>${items.length ? `${items.length}?` : "??"}</em></header>
+        <div>${items.length ? items.map((item) => scheduleItemMarkup(item, true)).join("") : `<p class="schedule-empty-mini">??????</p>`}</div>
       </section>`;
     }).join("")}</div>`;
   }
@@ -434,10 +434,10 @@ function renderScheduleViews() {
       const date = `${monthStart.slice(0, 8)}${String(day).padStart(2, "0")}`;
       const items = byDate[date] || [];
       cells.push(`<button type="button" class="schedule-month-cell ${date === today ? "is-today" : ""} ${date === selected ? "is-selected" : ""}" data-schedule-date="${date}">
-        <span>${day}</span><small>${items.length ? `${items.length}项` : ""}</small><i>${items.slice(0, 3).map((item) => `<b class="${escapeHtml(item.kind || "task")}"></b>`).join("")}</i>
+        <span>${day}</span><small>${items.length ? `${items.length}?` : ""}</small><i>${items.slice(0, 3).map((item) => `<b class="${escapeHtml(item.kind || "task")}"></b>`).join("")}</i>
       </button>`);
     }
-    scheduleMonthView.innerHTML = `<div class="schedule-month-weekdays">${"一二三四五六日".split("").map((day) => `<span>周${day}</span>`).join("")}</div><div class="schedule-month-grid">${cells.join("")}</div>`;
+    scheduleMonthView.innerHTML = `<div class="schedule-month-weekdays">${"???????".split("").map((day) => `<span>?${day}</span>`).join("")}</div><div class="schedule-month-grid">${cells.join("")}</div>`;
     scheduleMonthView.querySelectorAll("[data-schedule-date]").forEach((button) => {
       button.addEventListener("click", () => {
         scheduleCursorDate = button.dataset.scheduleDate;
@@ -450,7 +450,7 @@ function renderScheduleViews() {
   [scheduleDayView, scheduleWeekView, scheduleMonthView].forEach((panel) => {
     if (panel) panel.hidden = !panel.id.endsWith(`${scheduleViewMode}-view`);
   });
-  if (scheduleState) scheduleState.textContent = `${dayItems.length} 项安排`;
+  if (scheduleState) scheduleState.textContent = `${dayItems.length} ???`;
 }
 
 function updateScheduleTabs() {
@@ -501,7 +501,7 @@ function initializeWorkspaceNavigation() {
     setResultMode(false);
     clearConversationStream();
     queryInput.value = "";
-    answer.textContent = "把课程、自习、取快递、吃饭或运动告诉我，我会先判断能否全部完成；如果时间不够，也会说明原因并给你可选方案。";
+    answer.textContent = "?????????????????????????????????????????????????????";
     answer.classList.add("muted");
     assistantActions.innerHTML = "";
     freshness.innerHTML = "";
@@ -530,10 +530,10 @@ function initializeWorkspaceNavigation() {
       return;
     }
     setResultMode(false);
-    answer.textContent = item.answer || "这条历史对话没有保存回答摘要。";
+    answer.textContent = item.answer || "???????????????";
     answer.classList.toggle("muted", !item.answer);
     assistantActions.innerHTML = "";
-    freshness.innerHTML = '<span class="source-tag">本机历史摘要</span>';
+    freshness.innerHTML = '<span class="source-tag">??????</span>';
     closeDrawers();
     assistantPanel?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
@@ -622,7 +622,7 @@ function memoryBackupItems(items) {
 function timetableBackupValue(value) {
   if (!value?.entries?.length) return null;
   return {
-    name: value.timetable?.name || "我的课表",
+    name: value.timetable?.name || "????",
     term_start: value.timetable?.term_start || null,
     term_end: value.timetable?.term_end || null,
     enabled: value.timetable?.enabled !== false,
@@ -642,7 +642,7 @@ function calendarBackupItems(items) {
     date: item.date,
     action: item.action,
     replacement_weekday: item.replacement_weekday || null,
-    label: item.label || "学校校历调整",
+    label: item.label || "??????",
     source_ref: item.source_ref || null,
   }));
 }
@@ -703,10 +703,10 @@ async function buildPersonalDataBackup() {
 
 function validatePersonalDataBackup(value) {
   if (!value || typeof value !== "object") {
-    throw new Error("这不是有效的易程智策数据包。");
+    throw new Error("??????????????");
   }
   if (value.product !== "yicheng-agent" || value.schema_version !== "1.0") {
-    throw new Error("备份文件版本不受支持，请选择由易程智策导出的文件。");
+    throw new Error("?????????????????????????");
   }
   const identityPattern = /^[A-Za-z0-9_-]+$/;
   if (
@@ -717,10 +717,10 @@ function validatePersonalDataBackup(value) {
     || !identityPattern.test(value.thread_id)
     || value.thread_id.length > 128
   ) {
-    throw new Error("备份文件中的用户标识不合法。");
+    throw new Error("??????????????");
   }
   if (!Array.isArray(value.memories) || value.memories.length > 100) {
-    throw new Error("备份文件中的长期记忆数量不合法。");
+    throw new Error("????????????????");
   }
   if (
     value.timetable
@@ -729,13 +729,13 @@ function validatePersonalDataBackup(value) {
       || value.timetable.entries.length > 500
     )
   ) {
-    throw new Error("备份文件中的课表数量不合法。");
+    throw new Error("??????????????");
   }
   if (
     !Array.isArray(value.calendar_overrides)
     || value.calendar_overrides.length > 366
   ) {
-    throw new Error("备份文件中的校历调整数量不合法。");
+    throw new Error("????????????????");
   }
   return value;
 }
@@ -743,16 +743,16 @@ function validatePersonalDataBackup(value) {
 function personalDataSummary(value) {
   const courseCount = value.timetable?.entries?.length || 0;
   const calendarCount = value.calendar_overrides?.length || 0;
-  const planLabel = value.current_plan ? "、1份当前计划" : "";
+  const planLabel = value.current_plan ? "?1?????" : "";
   return (
-    `已识别 ${value.memories.length} 条长期记忆、${courseCount} 个课程时段、`
-    + `${calendarCount} 条校历调整${planLabel}。请确认后再恢复。`
+    `??? ${value.memories.length} ??????${courseCount} ??????`
+    + `${calendarCount} ?????${planLabel}?????????`
   );
 }
 
 profileExport.addEventListener("click", async () => {
   profileExport.disabled = true;
-  profileExport.textContent = "正在整理个人数据…";
+  profileExport.textContent = "?????????";
   profileBackupState.className = "storage-note";
   try {
     const backup = await buildPersonalDataBackup();
@@ -763,24 +763,24 @@ profileExport.addEventListener("click", async () => {
     const link = document.createElement("a");
     const date = shanghaiDateString();
     link.href = URL.createObjectURL(blob);
-    link.download = `易程智策个人数据_${date}.json`;
+    link.download = `????????_${date}.json`;
     document.body.append(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(link.href);
     profileBackupState.textContent = (
-      "备份已经生成。文件不含密码、登录凭证或 API 密钥，请妥善保存。"
+      "??????????????????? API ?????????"
     );
     profileBackupState.classList.add("ready");
   } catch (error) {
     profileBackupState.textContent = (
-      error instanceof Error ? error.message : "个人数据暂时无法导出。"
+      error instanceof Error ? error.message : "???????????"
     );
     profileBackupState.classList.add("error");
     renderDebug(error);
   } finally {
     profileExport.disabled = false;
-    profileExport.textContent = "导出我的数据备份";
+    profileExport.textContent = "????????";
   }
 });
 
@@ -791,7 +791,7 @@ profileImportFile.addEventListener("change", async () => {
   const file = profileImportFile.files?.[0];
   if (!file) return;
   if (file.size > 2_000_000) {
-    profileBackupState.textContent = "备份文件不能超过 2 MB。";
+    profileBackupState.textContent = "???????? 2 MB?";
     profileBackupState.classList.add("error");
     return;
   }
@@ -805,7 +805,7 @@ profileImportFile.addEventListener("change", async () => {
     profileRestore.hidden = false;
   } catch (error) {
     profileBackupState.textContent = (
-      error instanceof Error ? error.message : "备份文件无法读取。"
+      error instanceof Error ? error.message : "?????????"
     );
     profileBackupState.classList.add("error");
   }
@@ -814,7 +814,7 @@ profileImportFile.addEventListener("change", async () => {
 profileRestore.addEventListener("click", async () => {
   if (!pendingProfileBackup) return;
   profileRestore.disabled = true;
-  profileRestore.textContent = "正在恢复个人数据…";
+  profileRestore.textContent = "?????????";
   profileBackupState.className = "storage-note";
   try {
     const backup = pendingProfileBackup;
@@ -892,20 +892,20 @@ profileRestore.addEventListener("click", async () => {
         || null,
     );
     profileBackupState.textContent = (
-      `恢复完成：${result.memories_restored} 条记忆、`
-      + `${result.timetable_entries_restored} 个课程时段。`
-      + "页面即将刷新并重新汇总日程。"
+      `?????${result.memories_restored} ????`
+      + `${result.timetable_entries_restored} ??????`
+      + "??????????????"
     );
     profileBackupState.classList.add("ready");
     setTimeout(() => globalThis.location.reload(), 900);
   } catch (error) {
     profileBackupState.textContent = error?.error?.message
-      || "个人数据暂时没有恢复成功，原有数据未被清除。";
+      || "??????????????????????";
     profileBackupState.classList.add("error");
     renderDebug(error);
   } finally {
     profileRestore.disabled = false;
-    profileRestore.textContent = "确认恢复到这台设备";
+    profileRestore.textContent = "?????????";
   }
 });
 
@@ -925,7 +925,7 @@ function clientContextSnapshot() {
     })),
     timetable: timetableData?.entries?.length
       ? {
-        name: timetableData.timetable?.name || "我的课表",
+        name: timetableData.timetable?.name || "????",
         term_start: timetableData.timetable?.term_start || null,
         term_end: timetableData.timetable?.term_end || null,
         enabled: timetableData.timetable?.enabled ?? true,
@@ -963,8 +963,8 @@ function renderCampus(campus, { isDefault = false } = {}) {
   currentCampusProfile = campus;
   renderPersonalizationState();
   if (!campus) {
-    campusState.textContent = "读取失败";
-    campusSummary.textContent = "本校知识库暂时没有加载成功，请刷新重试。";
+    campusState.textContent = "????";
+    campusSummary.textContent = "????????????????????";
     campusSummary.classList.add("muted");
     campusReset.hidden = true;
     return;
@@ -974,15 +974,15 @@ function renderCampus(campus, { isDefault = false } = {}) {
     ?? 0;
   campusName.value = campus.display_name || "";
   campusCity.value = campus.search_city || "";
-  campusState.textContent = isDefault ? "默认校园" : "已切换";
+  campusState.textContent = isDefault ? "????" : "???";
   campusState.classList.add("ready");
   campusSummary.classList.remove("muted");
   campusSummary.innerHTML = `
     <strong>${escapeHtml(campus.display_name)}</strong>
-    <span>已保存 ${locationCount} 个本校地点${
+    <span>??? ${locationCount} ?????${
       isDefault
-        ? "，并已配置本校知识规则。"
-        : "。地点可用于路线计算；开放时间、节次和制度仍需导入本校知识包。"
+        ? "????????????"
+        : "???????????????????????????????"
     }</span>
   `;
   campusReset.hidden = isDefault;
@@ -1003,13 +1003,13 @@ async function loadCampus() {
 campusDiscover.addEventListener("click", async () => {
   const schoolName = campusName.value.trim();
   if (!schoolName) {
-    campusSummary.textContent = "请先填写学校名称，最好包含具体校区。";
+    campusSummary.textContent = "??????????????????";
     campusSummary.classList.remove("muted");
     return;
   }
   campusDiscover.disabled = true;
-  campusDiscover.textContent = "正在查找校园地点…";
-  campusSummary.textContent = "正在通过高德分类查找本校地点，请稍候。";
+  campusDiscover.textContent = "?????????";
+  campusSummary.textContent = "???????????????????";
   try {
     const response = await fetch("/api/v1/campuses/discover", {
       method: "POST",
@@ -1029,13 +1029,13 @@ campusDiscover.addEventListener("click", async () => {
       `<small>${escapeHtml(data.coverage_note)}</small>`,
     );
   } catch (error) {
-    campusState.textContent = "查找失败";
+    campusState.textContent = "????";
     campusSummary.textContent = error?.error?.message
-      || "暂时无法查找这所学校，请检查名称和城市后重试。";
+      || "???????????????????????";
     campusSummary.classList.remove("muted");
   } finally {
     campusDiscover.disabled = false;
-    campusDiscover.textContent = "查找这所学校";
+    campusDiscover.textContent = "??????";
   }
 });
 
@@ -1077,21 +1077,21 @@ async function initializeAccess() {
     loginUsername.value = status.test_username || "";
     loginPassword.value = "";
     loginMessage.textContent = status.configured
-      ? "请输入参赛材料中提供的测试账号和密码。"
-      : "测试入口尚未完成安全配置，请联系项目负责人。";
+      ? "???????????????????"
+      : "??????????????????????";
     accessGate.hidden = false;
     logoutButton.hidden = true;
     return false;
   } catch {
     accessGate.hidden = false;
-    loginMessage.textContent = "暂时无法检查登录状态，请稍后刷新页面。";
+    loginMessage.textContent = "???????????????????";
     return false;
   }
 }
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  loginMessage.textContent = "正在验证测试账号…";
+  loginMessage.textContent = "?????????";
   const response = await fetch("/api/v1/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1102,7 +1102,7 @@ loginForm.addEventListener("submit", async (event) => {
   });
   const data = await response.json();
   if (!response.ok) {
-    loginMessage.textContent = data?.error?.message || "登录没有成功。";
+    loginMessage.textContent = data?.error?.message || "???????";
     return;
   }
   localStorage.setItem(accessTokenKey, data.access_token);
@@ -1115,90 +1115,90 @@ logoutButton.addEventListener("click", () => {
 });
 
 const sourceLabels = {
-  user: "用户提供",
-  live_api: "实时数据",
-  structured: "结构化规则",
-  demo_fixture: "演示数据",
-  cache: "缓存数据",
-  estimated: "估算数据",
-  rag: "知识检索",
-  unknown: "暂不可用",
+  user: "????",
+  live_api: "????",
+  structured: "?????",
+  demo_fixture: "????",
+  cache: "????",
+  estimated: "????",
+  rag: "????",
+  unknown: "????",
 };
 
 const memoryDefinitions = {
   buffer_min: {
-    label: "日程缓冲时间",
-    placeholder: "例如：15分钟",
+    label: "??????",
+    placeholder: "???15??",
     category: "preference",
   },
   walking_speed: {
-    label: "步行节奏",
-    placeholder: "慢、正常或快",
+    label: "????",
+    placeholder: "??????",
     category: "preference",
   },
   transport_mode: {
-    label: "常用出行方式",
-    placeholder: "步行、自行车或电瓶车",
+    label: "??????",
+    placeholder: "??????????",
     category: "preference",
   },
   avoid_congestion: {
-    label: "偏好错峰通勤",
-    placeholder: "是或否",
+    label: "??????",
+    placeholder: "???",
     category: "preference",
   },
   avoid_rain: {
-    label: "避雨偏好",
-    placeholder: "是或否",
+    label: "????",
+    placeholder: "???",
     category: "preference",
   },
   avoid_tight_schedule: {
-    label: "避免行程太紧",
-    placeholder: "是或否",
+    label: "??????",
+    placeholder: "???",
     category: "preference",
   },
   preferred_locations: {
-    label: "常用地点",
-    placeholder: "例如：图书馆、东操场",
+    label: "????",
+    placeholder: "??????????",
     category: "preference",
   },
   preferred_study_period: {
-    label: "高效学习时段",
-    placeholder: "上午、下午或晚上",
+    label: "??????",
+    placeholder: "????????",
     category: "habit",
   },
   preferred_study_location: {
-    label: "常用自习地点",
-    placeholder: "例如：图书馆六层",
+    label: "??????",
+    placeholder: "????????",
     category: "preference",
   },
   usual_bedtime: {
-    label: "常用就寝时间",
-    placeholder: "例如：23:30",
+    label: "??????",
+    placeholder: "???23:30",
     category: "habit",
   },
   usual_wake_time: {
-    label: "常用起床时间",
-    placeholder: "例如：07:00",
+    label: "??????",
+    placeholder: "???07:00",
     category: "habit",
   },
   sleep_goal_hours: {
-    label: "希望睡眠时长",
-    placeholder: "例如：7.5小时",
+    label: "??????",
+    placeholder: "???7.5??",
     category: "preference",
   },
   weekly_daily_focus_limit_min: {
-    label: "每日自主安排上限",
-    placeholder: "例如：180分钟",
+    label: "????????",
+    placeholder: "???180??",
     category: "preference",
   },
 };
 
 function behaviorTopic(title) {
   const definitions = [
-    ["study", "自习", ["自习", "学习", "复习", "阅读"]],
-    ["exercise", "运动", ["跑步", "运动", "健身", "锻炼"]],
-    ["meal", "用餐", ["吃饭", "用餐", "早餐", "午餐", "晚餐"]],
-    ["parcel", "取快递", ["快递", "取件", "驿站"]],
+    ["study", "??", ["??", "??", "??", "??"]],
+    ["exercise", "??", ["??", "??", "??", "??"]],
+    ["meal", "??", ["??", "??", "??", "??", "??"]],
+    ["parcel", "???", ["??", "??", "??"]],
   ];
   return definitions.find(([, , markers]) =>
     markers.some((marker) => title.includes(marker))
@@ -1228,7 +1228,7 @@ function recordBehaviorHistory(data) {
     .filter((item) => item.item_type === "task")
     .flatMap((item) => {
       const topic = behaviorTopic(item.title || "");
-      if (!topic || item.reason === "固定或用户锁定任务") return [];
+      if (!topic || item.reason === "?????????") return [];
       const [, taskTitle] = topic;
       const start = timePart(item.start_at);
       return [{
@@ -1313,9 +1313,9 @@ function renderPersonalizationState() {
   personalizationReset.hidden = patterns.length === 0;
   personalizationState.textContent = enabled
     ? patterns.length
-      ? `已开启，发现 ${patterns.length} 个稳定习惯；只询问，不会自动加入。`
-      : "已开启；同类行为在不同日期出现至少3次后，才会形成建议。"
-    : "当前关闭。历史仍保存在本机，开启后才会用于生成建议。";
+      ? `?????? ${patterns.length} ?????????????????`
+      : "?????????????????3??????????"
+    : "??????????????????????????";
 }
 
 personalizationToggle.addEventListener("change", () => {
@@ -1330,7 +1330,7 @@ personalizationReset.addEventListener("click", () => {
   localStorage.removeItem(suggestionFeedbackKey);
   renderPersonalizationState();
   personalizationState.textContent = (
-    "建议降频记录已重置；已识别的行为历史仍保留在本机。"
+    "?????????????????????????"
   );
 });
 
@@ -1343,7 +1343,7 @@ function escapeHtml(value) {
 }
 
 function timePart(value) {
-  if (!value) return "—";
+  if (!value) return "?";
   return new Intl.DateTimeFormat("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
@@ -1366,7 +1366,7 @@ function renderClock() {
     hour12: false,
     timeZone: "Asia/Shanghai",
   }).format(current);
-  clock.textContent = `北京时间 ${formatted}`;
+  clock.textContent = `???? ${formatted}`;
 }
 
 function renderTimeline(data) {
@@ -1388,57 +1388,57 @@ function renderTimeline(data) {
       : 0;
     const changeCards = changes.map((change) => {
       const before = change.before_start
-        ? `${timePart(change.before_start)}—${timePart(change.before_end)}`
-        : "未安排";
+        ? `${timePart(change.before_start)}?${timePart(change.before_end)}`
+        : "???";
       const after = change.after_start
-        ? `${timePart(change.after_start)}—${timePart(change.after_end)}`
-        : "已移除";
+        ? `${timePart(change.after_start)}?${timePart(change.after_end)}`
+        : "???";
       return `<span class="result-change-chip ${escapeHtml(change.change_type)}">
         <b>${escapeHtml(change.title)}</b>
         <em>${escapeHtml(change.summary)}</em>
-        <small>${before} → ${after}</small>
+        <small>${before} ? ${after}</small>
       </span>`;
     });
     if (travelDelta) {
       changeCards.push(`<span class="result-change-chip travel-change">
-        <b>通勤时间</b>
-        <em>${travelDelta < 0 ? "减少" : "增加"}${Math.abs(travelDelta)}分钟</em>
-        <small>${previousTravel}分钟 → ${currentTravel}分钟</small>
+        <b>????</b>
+        <em>${travelDelta < 0 ? "??" : "??"}${Math.abs(travelDelta)}??</em>
+        <small>${previousTravel}?? ? ${currentTravel}??</small>
       </span>`);
     }
     if (waitingDelta) {
       const previousWaiting = planIdleMinutes(data.previous_plan);
       const currentWaiting = planIdleMinutes(data.plan);
       changeCards.push(`<span class="result-change-chip waiting-change">
-        <b>等待空档</b>
-        <em>${waitingDelta < 0 ? "减少" : "增加"}${Math.abs(waitingDelta)}分钟</em>
-        <small>${previousWaiting}分钟 → ${currentWaiting}分钟</small>
+        <b>????</b>
+        <em>${waitingDelta < 0 ? "??" : "??"}${Math.abs(waitingDelta)}??</em>
+        <small>${previousWaiting}?? ? ${currentWaiting}??</small>
       </span>`);
     }
     resultChangeSummary.innerHTML = changeCards.length
-      ? `<strong>本次调整</strong><div>${changeCards.join("")}</div>`
+      ? `<strong>????</strong><div>${changeCards.join("")}</div>`
       : "";
     resultChangeSummary.hidden = changeCards.length === 0;
   }
   const pendingCount = (data.task_statuses || [])
     .filter((task) => task.status === "needs_adjustment").length;
   planTitle.textContent = pendingCount
-    ? "当前可安排部分"
-    : "完整日程时间轴";
+    ? "???????"
+    : "???????";
   timeline.classList.toggle("empty", items.length === 0);
   timeline.innerHTML = items.length
     ? items.map((item) => {
       const isTravel = item.item_type === "travel";
       const travelModeLabels = {
-        walk: "步行通勤",
-        bicycle: "自行车通勤",
-        electrobike: "电瓶车通勤",
+        walk: "????",
+        bicycle: "?????",
+        electrobike: "?????",
       };
       const title = isTravel
-        ? travelModeLabels[item.travel_mode] || "通勤"
+        ? travelModeLabels[item.travel_mode] || "??"
         : item.title;
       const location = item.location_id
-        ? locationNames[item.location_id] || "地点待确认"
+        ? locationNames[item.location_id] || "?????"
         : "";
       const duration = Math.max(
         0,
@@ -1446,36 +1446,36 @@ function renderTimeline(data) {
       );
       const reason = isTravel
         ? item.congestion_delay_min > 0
-          ? `${item.source === "live_api" ? "高德返回" : "校园路线基准"} ${item.base_duration_min} 分钟，高峰额外预留 ${item.congestion_delay_min} 分钟`
-          : `已按所选出行方式预留 ${duration} 分钟`
-        : item.reason === "固定或用户锁定任务"
-          ? "这是你明确给出的固定安排"
-          : "已结合优先级、通勤和可用时间安排";
+          ? `${item.source === "live_api" ? "????" : "??????"} ${item.base_duration_min} ????????? ${item.congestion_delay_min} ??`
+          : `?????????? ${duration} ??`
+        : item.reason === "?????????"
+          ? "????????????"
+          : "????????????????";
       const itemIcon = isTravel
         ? "travel"
-        : title.includes("图书馆") || title.includes("学习") || title.includes("自习")
+        : title.includes("???") || title.includes("??") || title.includes("??")
           ? "book"
-          : title.includes("快递") || title.includes("报名")
+          : title.includes("??") || title.includes("??")
             ? "package"
-            : title.includes("跑步") || title.includes("运动")
+            : title.includes("??") || title.includes("??")
               ? "activity"
                : "calendar";
       const change = isTravel ? null : changesByTask.get(item.task_id);
       return `
         <div class="timeline-item ${isTravel ? "travel" : ""} ${change ? `has-change ${escapeHtml(change.change_type)}` : ""}">
-          <div class="time">${timePart(item.start_at)}—${timePart(item.end_at)}</div>
+          <div class="time">${timePart(item.start_at)}?${timePart(item.end_at)}</div>
           <div class="rail"><span></span></div>
           <div class="content">
             <span class="timeline-kind-icon">${dashboardIcon(itemIcon)}</span>
             <strong>${escapeHtml(title)}</strong>
             ${change ? `<span class="timeline-change-badge">${escapeHtml(change.summary)}</span>` : ""}
             ${location ? `<small>${escapeHtml(location)}</small>` : ""}
-            ${change?.before_start ? `<small class="timeline-before-time">原计划 ${timePart(change.before_start)}—${timePart(change.before_end)}</small>` : ""}
+            ${change?.before_start ? `<small class="timeline-before-time">??? ${timePart(change.before_start)}?${timePart(change.before_end)}</small>` : ""}
             <p>${escapeHtml(reason)}</p>
           </div>
         </div>`;
     }).join("")
-    : "没有生成结构化日程。";
+    : "??????????";
 }
 
 function setResultMode(active) {
@@ -1493,8 +1493,8 @@ function setInlineRequestEditing(active) {
   resultRequest.classList.toggle("is-editing", active);
   resultRequestText.hidden = active;
   resultRequestInput.hidden = !active;
-  resultEdit.textContent = active ? "取消修改" : "修改需求";
-  resultRerun.textContent = active ? "按新需求规划" : "重新规划";
+  resultEdit.textContent = active ? "????" : "????";
+  resultRerun.textContent = active ? "??????" : "????";
   if (active) {
     resultRequestInput.value = lastResultQuery;
     resultRequestInput.focus();
@@ -1523,27 +1523,27 @@ function renderResultSummary(data) {
   const endTimes = (plan.items || []).map((item) => new Date(item.end_at).getTime());
   const finalEnd = endTimes.length
     ? timePart(new Date(Math.max(...endTimes)))
-    : "—";
+    : "?";
   const feasible = plan.status === "valid" && scheduled === requested;
   const cards = [
     [
-      feasible ? "可执行" : "需调整",
-      feasible ? "所有任务均已安排" : "有任务需要调整",
+      feasible ? "???" : "???",
+      feasible ? "????????" : "???????",
       feasible ? "success" : "attention",
       "feasibility",
     ],
     [
       `${scheduled}/${requested}`,
-      "任务已安排",
+      "?????",
       scheduled === requested ? "success" : "attention",
       "tasks",
     ],
-    [finalEnd, "预计结束时间", "time", "end"],
-    [`${metrics.buffer_minutes || 0}分钟`, "弹性缓冲", "time", "buffer"],
-    [`${metrics.travel_minutes || 0}分钟`, "校园通勤", "time", "travel"],
+    [finalEnd, "??????", "time", "end"],
+    [`${metrics.buffer_minutes || 0}??`, "????", "time", "buffer"],
+    [`${metrics.travel_minutes || 0}??`, "????", "time", "travel"],
     [
       `${passed}/${checks.length}`,
-      "约束检查通过",
+      "??????",
       passed === checks.length ? "success" : "attention",
       "checks",
     ],
@@ -1564,14 +1564,14 @@ function renderResultDashboard(data) {
     resultDetails.hidden = true;
     return;
   }
-  const query = lastResultQuery || activeConversationQuery || "本次校园日程规划";
+  const query = lastResultQuery || activeConversationQuery || "????????";
   resultRequestText.textContent = query;
   setInlineRequestEditing(false);
   resultRequest.hidden = false;
 
   const checks = data.constraint_checks || [];
   const passed = checks.filter((item) => item.passed).length;
-  resultConstraintTotal.textContent = `${passed}/${checks.length} 通过`;
+  resultConstraintTotal.textContent = `${passed}/${checks.length} ??`;
   resultConstraints.innerHTML = checks.length
     ? checks.map((check) => `
       <div class="result-check-item ${check.passed ? "passed" : "failed"}">
@@ -1580,41 +1580,41 @@ function renderResultDashboard(data) {
           <strong>${escapeHtml(check.label)}</strong>
           <small>${escapeHtml(check.message)}</small>
         </div>
-        <em>${check.passed ? "通过" : "注意"}</em>
+        <em>${check.passed ? "??" : "??"}</em>
       </div>
     `).join("")
-    : '<p class="result-detail-empty">暂无约束检查。</p>';
+    : '<p class="result-detail-empty">???????</p>';
 
   const freshness = data.data_freshness || {};
   const isLive = (value) => value === "live_api";
   const sourceEntries = [
     {
       icon: "map",
-      name: "高德地图",
+      name: "????",
       purpose: isLive(freshness.route)
-        ? "实时路线与通勤计算"
-        : "已接入 · 当前使用校准路线",
-      state: isLive(freshness.route) ? "实时" : "演示",
+        ? "?????????"
+        : "??? ? ????????",
+      state: isLive(freshness.route) ? "??" : "??",
     },
     {
       icon: "building",
-      name: "场馆规则",
-      purpose: "校园开放时间校验",
-      state: "规则库",
+      name: "????",
+      purpose: "????????",
+      state: "???",
     },
     {
       icon: "cloud",
-      name: "高德天气",
+      name: "????",
       purpose: isLive(freshness.weather)
-        ? "实时天气与降雨风险"
-        : "冻结天气场景校验",
-      state: isLive(freshness.weather) ? "实时" : "演示",
+        ? "?????????"
+        : "????????",
+      state: isLive(freshness.weather) ? "??" : "??",
     },
     {
       icon: "calendar",
-      name: "个人课表",
-      purpose: "课程与空闲时间确认",
-      state: "个人数据",
+      name: "????",
+      purpose: "?????????",
+      state: "????",
     },
   ];
   resultSources.innerHTML = sourceEntries.map((entry) => {
@@ -1638,31 +1638,31 @@ function renderTaskStatuses(statuses = [], locationNames = {}) {
   const pendingCount = statuses.length - scheduledCount;
   taskStatuses.innerHTML = `
     <div class="task-status-summary">
-      <strong>任务完整性</strong>
-      <span>已安排 ${scheduledCount}/${statuses.length}${
-        pendingCount ? ` · ${pendingCount}项待调整` : ""
+      <strong>?????</strong>
+      <span>??? ${scheduledCount}/${statuses.length}${
+        pendingCount ? ` ? ${pendingCount}????` : ""
       }</span>
     </div>
     ${statuses.map((task) => {
       const pending = task.status === "needs_adjustment";
       const location = task.location_id
-        ? ` · ${escapeHtml(
-          locationNames[task.location_id] || "地点待确认"
+        ? ` ? ${escapeHtml(
+          locationNames[task.location_id] || "?????"
         )}`
         : "";
       return `
         <div class="task-status-item ${
           pending ? "needs-adjustment" : "scheduled"
         }">
-          <span class="task-status-icon">${pending ? "!" : "✓"}</span>
+          <span class="task-status-icon">${pending ? "!" : "?"}</span>
           <div>
             <strong>${escapeHtml(task.title)}</strong>
-            <small>${task.duration_min}分钟${location} · ${
+            <small>${task.duration_min}??${location} ? ${
               escapeHtml(task.message)
             }</small>
           </div>
           <span class="task-status-badge">${
-            pending ? "待调整" : "已安排"
+            pending ? "???" : "???"
           }</span>
         </div>`;
     }).join("")}
@@ -1680,12 +1680,12 @@ function renderExecution(steps = []) {
           <small>${escapeHtml(step.detail)}</small>
         </div>
         <span class="execution-state">${
-          step.status === "success" ? "完成"
-            : step.status === "fallback" ? "降级完成"
-              : step.status === "failed" ? "未通过" : "等待"
+          step.status === "success" ? "??"
+            : step.status === "fallback" ? "????"
+              : step.status === "failed" ? "???" : "??"
         }</span>
       </div>`).join("")
-    : "运行后显示五个处理步骤。";
+    : "????????????";
 }
 
 function renderConstraints(checks = []) {
@@ -1693,20 +1693,20 @@ function renderConstraints(checks = []) {
   constraints.innerHTML = checks.length
     ? checks.map((check) => `
       <div class="check-item ${check.passed ? "passed" : "failed"}">
-        <span class="check-icon">${check.passed ? "✓" : "!"}</span>
+        <span class="check-icon">${check.passed ? "?" : "!"}</span>
         <div>
           <strong>${escapeHtml(check.label)}</strong>
           <small>${escapeHtml(check.message)}</small>
         </div>
       </div>`).join("")
-    : "生成后显示检查结果。";
+    : "??????????";
 }
 
 function renderDiff(data) {
   const changes = data.plan_diff || [];
   const hasChanges = changes.length > 0 || Boolean(data.adjustment_reason);
   adjustmentPanel.classList.toggle("has-changes", hasChanges);
-  adjustment.textContent = data.adjustment_reason || "当前没有计划变更。";
+  adjustment.textContent = data.adjustment_reason || "?????????";
   adjustment.classList.toggle("muted", !data.adjustment_reason);
   diff.innerHTML = changes.map((change) => `
     <div class="diff-item">
@@ -1715,18 +1715,18 @@ function renderDiff(data) {
         <span>${escapeHtml(change.summary)}</span>
       </div>
       <small>
-        ${change.before_start ? `${timePart(change.before_start)}—${timePart(change.before_end)}` : "未安排"}
-        <b>→</b>
-        ${change.after_start ? `${timePart(change.after_start)}—${timePart(change.after_end)}` : "已移除"}
+        ${change.before_start ? `${timePart(change.before_start)}?${timePart(change.before_end)}` : "???"}
+        <b>?</b>
+        ${change.after_start ? `${timePart(change.after_start)}?${timePart(change.after_end)}` : "???"}
       </small>
     </div>`).join("");
 }
 
 function renderEvidence(data) {
   const sourceEntries = Object.entries(data.data_freshness || {});
-  const sourceNames = { route: "路径", weather: "天气", knowledge: "知识" };
+  const sourceNames = { route: "??", weather: "??", knowledge: "??" };
   freshness.innerHTML = sourceEntries.map(([key, value]) => `
-    <span class="tag">${sourceNames[key] || key} · ${sourceLabels[value] || value}</span>
+    <span class="tag">${sourceNames[key] || key} ? ${sourceLabels[value] || value}</span>
   `).join("");
 
   const hiddenTechnicalCodes = new Set([
@@ -1741,17 +1741,17 @@ function renderEvidence(data) {
       !hiddenTechnicalCodes.has(item.code)
       || (
         item.code === "ROUTE_FALLBACK"
-        && item.message?.includes("电瓶车实时路线")
+        && item.message?.includes("???????")
       )
     ),
   );
   const careInsights = (data.insights || []).filter(
     (item) => ["required", "attention"].includes(item.importance)
-      && !["规划时间基准", "通勤方式与高峰缓冲"].includes(item.title),
+      && !["??????", "?????????"].includes(item.title),
   );
   const careItems = [
     ...warningItems.map((item) => ({
-      title: item.severity === "error" ? "需处理" : "数据说明",
+      title: item.severity === "error" ? "???" : "????",
       message: item.message,
       error: item.severity === "error",
     })),
@@ -1770,7 +1770,7 @@ function renderEvidence(data) {
         <strong>${escapeHtml(item.title)}</strong>
         <span>${escapeHtml(item.message)}</span>
       </div>`).join("")
-    : "暂时没有提醒。";
+    : "???????";
 }
 
 function renderInsights(items = []) {
@@ -1785,14 +1785,14 @@ function renderInsights(items = []) {
         <p>${escapeHtml(item.content)}</p>
       </div>
     `).join("")
-    : "本次没有需要额外展示的依据。";
+    : "??????????????";
 }
 
 function renderDebug(payload) {
   lastDebugPayload = payload;
   debugContent.textContent = payload
     ? JSON.stringify(payload, null, 2)
-    : "尚无运行数据。";
+    : "???????";
 }
 
 function renderSuggestedActions(actions = []) {
@@ -1817,7 +1817,7 @@ function renderSuggestedActions(actions = []) {
       </button>
       ${action.dismissible ? `
         <button class="suggestion-dismiss" data-dismiss-index="${index}">
-          这次不用
+          ????
         </button>
       ` : ""}
     </div>
@@ -1866,8 +1866,8 @@ function renderResponse(data) {
   answer.classList.remove("muted");
   completeConversationTurn(data.answer);
   saveState.textContent = data.current_plan_saved
-    ? "当前计划已保存"
-    : data.plan ? "结果未写入当前计划" : "尚未生成当前计划";
+    ? "???????"
+    : data.plan ? "?????????" : "????????";
   saveState.classList.toggle("saved", data.current_plan_saved);
   renderTimeline(data);
   renderResultSummary(data);
@@ -1887,9 +1887,9 @@ function renderResponse(data) {
     setInlineRequestEditing(false);
     resultRequest.hidden = false;
     resultDetails.hidden = true;
-    planTitle.textContent = "需要补充信息";
+    planTitle.textContent = "??????";
     timeline.className = "timeline empty";
-    timeline.textContent = data.answer || "请补充需求后重新规划。";
+    timeline.textContent = data.answer || "???????????";
     setResultMode(true);
   }
   if (data.current_plan_saved) {
@@ -1914,10 +1914,10 @@ function shanghaiDateString(value = new Date()) {
 }
 
 const agendaSourceLabels = {
-  course: "个人课表",
-  plan: "对话安排",
-  weekly: "周目标",
-  manual: "手动添加",
+  course: "????",
+  plan: "????",
+  weekly: "???",
+  manual: "????",
 };
 
 function agendaItemDate(item) {
@@ -1944,48 +1944,48 @@ function renderAgenda(data, selectedDate) {
   const reminderCount = dayReminders.length;
   const today = shanghaiDateString();
   agendaState.textContent = selectedDate === today
-    ? `今天 · ${items.length}项`
-    : `${selectedDate.slice(5).replace("-", "月")}日 · ${items.length}项`;
+    ? `?? ? ${items.length}?`
+    : `${selectedDate.slice(5).replace("-", "?")}? ? ${items.length}?`;
   agendaState.classList.toggle("ready", items.length > 0);
   agendaMetrics.innerHTML = `
-    <span>课程 ${courseCount} 节次段</span>
-    <span>已安排 ${Math.round(dayBusy / 6) / 10} 小时</span>
-    <span>提醒 ${reminderCount} 次</span>
-    <span>已汇总未来7天</span>
+    <span>?? ${courseCount} ???</span>
+    <span>??? ${Math.round(dayBusy / 6) / 10} ??</span>
+    <span>?? ${reminderCount} ?</span>
+    <span>?????7?</span>
   `;
   agendaList.classList.toggle("muted", items.length === 0);
   agendaList.innerHTML = items.length
     ? items.map((item) => `
       <div class="agenda-item ${escapeHtml(item.kind)}">
         <time>${escapeHtml(timePart(item.start_at))}
-          —${escapeHtml(timePart(item.end_at))}</time>
+          ?${escapeHtml(timePart(item.end_at))}</time>
         <span class="agenda-kind" aria-hidden="true"></span>
         <div>
           <strong>${escapeHtml(item.title)}</strong>
           <small>${item.location_name
             ? escapeHtml(item.location_name)
             : item.kind === "travel"
-              ? "已预留通勤时间"
-              : "地点未设置"}${
-            item.locked ? " · 固定安排" : ""
+              ? "???????"
+              : "?????"}${
+            item.locked ? " ? ????" : ""
           }</small>
         </div>
         <span class="agenda-source">${
-          agendaSourceLabels[item.source] || "个人日程"
+          agendaSourceLabels[item.source] || "????"
         }</span>
       </div>
     `).join("")
     : `
       <div class="weekly-safe">
-        <strong>这一天还没有固定安排</strong>
-        <span>可以通过上方对话告诉我想完成什么，也可以把它留给休息和临时变化。</span>
+        <strong>??????????</strong>
+        <span>????????????????????????????????</span>
       </div>
     `;
   agendaReminders.innerHTML = dayReminders.length
     ? `
       <div class="agenda-reminder-heading">
-        <strong>今天会这样提醒你</strong>
-        <span>按时间先后排列，可在下方修改提前量</span>
+        <strong>????????</strong>
+        <span>?????????????????</span>
       </div>
       <div class="agenda-reminder-list">
         ${dayReminders.slice(0, 6).map((item) => `
@@ -2004,8 +2004,8 @@ function renderAgenda(data, selectedDate) {
   careSuggestions.innerHTML = careItems.length
     ? `
       <div class="care-heading">
-        <strong>未来7天的生活关照</strong>
-        <span>只给建议，不会未经确认写入日程</span>
+        <strong>??7??????</strong>
+        <span>???????????????</span>
       </div>
       ${careItems.map((item, index) => `
       <div class="care-card ${escapeHtml(item.level)}">
@@ -2013,7 +2013,7 @@ function renderAgenda(data, selectedDate) {
         <p>${escapeHtml(item.content)}</p>
         ${item.action_query ? `
           <button class="ghost" data-care-action="${index}">
-            让我帮你找合适时段
+            ?????????
           </button>
         ` : ""}
       </div>
@@ -2035,7 +2035,7 @@ function renderAgenda(data, selectedDate) {
 async function loadAgendaRange(startDate, endDate) {
   const selectedDate = startDate;
   agendaDate.value = selectedDate;
-  agendaState.textContent = "正在汇总";
+  agendaState.textContent = "????";
   const response = await fetch(
     `/api/v1/users/${consoleUserId}/agenda/contextual`
       + `?start_date=${encodeURIComponent(selectedDate)}`
@@ -2075,29 +2075,29 @@ function renderReminderSettings(payload) {
     : "unsupported";
   if (permission === "granted" && settings.browser_notifications) {
     reminderState.textContent = (
-      "浏览器提醒已开启。网页打开时会自动检查；"
-      + "需要关闭网页后仍提醒，请导出到系统日历。"
+      "????????????????????"
+      + "????????????????????"
     );
-    reminderEnable.textContent = "浏览器提醒已开启";
+    reminderEnable.textContent = "????????";
     reminderEnable.disabled = true;
     startReminderPolling();
   } else if (permission === "denied") {
     reminderState.textContent = (
-      "浏览器已拒绝通知权限，可在浏览器网站设置中重新开启；"
-      + "系统日历导出仍可使用。"
+      "??????????????????????????"
+      + "???????????"
     );
-    reminderEnable.textContent = "通知权限已被拒绝";
+    reminderEnable.textContent = "????????";
     reminderEnable.disabled = true;
   } else if (permission === "unsupported") {
     reminderState.textContent = (
-      "当前浏览器不支持网页通知，可使用“导出到系统日历”。"
+      "??????????????????????????"
     );
     reminderEnable.disabled = true;
   } else {
     reminderState.textContent = (
-      "浏览器提醒尚未开启；你的提前时间设置已经可以保存。"
+      "?????????????????????????"
     );
-    reminderEnable.textContent = "开启浏览器提醒";
+    reminderEnable.textContent = "???????";
     reminderEnable.disabled = false;
   }
 }
@@ -2205,8 +2205,8 @@ async function pollDueReminders() {
     writeLocalSnapshot(shownReminderKey, shown);
   } catch (error) {
     reminderState.textContent = (
-      "这次自动检查提醒没有成功，我会稍后再试；"
-      + "已导入系统日历的闹钟不受影响。"
+      "????????????????????"
+      + "???????????????"
     );
     renderDebug(error);
   }
@@ -2238,10 +2238,10 @@ reminderSave.addEventListener("click", async () => {
   reminderSave.disabled = true;
   try {
     await saveReminderSettings();
-    reminderState.textContent = "提醒时间已经保存。";
+    reminderState.textContent = "?????????";
   } catch (error) {
     reminderState.textContent = error?.error?.message
-      || "提醒设置暂时没有保存成功。";
+      || "?????????????";
     renderDebug(error);
   } finally {
     reminderSave.disabled = false;
@@ -2257,7 +2257,7 @@ reminderEnable.addEventListener("click", async () => {
     await pollDueReminders();
   } else {
     reminderState.textContent = (
-      "没有获得通知权限。你仍可以导出到系统日历，用系统闹钟提醒。"
+      "?????????????????????????????"
     );
   }
 });
@@ -2266,7 +2266,7 @@ agendaExport.addEventListener("click", async (event) => {
   event.preventDefault();
   const startDate = agendaDate.value || shanghaiDateString();
   const endDate = addWeeklyDays(startDate, 90);
-  agendaExport.textContent = "正在生成日历文件…";
+  agendaExport.textContent = "?????????";
   try {
     const response = await fetch(
       `/api/v1/users/${consoleUserId}/agenda.ics/contextual`
@@ -2283,30 +2283,30 @@ agendaExport.addEventListener("click", async (event) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `易程智策个人日程_${startDate}.ics`;
+    link.download = `????????_${startDate}.ics`;
     link.click();
     URL.revokeObjectURL(url);
     reminderState.textContent = (
-      "日历文件已生成。导入手机或电脑日历后，系统会按提醒时间通知。"
+      "??????????????????????????????"
     );
   } catch (error) {
     reminderState.textContent = error?.error?.message
-      || "日历文件暂时没有生成成功。";
+      || "?????????????";
     renderDebug(error);
   } finally {
-    agendaExport.textContent = "导出到系统日历（含闹钟）";
+    agendaExport.textContent = "????????????";
   }
 });
 
 function renderError(error) {
   const body = error?.error || {};
-  answer.textContent = body.message || "请求失败，请稍后重试。";
+  answer.textContent = body.message || "???????????";
   answer.classList.remove("muted");
   completeConversationTurn(answer.textContent);
   warnings.innerHTML = `
     <div class="warning error">
-      <strong>请求未完成</strong>
-      <span>请检查输入后重试；如果仍然失败，可展开页面底部调试信息。</span>
+      <strong>?????</strong>
+      <span>????????????????????????????</span>
     </div>`;
   renderDebug(error);
 }
@@ -2314,7 +2314,7 @@ function renderError(error) {
 function setLoading(active) {
   submitButton.disabled = active;
   resetButton.disabled = active;
-  submitButton.textContent = active ? "正在认真规划…" : "发送给易程智策";
+  submitButton.textContent = active ? "???????" : "???????";
 }
 
 async function runRequest(url, options = {}, transformData = null) {
@@ -2337,10 +2337,10 @@ async function runRequest(url, options = {}, transformData = null) {
 async function submitQuery(rawQuery, { keepResultMode = false } = {}) {
   let query = rawQuery.trim();
   if (!query) {
-    answer.textContent = "请先输入需要安排或调整的任务。";
+    answer.textContent = "???????????????";
     return;
   }
-  const choice = query.match(/^选\s*([12])$/);
+  const choice = query.match(/^?\s*([12])$/);
   if (choice) {
     const action = lastSuggestedActions[Number(choice[1]) - 1];
     if (action) {
@@ -2379,7 +2379,7 @@ resultRerun?.addEventListener("click", async () => {
   }
   resultEdit.disabled = true;
   resultRerun.disabled = true;
-  resultRerun.textContent = "正在重新规划…";
+  resultRerun.textContent = "???????";
   try {
     await submitQuery(query, { keepResultMode: true });
   } finally {
@@ -2398,10 +2398,10 @@ resultRequestInput?.addEventListener("keydown", (event) => {
 });
 
 const resultActionQueries = {
-  alternative: "在保留所有任务、时长、截止时间和硬约束的前提下，生成另一种可行方案。",
-  travel: "在不遗漏任务的前提下，优先优化通勤时间，并尽量避开拥堵时段。",
-  waiting: "保留任务时长和截止时间，尽量减少行程中的等待时间。",
-  order: "尝试调整任务顺序，并说明这样调整的原因。",
+  alternative: "??????????????????????????????????",
+  travel: "??????????????????????????????",
+  waiting: "?????????????????????????",
+  order: "????????????????????",
 };
 
 function planFingerprint(data) {
@@ -2441,29 +2441,29 @@ function renderResultActionOutcome(action, before, after) {
   );
   const messages = changed
     ? {
-        alternative: "已生成不同的可行排法，任务与硬约束仍然保留。",
+        alternative: "??????????????????????",
         travel: travelSaved
-          ? `已重新规划，通勤时间减少 ${travelSaved} 分钟。`
-          : "已避开更拥堵的时段，并重新计算通勤衔接。",
+          ? `???????????? ${travelSaved} ???`
+          : "????????????????????",
         waiting: waitingSaved
-          ? `已把任务排得更紧凑，等待时间减少 ${waitingSaved} 分钟。`
-          : "已重新组合任务顺序，减少不必要的中间空档。",
-        order: "已更换任务先后顺序，并重新校验时间和通勤约束。",
+          ? `???????????????? ${waitingSaved} ???`
+          : "?????????????????????",
+        order: "???????????????????????",
       }
     : {
-        alternative: "当前约束下没有找到同样安全的不同排法，已保留原方案。",
-        travel: "当前通勤已是可用路线中的较优结果，无需重复调整。",
-        waiting: "当前任务已经连续衔接，没有可进一步压缩的等待时间。",
-        order: "其他顺序会影响截止时间或通勤约束，因此保留当前顺序。",
+        alternative: "??????????????????????????",
+        travel: "????????????????????????",
+        waiting: "?????????????????????????",
+        order: "??????????????????????????",
       };
-  resultActionStatus.textContent = messages[action] || "规划已重新校验。";
+  resultActionStatus.textContent = messages[action] || "????????";
   resultActionStatus.classList.toggle("is-unchanged", !changed);
   resultActionStatus.hidden = false;
 }
 
 function currentBaseRequirement() {
   const value = resultRequestText.textContent.trim() || lastResultQuery;
-  return value.split(/\n调整要求：/u, 1)[0].trim();
+  return value.split(/\n?????/u, 1)[0].trim();
 }
 
 resultQuickActions?.addEventListener("click", async (event) => {
@@ -2474,7 +2474,7 @@ resultQuickActions?.addEventListener("click", async (event) => {
   const action = button.dataset.resultAction;
   const before = lastResultData;
   const currentRequirement = currentBaseRequirement();
-  const query = `${currentRequirement}\n调整要求：${adjustment}`;
+  const query = `${currentRequirement}\n?????${adjustment}`;
   resultQuickActions.querySelectorAll("button").forEach((item) => {
     item.disabled = true;
     item.classList.toggle("active", item === button);
@@ -2509,31 +2509,31 @@ resetButton.addEventListener("click", async () => {
     clearConversationStream();
     queryInput.value = "";
     timeline.className = "timeline empty";
-    timeline.textContent = "演示已复位，请从案例一开始。";
+    timeline.textContent = "??????????????";
     resultSummary.innerHTML = "";
     resultSummary.hidden = true;
     resultRequest.hidden = true;
     resultDetails.hidden = true;
     setResultMode(false);
-    planTitle.textContent = "日程时间轴";
+    planTitle.textContent = "?????";
     taskStatuses.innerHTML = "";
     execution.className = "execution-list empty";
-    execution.textContent = "运行后显示五个处理步骤。";
+    execution.textContent = "????????????";
     constraints.className = "check-list empty";
-    constraints.textContent = "生成后显示检查结果。";
+    constraints.textContent = "??????????";
     diff.innerHTML = "";
     adjustmentPanel.classList.remove("has-changes");
-    adjustment.textContent = "当前没有计划变更。";
+    adjustment.textContent = "?????????";
     answer.textContent = data.message;
     answer.classList.remove("muted");
-    warnings.textContent = "暂时没有提醒。";
+    warnings.textContent = "???????";
     warnings.className = "warnings muted";
     freshness.innerHTML = "";
     renderSuggestedActions([]);
     renderInsights([]);
     renderDebug(null);
     localStorage.removeItem(planSnapshotKey);
-    saveState.textContent = "尚未生成当前计划";
+    saveState.textContent = "????????";
     saveState.classList.remove("saved");
   } catch (error) {
     renderError(error);
@@ -2547,9 +2547,9 @@ async function loadDemos({ autoRun = false } = {}) {
   const demos = await response.json();
   const demoMarkup = demos.map((demo, index) => `
     <button data-demo="${escapeHtml(demo.id)}">
-      <span class="demo-play" aria-hidden="true">▶</span>
+      <span class="demo-play" aria-hidden="true">?</span>
       <span>${escapeHtml(demo.title)}</span>
-      <small>案例${"一二三四"[index] || index + 1}</small>
+      <small>??${"????"[index] || index + 1}</small>
     </button>
   `).join("");
   demoButtons.innerHTML = demoMarkup;
@@ -2614,8 +2614,8 @@ function addWeeklyDays(rawDate, offset) {
 function weeklyDateLabel(rawDate) {
   const { year, month, day } = parseWeeklyDate(rawDate);
   const value = new Date(Date.UTC(year, month - 1, day, 12));
-  const weekday = "日一二三四五六"[value.getUTCDay()];
-  return `${month}月${day}日 · 周${weekday}`;
+  const weekday = "???????"[value.getUTCDay()];
+  return `${month}?${day}? ? ?${weekday}`;
 }
 
 function weeklyTimeLabel(rawValue) {
@@ -2643,22 +2643,22 @@ function nextWeeklyMonday() {
 }
 
 const weeklyLocationLabels = {
-  library: "图书馆",
-  library_floor_6_12: "图书馆六层或十二层",
-  library_floor_7_11: "图书馆七至十一层",
-  teaching_building_6: "第六教学楼",
-  parcel_station: "菜鸟驿站",
-  sf_express: "顺丰快递点",
-  jd_express: "京东快递点",
-  canteen: "学生餐厅",
-  track: "东操场",
-  gym_south_track: "体育馆副馆南侧跑道",
-  northwest_track: "西北田径场",
-  gym_main: "体育馆主馆",
-  gym_comprehensive: "综合馆",
-  laboratory: "实验室",
-  student_dormitory: "学生公寓",
-  campus_hospital: "校医院",
+  library: "???",
+  library_floor_6_12: "?????????",
+  library_floor_7_11: "????????",
+  teaching_building_6: "?????",
+  parcel_station: "????",
+  sf_express: "?????",
+  jd_express: "?????",
+  canteen: "????",
+  track: "???",
+  gym_south_track: "?????????",
+  northwest_track: "?????",
+  gym_main: "?????",
+  gym_comprehensive: "???",
+  laboratory: "???",
+  student_dormitory: "????",
+  campus_hospital: "???",
 };
 
 function weeklyLocationLabel(rawValue) {
@@ -2671,32 +2671,32 @@ function renderWeeklyPlan(data) {
   const plan = data.weekly_plan;
   const capacitySummary = data.capacity_summary || {};
   const statusLabels = {
-    valid: "本周可执行",
-    at_risk: "存在挤压风险",
-    infeasible: "容量不足",
+    valid: "?????",
+    at_risk: "??????",
+    infeasible: "????",
   };
-  weeklyState.textContent = statusLabels[plan.status] || "已生成";
+  weeklyState.textContent = statusLabels[plan.status] || "???";
   weeklyState.classList.toggle("ready", plan.status === "valid");
   weeklySummary.classList.remove("muted");
   weeklySummary.innerHTML = `
     <strong>${escapeHtml(data.answer)}</strong>
     <div class="weekly-metrics">
-      <span>目标 ${plan.goals.length} 项</span>
-      <span>时间块 ${plan.allocations.length} 个</span>
-      <span>已分配 ${Math.round(plan.metrics.allocated_duration_min / 6) / 10} 小时</span>
-      <span>未分配 ${plan.metrics.unallocated_duration_min} 分钟</span>
+      <span>?? ${plan.goals.length} ?</span>
+      <span>??? ${plan.allocations.length} ?</span>
+      <span>??? ${Math.round(plan.metrics.allocated_duration_min / 6) / 10} ??</span>
+      <span>??? ${plan.metrics.unallocated_duration_min} ??</span>
     </div>
     ${capacitySummary.source === "personal_context" ? `
       <div class="weekly-context">
         <span>${capacitySummary.timetable_applied
-          ? `已扣除 ${capacitySummary.excluded_course_count || 0} 段个人课程`
-          : "尚未启用个人课表"}</span>
+          ? `??? ${capacitySummary.excluded_course_count || 0} ?????`
+          : "????????"}</span>
         ${(capacitySummary.memory_labels || []).map((label) =>
-          `<span>已参考${escapeHtml(label)}</span>`,
+          `<span>???${escapeHtml(label)}</span>`,
         ).join("")}
       </div>
       <p class="weekly-context-note">${escapeHtml(
-        (capacitySummary.notes || []).join("；"),
+        (capacitySummary.notes || []).join("?"),
       )}</p>
     ` : ""}
   `;
@@ -2723,7 +2723,7 @@ function renderWeeklyPlan(data) {
           <small>${items.reduce(
             (sum, item) => sum + item.allocated_duration_min,
             0,
-          )} 分钟</small>
+          )} ??</small>
         </header>
         <div>
           ${items.length ? items.map((item) => {
@@ -2733,16 +2733,16 @@ function renderWeeklyPlan(data) {
             return `
               <article class="weekly-block">
                 <time>${escapeHtml(weeklyTimeLabel(item.earliest_start))}
-                  — ${escapeHtml(weeklyTimeLabel(item.latest_end))}</time>
-                <strong>${escapeHtml(stage?.title || goal?.title || "本周任务")}</strong>
+                  ? ${escapeHtml(weeklyTimeLabel(item.latest_end))}</time>
+                <strong>${escapeHtml(stage?.title || goal?.title || "????")}</strong>
                 <small>${escapeHtml(goal?.title || "")}${
                   locationLabel
-                    ? ` · ${escapeHtml(locationLabel)}`
+                    ? ` ? ${escapeHtml(locationLabel)}`
                     : ""
                 }</small>
               </article>
             `;
-          }).join("") : "<p>留作缓冲、休息或临时变化</p>"}
+          }).join("") : "<p>????????????</p>"}
         </div>
       </section>
     `;
@@ -2750,14 +2750,14 @@ function renderWeeklyPlan(data) {
   weeklyRisks.innerHTML = plan.issues.length
     ? plan.issues.map((issue) => `
       <div class="warning ${issue.severity === "error" ? "error" : ""}">
-        <strong>本周风险</strong>
+        <strong>????</strong>
         <span>${escapeHtml(issue.message)}</span>
       </div>
     `).join("")
     : `
       <div class="weekly-safe">
-        <strong>本周目标均已纳入</strong>
-        <span>每天执行前仍会根据实时天气、通勤和临时校历再次检查。</span>
+        <strong>????????</strong>
+        <span>??????????????????????????</span>
       </div>
     `;
   renderDebug(data);
@@ -2780,7 +2780,7 @@ async function loadWeeklyDemos() {
         item.classList.toggle("active", item === button),
       );
       button.disabled = true;
-      weeklyState.textContent = "正在分配…";
+      weeklyState.textContent = "?????";
       try {
         const response = await fetch(
           `/api/v1/weeks/demos/${button.dataset.weeklyDemo}/run`
@@ -2791,9 +2791,9 @@ async function loadWeeklyDemos() {
         if (!response.ok) throw data;
         renderWeeklyPlan(data);
       } catch (error) {
-        weeklyState.textContent = "生成失败";
+        weeklyState.textContent = "????";
         weeklySummary.textContent = error?.error?.message
-          || "周计划暂时没有生成成功，请稍后重试。";
+          || "??????????????????";
         weeklySummary.classList.remove("muted");
         renderDebug(error);
       } finally {
@@ -2806,16 +2806,16 @@ async function loadWeeklyDemos() {
 weeklyGenerate.addEventListener("click", async () => {
   const query = weeklyQuery.value.trim();
   if (!query) {
-    weeklySummary.textContent = "先告诉我这一周最想完成的目标吧。";
+    weeklySummary.textContent = "????????????????";
     weeklySummary.classList.remove("muted");
     weeklyQuery.focus();
     return;
   }
   if (!weeklyStart.value) weeklyStart.value = nextWeeklyMonday();
   weeklyGenerate.disabled = true;
-  weeklyState.textContent = "正在理解目标…";
+  weeklyState.textContent = "???????";
   weeklySummary.textContent = (
-    "正在结合你的课表、校历和长期偏好，计算这一周真正可用的时间。"
+    "??????????????????????????????"
   );
   weeklySummary.classList.remove("muted");
   try {
@@ -2833,22 +2833,22 @@ weeklyGenerate.addEventListener("click", async () => {
     const data = await response.json();
     if (!response.ok) throw data;
     renderWeeklyPlan(data);
-    weeklyGenerate.textContent = "按新要求重新规划本周";
+    weeklyGenerate.textContent = "??????????";
   } catch (error) {
     const questions = (error?.error?.details || [])
       .map((item) => item.question)
       .filter(Boolean);
-    weeklyState.textContent = questions.length ? "需要确认" : "生成失败";
+    weeklyState.textContent = questions.length ? "????" : "????";
     weeklySummary.innerHTML = questions.length
       ? `
-        <strong>${escapeHtml(error?.error?.message || "还需要确认一项信息。")}</strong>
+        <strong>${escapeHtml(error?.error?.message || "??????????")}</strong>
         <ul>${questions.map((item) =>
           `<li>${escapeHtml(item)}</li>`,
         ).join("")}</ul>
       `
       : escapeHtml(
         error?.error?.message
-          || "这一周暂时没有排成功，请稍后再试一次。",
+          || "???????????????????",
       );
     weeklySummary.classList.remove("muted");
     renderDebug(error);
@@ -2859,69 +2859,69 @@ weeklyGenerate.addEventListener("click", async () => {
 
 function parseMemoryValue(key, rawValue) {
   const value = rawValue.trim();
-  if (!value) throw new Error("请先填写想保存的偏好。");
+  if (!value) throw new Error("???????????");
   if (key === "buffer_min") {
     const minutes = Number(value.match(/\d+/)?.[0]);
     if (!Number.isFinite(minutes) || minutes < 0 || minutes > 60) {
-      throw new Error("缓冲时间请填写0到60分钟。");
+      throw new Error("???????0?60???");
     }
     return minutes;
   }
   if (key === "walking_speed") {
-    const normalized = { 慢: "slow", 正常: "normal", 快: "fast" }[value];
-    if (!normalized) throw new Error("步行节奏请填写：慢、正常或快。");
+    const normalized = { ?: "slow", ??: "normal", ?: "fast" }[value];
+    if (!normalized) throw new Error("???????????????");
     return normalized;
   }
   if (key === "transport_mode") {
     const normalized = {
-      步行: "walk",
-      自行车: "bicycle",
-      骑行: "bicycle",
-      电瓶车: "electrobike",
-      电动车: "electrobike",
+      ??: "walk",
+      ???: "bicycle",
+      ??: "bicycle",
+      ???: "electrobike",
+      ???: "electrobike",
     }[value];
     if (!normalized) {
-      throw new Error("常用出行方式请填写：步行、自行车或电瓶车。");
+      throw new Error("?????????????????????");
     }
     return normalized;
   }
   if (["avoid_rain", "avoid_tight_schedule", "avoid_congestion"].includes(key)) {
-    if (["是", "需要", "开启", "true"].includes(value.toLowerCase())) return true;
-    if (["否", "不需要", "关闭", "false"].includes(value.toLowerCase())) return false;
-    throw new Error("这一项请填写“是”或“否”。");
+    if (["?", "??", "??", "true"].includes(value.toLowerCase())) return true;
+    if (["?", "???", "??", "false"].includes(value.toLowerCase())) return false;
+    throw new Error("??????????????");
   }
   if (key === "preferred_locations") {
-    return value.split(/[、,，]/).map((item) => item.trim()).filter(Boolean);
+    return value.split(/[?,?]/).map((item) => item.trim()).filter(Boolean);
   }
   if (key === "preferred_study_period") {
     const normalized = {
-      上午: "morning",
-      早上: "morning",
-      下午: "afternoon",
-      晚上: "evening",
-      晚间: "evening",
+      ??: "morning",
+      ??: "morning",
+      ??: "afternoon",
+      ??: "evening",
+      ??: "evening",
     }[value];
-    if (!normalized) throw new Error("高效学习时段请填写：上午、下午或晚上。");
+    if (!normalized) throw new Error("???????????????????");
     return normalized;
   }
   if (key === "weekly_daily_focus_limit_min") {
     const minutes = Number(value.match(/\d+/)?.[0]);
     if (!Number.isFinite(minutes) || minutes < 30 || minutes > 720) {
-      throw new Error("每日自主安排上限请填写30到720分钟。");
+      throw new Error("???????????30?720???");
     }
     return minutes;
   }
   if (["usual_bedtime", "usual_wake_time"].includes(key)) {
-    const matched = value.match(/^([01]?\d|2[0-3])[:：]([0-5]\d)$/);
+    const matched = value.match(/^([01]?\d|2[0-3])[:?]([0-5]\d)$/);
     if (!matched) {
-      throw new Error("请按24小时制填写，例如：23:30或07:00。");
+      throw new Error("??24?????????23:30?07:00?");
     }
     return `${matched[1].padStart(2, "0")}:${matched[2]}`;
   }
   if (key === "sleep_goal_hours") {
     const hours = Number(value.match(/\d+(?:\.\d+)?/)?.[0]);
     if (!Number.isFinite(hours) || hours < 4 || hours > 12) {
-      throw new Error("希望睡眠时长请填写4到12小时。");
+      throw new Error("?????????4?12???");
     }
     return hours;
   }
@@ -2929,37 +2929,37 @@ function parseMemoryValue(key, rawValue) {
 }
 
 function displayMemoryValue(key, value) {
-  if (key === "buffer_min") return `${value}分钟`;
+  if (key === "buffer_min") return `${value}??`;
   if (key === "walking_speed") {
-    return { slow: "慢", normal: "正常", fast: "快" }[value] || value;
+    return { slow: "?", normal: "??", fast: "?" }[value] || value;
   }
   if (key === "transport_mode") {
     return {
-      walk: "步行",
-      bicycle: "自行车",
-      electrobike: "电瓶车",
+      walk: "??",
+      bicycle: "???",
+      electrobike: "???",
     }[value] || value;
   }
   if (["avoid_rain", "avoid_tight_schedule", "avoid_congestion"].includes(key)) {
-    return value ? "是" : "否";
+    return value ? "?" : "?";
   }
   if (key === "preferred_study_period") {
     return {
-      morning: "上午",
-      afternoon: "下午",
-      evening: "晚上",
+      morning: "??",
+      afternoon: "??",
+      evening: "??",
     }[value] || value;
   }
-  if (key === "weekly_daily_focus_limit_min") return `${value}分钟`;
+  if (key === "weekly_daily_focus_limit_min") return `${value}??`;
   if (["usual_bedtime", "usual_wake_time"].includes(key)) return value;
-  if (key === "sleep_goal_hours") return `${value}小时`;
-  if (Array.isArray(value)) return value.join("、");
+  if (key === "sleep_goal_hours") return `${value}??`;
+  if (Array.isArray(value)) return value.join("?");
   return String(value);
 }
 
 function updateMemoryPlaceholder() {
   const definition = memoryDefinitions[memoryType.value];
-  memoryValue.placeholder = definition?.placeholder || "填写偏好";
+  memoryValue.placeholder = definition?.placeholder || "????";
 }
 
 async function loadMemories() {
@@ -2982,17 +2982,17 @@ async function loadMemories() {
           <small>${escapeHtml(displayMemoryValue(item.key, item.value))}</small>
         </div>
         <div class="memory-actions">
-          <button data-memory-edit="${escapeHtml(item.id)}">修改</button>
+          <button data-memory-edit="${escapeHtml(item.id)}">??</button>
           <button data-memory-toggle="${escapeHtml(item.id)}">
-            ${item.enabled ? "停用" : "启用"}
+            ${item.enabled ? "??" : "??"}
           </button>
           <button class="danger-link" data-memory-delete="${escapeHtml(item.id)}">
-            删除
+            ??
           </button>
         </div>
       </div>
     `).join("")
-    : "还没有保存长期偏好。";
+    : "??????????";
   memoryList.querySelectorAll("[data-memory-edit]").forEach((button) => {
     button.addEventListener("click", () => {
       const item = items.find((value) => value.id === button.dataset.memoryEdit);
@@ -3070,7 +3070,7 @@ memorySave.addEventListener("click", async () => {
   } catch (error) {
     const message = error instanceof Error
       ? error.message
-      : error?.error?.message || "这条记忆暂时没有保存成功。";
+      : error?.error?.message || "?????????????";
     memoryList.textContent = message;
     memoryList.classList.remove("muted");
     renderDebug(error);
@@ -3078,7 +3078,7 @@ memorySave.addEventListener("click", async () => {
 });
 
 function timetableWeekdayLabel(value) {
-  return `周${"一二三四五六日"[Number(value) - 1] || value}`;
+  return `?${"???????"[Number(value) - 1] || value}`;
 }
 
 async function fileToImportPayload(file) {
@@ -3097,7 +3097,7 @@ async function fileToImportPayload(file) {
   if (extension === "csv" || extension === "json") {
     return { format: extension, content: await file.text() };
   }
-  throw new Error("请选择 .pdf、.xlsx、.csv 或 .json 课表文件。");
+  throw new Error("??? .pdf?.xlsx?.csv ? .json ?????");
 }
 
 function renderTimetable(data) {
@@ -3106,7 +3106,7 @@ function renderTimetable(data) {
   timetableSummary.classList.toggle("muted", entries.length === 0);
   timetableClear.hidden = entries.length === 0 || isPreview;
   if (!entries.length) {
-    timetableSummary.textContent = "当前还没有导入个人课表。";
+    timetableSummary.textContent = "????????????";
     return;
   }
   const grouped = new Map();
@@ -3124,9 +3124,9 @@ function renderTimetable(data) {
   });
   timetableSummary.innerHTML = `
     <div class="timetable-status">
-      <strong>${escapeHtml(data.timetable?.name || "我的课表")}</strong>
-      <span>${entries.length}个课程时段 · ${
-        isPreview ? "等待确认" : "已启用"
+      <strong>${escapeHtml(data.timetable?.name || "????")}</strong>
+      <span>${entries.length}????? ? ${
+        isPreview ? "????" : "???"
       }</span>
     </div>
     ${[...grouped.entries()].map(([weekday, values]) => `
@@ -3134,13 +3134,13 @@ function renderTimetable(data) {
         <strong>${timetableWeekdayLabel(weekday)}</strong>
         <div>
           ${values.map((entry) => `
-            <span>${escapeHtml(entry.course_name)} · 第${entry.start_period}${
+            <span>${escapeHtml(entry.course_name)} ? ?${entry.start_period}${
               entry.end_period === entry.start_period
                 ? ""
-                : `—${entry.end_period}`
-            }节${entry.location ? ` · ${escapeHtml(entry.location)}` : ""}${
+                : `?${entry.end_period}`
+            }?${entry.location ? ` ? ${escapeHtml(entry.location)}` : ""}${
               entry.weeks?.length
-                ? ` · 第${escapeHtml(entry.weeks.join("、"))}周`
+                ? ` ? ?${escapeHtml(entry.weeks.join("?"))}?`
                 : ""
             }</span>
           `).join("")}
@@ -3160,7 +3160,7 @@ async function loadTimetable() {
   if (data.entries?.length) {
     writeLocalSnapshot(timetableSnapshotKey, data);
   }
-  timetableName.value = timetableData.timetable?.name || "我的课表";
+  timetableName.value = timetableData.timetable?.name || "????";
   termStart.value = timetableData.timetable?.term_start || "";
   termEnd.value = timetableData.timetable?.term_end || "";
   renderTimetable(timetableData);
@@ -3169,25 +3169,25 @@ async function loadTimetable() {
 timetableImport.addEventListener("click", async () => {
   const file = timetableFile.files?.[0];
   if (!file) {
-    timetableSummary.textContent = "请先选择一份课表文件。";
+    timetableSummary.textContent = "???????????";
     timetableSummary.classList.remove("muted");
     return;
   }
   if (!termStart.value) {
     timetableSummary.textContent = (
-      "请先选择“第一教学周周一”。这样我才能把课表里的教学周次"
-      + "准确换算成真实日期。"
+      "????????????????????????????"
+      + "??????????"
     );
     timetableSummary.classList.remove("muted");
     termStart.focus();
     return;
   }
   timetableImport.disabled = true;
-  timetableImport.textContent = "正在识别课表…";
+  timetableImport.textContent = "???????";
   try {
     const filePayload = await fileToImportPayload(file);
     const importPayload = {
-      name: timetableName.value.trim() || "我的课表",
+      name: timetableName.value.trim() || "????",
       term_start: termStart.value || null,
       term_end: termEnd.value || null,
       ...filePayload,
@@ -3214,19 +3214,19 @@ timetableImport.addEventListener("click", async () => {
     });
     timetableConfirm.hidden = false;
     answer.textContent = (
-      `我先识别出了 ${data.imported_count} 个课程时段，尚未覆盖原课表。`
-      + "请检查课程名、星期、节次、周次和地点，确认无误后再启用。"
+      `?????? ${data.imported_count} ??????????????`
+      + "????????????????????????????"
     );
     answer.classList.remove("muted");
   } catch (error) {
     timetableSummary.textContent = error instanceof Error
       ? error.message
-      : error?.error?.message || "课表暂时没有导入成功。";
+      : error?.error?.message || "???????????";
     timetableSummary.classList.remove("muted");
     renderDebug(error);
   } finally {
     timetableImport.disabled = false;
-    timetableImport.textContent = "识别并预览课表";
+    timetableImport.textContent = "???????";
   }
 });
 
@@ -3238,7 +3238,7 @@ timetableFile.addEventListener("change", () => {
 timetableConfirm.addEventListener("click", async () => {
   if (!pendingTimetableImport) return;
   timetableConfirm.disabled = true;
-  timetableConfirm.textContent = "正在启用课表…";
+  timetableConfirm.textContent = "???????";
   try {
     const response = await fetch(
       `/api/v1/users/${consoleUserId}/timetable/import`,
@@ -3256,19 +3256,19 @@ timetableConfirm.addEventListener("click", async () => {
     timetableConfirm.hidden = true;
     timetableFile.value = "";
     answer.textContent = (
-      `课表已经启用，共保存 ${data.imported_count} 个课程时段。`
-      + "之后你只要告诉我日期和想做的事，我会自动避开上课时间。"
+      `?????????? ${data.imported_count} ??????`
+      + "???????????????????????????"
     );
     answer.classList.remove("muted");
     await loadAgenda(agendaDate.value || shanghaiDateString());
   } catch (error) {
     timetableSummary.textContent = error?.error?.message
-      || "课表暂时没有启用成功。";
+      || "???????????";
     timetableSummary.classList.remove("muted");
     renderDebug(error);
   } finally {
     timetableConfirm.disabled = false;
-    timetableConfirm.textContent = "确认启用这份课表";
+    timetableConfirm.textContent = "????????";
   }
 });
 
@@ -3285,31 +3285,31 @@ timetableClear.addEventListener("click", async () => {
 });
 
 const calendarActionLabels = {
-  no_class: "不上课",
-  normal: "按当天课表",
-  makeup: "补课",
+  no_class: "???",
+  normal: "?????",
+  makeup: "??",
 };
 
 function renderCalendarOverrides(items) {
   calendarList.classList.toggle("muted", !items.length);
   if (!items.length) {
-    calendarList.textContent = "暂无学校校历调整。";
+    calendarList.textContent = "?????????";
     return;
   }
   calendarList.innerHTML = items.map((item) => {
     const weekday = item.replacement_weekday
-      ? ` · 按周${"一二三四五六日"[item.replacement_weekday - 1]}课表`
+      ? ` ? ??${"???????"[item.replacement_weekday - 1]}??`
       : "";
     return `
       <div class="calendar-item">
         <span>
-          <strong>${escapeHtml(item.date)}</strong> ·
+          <strong>${escapeHtml(item.date)}</strong> ?
           ${calendarActionLabels[item.action] || escapeHtml(item.action)}
           ${weekday}<br />
-          ${escapeHtml(item.label || "学校校历调整")}
+          ${escapeHtml(item.label || "??????")}
         </span>
         <button type="button" data-calendar-delete="${escapeHtml(item.date)}">
-          删除
+          ??
         </button>
       </div>
     `;
@@ -3337,7 +3337,7 @@ calendarAction.addEventListener("change", () => {
 
 calendarSave.addEventListener("click", async () => {
   if (!calendarDate.value) {
-    calendarList.textContent = "请先选择需要调整的日期。";
+    calendarList.textContent = "????????????";
     calendarList.classList.remove("muted");
     calendarDate.focus();
     return;
@@ -3348,7 +3348,7 @@ calendarSave.addEventListener("click", async () => {
     replacement_weekday: calendarAction.value === "makeup"
       ? Number(calendarWeekday.value)
       : null,
-    label: calendarLabel.value.trim() || "学校校历调整",
+    label: calendarLabel.value.trim() || "??????",
   };
   calendarSave.disabled = true;
   try {
@@ -3371,14 +3371,14 @@ calendarSave.addEventListener("click", async () => {
     renderCalendarOverrides(items);
     calendarLabel.value = "";
     answer.textContent = (
-      `已记下 ${data.date} 的校历安排。之后规划这一天时，`
-      + "我会先按这条学校通知处理课程，再安排其他活动。"
+      `??? ${data.date} ???????????????`
+      + "???????????????????????"
     );
     answer.classList.remove("muted");
     await loadAgenda(agendaDate.value || shanghaiDateString());
   } catch (error) {
     calendarList.textContent = error?.error?.message
-      || "这条校历调整暂时没有保存成功。";
+      || "???????????????";
     calendarList.classList.remove("muted");
     renderDebug(error);
   } finally {
@@ -3407,7 +3407,7 @@ async function checkHealth() {
   try {
     const response = await fetch("/api/v1/health");
     const data = await response.json();
-    health.textContent = data.status === "ok" ? "服务正常" : "服务降级";
+    health.textContent = data.status === "ok" ? "????" : "????";
     health.classList.toggle("ok", data.status === "ok");
     if (data.server_time) {
       serverClockBaseMs = new Date(data.server_time).getTime();
@@ -3415,8 +3415,8 @@ async function checkHealth() {
       renderClock();
     }
   } catch {
-    health.textContent = "服务不可用";
-    clock.textContent = "北京时间暂不可用";
+    health.textContent = "?????";
+    clock.textContent = "????????";
   }
 }
 
@@ -3428,30 +3428,30 @@ async function initializeApp() {
   updateMemoryPlaceholder();
   renderPersonalizationState();
   loadCampus().catch((error) => {
-    campusState.textContent = "读取失败";
-    campusSummary.textContent = "暂时无法读取校园设置。";
+    campusState.textContent = "????";
+    campusSummary.textContent = "???????????";
     renderDebug(error);
   });
   const accessGranted = await initializeAccess();
   if (!accessGranted) return;
   await loadDemos({ autoRun: true }).catch(() => {
-    demoButtons.textContent = "案例加载失败";
+    demoButtons.textContent = "??????";
   });
   agendaDate.value = shanghaiDateString();
   scheduleCursorDate = agendaDate.value;
   weeklyStart.value = nextWeeklyMonday();
   serviceWorkerRegistration().catch(() => {});
   loadReminderSettings().catch((error) => {
-    reminderState.textContent = "提醒设置暂时无法读取。";
+    reminderState.textContent = "???????????";
     renderDebug(error);
   });
   loadAgenda(agendaDate.value).catch((error) => {
-    agendaState.textContent = "读取失败";
-    agendaList.textContent = "个人日程暂时没有加载成功，请稍后刷新。";
+    agendaState.textContent = "????";
+    agendaList.textContent = "???????????????????";
     renderDebug(error);
   });
   loadWeeklyDemos().catch((error) => {
-    weeklyDemoButtons.textContent = "复杂周场景暂时无法读取";
+    weeklyDemoButtons.textContent = "???????????";
     renderDebug(error);
   });
   loadMemories().catch((error) => renderDebug(error));
