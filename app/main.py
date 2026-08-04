@@ -50,6 +50,11 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
         title="易程智策 Campus Agent",
         version="0.1.0",
         lifespan=lifespan,
+        docs_url="/docs" if active_settings.app_docs_enabled else None,
+        redoc_url="/redoc" if active_settings.app_docs_enabled else None,
+        openapi_url=(
+            "/openapi.json" if active_settings.app_docs_enabled else None
+        ),
     )
     application.state.access_manager = AccessManager(
         enabled=active_settings.app_access_enabled,
@@ -96,6 +101,33 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
                     },
                 )
         return await call_next(request)
+
+    @application.middleware("http")
+    async def add_security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), geolocation=(), microphone=(), payment=()",
+        )
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            (
+                "default-src 'self'; "
+                "script-src 'self'; "
+                "style-src 'self'; "
+                "img-src 'self' data:; "
+                "font-src 'self'; "
+                "connect-src 'self'; "
+                "object-src 'none'; "
+                "base-uri 'self'; "
+                "frame-ancestors 'none'; "
+                "form-action 'self'"
+            ),
+        )
+        return response
 
     @application.exception_handler(AppError)
     async def handle_app_error(

@@ -76,3 +76,21 @@ def test_tampered_access_token_is_rejected(tmp_path):
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "AUTH_REQUIRED"
+
+
+def test_public_defaults_disable_api_docs_and_add_security_headers(tmp_path):
+    with TestClient(protected_app(tmp_path)) as client:
+        response = client.get("/")
+        assert response.status_code == 200
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers["x-frame-options"] == "DENY"
+        assert response.headers["referrer-policy"] == "same-origin"
+        assert response.headers["permissions-policy"] == (
+            "camera=(), geolocation=(), microphone=(), payment=()"
+        )
+        assert "frame-ancestors 'none'" in response.headers[
+            "content-security-policy"
+        ]
+        assert client.get("/docs").status_code == 404
+        assert client.get("/redoc").status_code == 404
+        assert client.get("/openapi.json").status_code == 404
