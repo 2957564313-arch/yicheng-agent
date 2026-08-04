@@ -139,6 +139,7 @@ def test_result_dashboard_has_icons_sources_and_four_quick_actions() -> None:
     assert ".result-change-chip.travel-change" in styles
     assert "function planIdleMinutes(plan)" in javascript
     assert ".result-change-chip.waiting-change" in styles
+    assert "const hasPreviousPlan = Boolean(data.previous_plan);" in javascript
 
 
 def test_second_course_reminder_control_is_wired_to_settings() -> None:
