@@ -1377,12 +1377,15 @@ function renderTimeline(data) {
     changes.map((change) => [change.task_id, change]),
   );
   if (resultChangeSummary) {
+    const hasPreviousPlan = Boolean(data.previous_plan);
     const previousTravel = data.previous_plan?.metrics?.travel_minutes || 0;
     const currentTravel = data.plan?.metrics?.travel_minutes || 0;
-    const travelDelta = currentTravel - previousTravel;
-    const waitingDelta = (
-      planIdleMinutes(data.plan) - planIdleMinutes(data.previous_plan)
-    );
+    const travelDelta = hasPreviousPlan
+      ? currentTravel - previousTravel
+      : 0;
+    const waitingDelta = hasPreviousPlan
+      ? planIdleMinutes(data.plan) - planIdleMinutes(data.previous_plan)
+      : 0;
     const changeCards = changes.map((change) => {
       const before = change.before_start
         ? `${timePart(change.before_start)}—${timePart(change.before_end)}`
