@@ -8,7 +8,7 @@
       content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
     <title>易程智策 · 我的校园日程</title>
-    <link rel="stylesheet" href="/styles.css?v=20260804-5" />
+    <link rel="stylesheet" href="/styles.css?v=20260804-10" />
   </head>
   <body class="has-plan-result">
     <section id="access-gate" class="access-gate" hidden>
@@ -631,7 +631,8 @@
                 </div>
                 <div class="result-request-actions">
                   <button id="result-edit" type="button" class="ghost">修改需求</button>
-                  <button id="result-rerun" type="button" class="primary">重新规划</button>
+                  <button id="result-rerun" type="button" class="ghost">重新规划</button>
+                  <button id="result-add-agenda" type="button" class="primary">加入日程</button>
                 </div>
               </div>
               <div id="result-summary" class="result-summary" hidden></div>
@@ -647,6 +648,22 @@
                   <div id="timeline" class="timeline empty">
                     正在加载默认规划，请稍候…
                   </div>
+                  <p class="result-quick-actions-label">快速调整方案</p>
+                  <nav id="result-quick-actions" class="result-quick-actions" aria-label="快速调整计划">
+                    <button type="button" data-result-action="alternative">
+                      <span aria-hidden="true">✦</span>生成另一种可行方案
+                    </button>
+                    <button type="button" data-result-action="travel">
+                      <span aria-hidden="true">⌁</span>优化通勤时间
+                    </button>
+                    <button type="button" data-result-action="waiting">
+                      <span aria-hidden="true">◷</span>减少等待时间
+                    </button>
+                    <button type="button" data-result-action="order">
+                      <span aria-hidden="true">⇅</span>调整任务顺序
+                    </button>
+                  </nav>
+                  <p id="result-action-status" class="result-action-status" hidden></p>
                 </section>
                 <aside id="result-details" class="result-details" hidden>
                   <section class="result-detail-card">
@@ -662,21 +679,6 @@
                   </details>
                 </aside>
               </div>
-              <p id="result-action-status" class="result-action-status" hidden></p>
-              <nav id="result-quick-actions" class="result-quick-actions" aria-label="快速调整计划">
-                <button type="button" class="active" data-result-action="alternative">
-                  <span aria-hidden="true">✦</span>生成另一种可行方案
-                </button>
-                <button type="button" data-result-action="travel">
-                  <span aria-hidden="true">⌁</span>优化通勤时间
-                </button>
-                <button type="button" data-result-action="waiting">
-                  <span aria-hidden="true">◷</span>减少等待时间
-                </button>
-                <button type="button" data-result-action="order">
-                  <span aria-hidden="true">⇅</span>调整任务顺序
-                </button>
-              </nav>
               <div id="task-statuses" class="task-statuses"></div>
             </article>
 
@@ -745,6 +747,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260804-11" defer></script>
+    <script src="/app.js?v=20260804-14" defer></script>
   </body>
 </html>

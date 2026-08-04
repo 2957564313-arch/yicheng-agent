@@ -47,6 +47,7 @@ class PersonalDataRestoreRequest(BaseModel):
     )
     reminder_settings: ReminderSettings | None = None
     current_plan: Plan | None = None
+    current_plan_published: bool = False
 
 
 class PersonalDataBackup(PersonalDataRestoreRequest):
@@ -63,4 +64,5 @@ class PersonalDataRestoreResponse(BaseModel):
     calendar_overrides_restored: int = Field(ge=0)
     reminder_settings_restored: bool
     current_plan_restored: bool
+    current_plan_published: bool
     restored_at: datetime

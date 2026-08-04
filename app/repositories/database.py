@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS plans (
     version INTEGER NOT NULL,
     plan_json TEXT NOT NULL,
     metrics_json TEXT NOT NULL,
+    agenda_published INTEGER NOT NULL DEFAULT 0 CHECK (agenda_published IN (0, 1)),
     created_at TEXT NOT NULL
 );
 
@@ -311,6 +312,19 @@ class Database:
         connection = self.connect()
         try:
             connection.executescript(SCHEMA_SQL)
+            columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(plans)")
+            }
+            if "agenda_published" not in columns:
+                connection.execute(
+                    "ALTER TABLE plans ADD COLUMN agenda_published "
+                    "INTEGER NOT NULL DEFAULT 0 "
+                    "CHECK (agenda_published IN (0, 1))"
+                )
+                connection.execute(
+                    "UPDATE plans SET agenda_published = 1"
+                )
         finally:
             connection.close()
 

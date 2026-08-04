@@ -60,13 +60,44 @@ class PlanRepository:
             )
         return message_id
 
-    def save(self, plan: Plan, parent_plan_id: str | None = None) -> None:
+    def save(
+        self,
+        plan: Plan,
+        parent_plan_id: str | None = None,
+        *,
+        agenda_published: bool = False,
+    ) -> None:
         with self.database.transaction() as connection:
             self._insert_on_connection(
                 connection,
                 plan=plan,
                 parent_plan_id=parent_plan_id,
+                agenda_published=agenda_published,
             )
+
+    def set_agenda_published(
+        self,
+        *,
+        plan_id: str,
+        user_id: str,
+        published: bool,
+    ) -> bool:
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE plans SET agenda_published = ? "
+                "WHERE id = ? AND user_id = ? AND status = 'valid'",
+                (int(published), plan_id, user_id),
+            )
+        return cursor.rowcount > 0
+
+    def is_agenda_published(self, plan_id: str, user_id: str) -> bool:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT agenda_published FROM plans "
+                "WHERE id = ? AND user_id = ?",
+                (plan_id, user_id),
+            ).fetchone()
+        return bool(row and row["agenda_published"])
 
     def publish_weekly_day(
         self,
@@ -204,7 +235,11 @@ class PlanRepository:
                 thread_id=plan.thread_id,
                 now=now,
             )
-            self._insert_on_connection(connection, plan=plan)
+            self._insert_on_connection(
+                connection,
+                plan=plan,
+                agenda_published=True,
+            )
             self._bind_allocations_on_connection(
                 connection,
                 allocations=current,
@@ -259,14 +294,16 @@ class PlanRepository:
         *,
         plan: Plan,
         parent_plan_id: str | None = None,
+        agenda_published: bool = False,
     ) -> None:
         connection.execute(
             """
             INSERT INTO plans(
                 id, user_id, thread_id, parent_plan_id, plan_date,
-                status, version, plan_json, metrics_json, created_at
+                status, version, plan_json, metrics_json,
+                agenda_published, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 plan.id,
@@ -278,6 +315,7 @@ class PlanRepository:
                 plan.version,
                 plan.model_dump_json(),
                 plan.metrics.model_dump_json(),
+                int(agenda_published),
                 plan.created_at.isoformat(),
             ),
         )
@@ -466,6 +504,7 @@ class PlanRepository:
                     WHERE user_id = ?
                       AND plan_date BETWEEN ? AND ?
                       AND status = 'valid'
+                      AND agenda_published = 1
                 )
                 WHERE rank_in_date = 1
                 ORDER BY plan_date

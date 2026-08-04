@@ -80,6 +80,10 @@ def export_profile(
         ],
         reminder_settings=reminder_settings,
         current_plan=plan,
+        current_plan_published=(
+            plan is not None
+            and container.plans.is_agenda_published(plan.id, user_id)
+        ),
     )
 
 

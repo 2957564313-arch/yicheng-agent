@@ -23,6 +23,7 @@ const resultRequestText = $("#result-request-text");
 const resultRequestInput = $("#result-request-input");
 const resultEdit = $("#result-edit");
 const resultRerun = $("#result-rerun");
+const resultAddAgenda = $("#result-add-agenda");
 const resultDetails = $("#result-details");
 const resultConstraints = $("#result-constraints");
 const resultConstraintTotal = $("#result-constraint-total");
@@ -150,6 +151,7 @@ let activeConversationQuery = "";
 let activeConversationAnswer = "";
 let lastResultQuery = "";
 let lastResultData = null;
+let activePlanningNowOverride = null;
 const consoleUserId = getOrCreateLocalIdentity(
   "yicheng_user_id",
   "visitor",
@@ -169,6 +171,7 @@ const memorySnapshotKey = "yicheng_memory_snapshot";
 const timetableSnapshotKey = "yicheng_timetable_snapshot";
 const calendarSnapshotKey = "yicheng_calendar_snapshot";
 const planSnapshotKey = "yicheng_current_plan_snapshot";
+const planPublishedKey = "yicheng_published_plan_id";
 const campusSnapshotKey = "yicheng_campus_snapshot";
 const behaviorHistoryKey = "yicheng_behavior_history";
 const suggestionFeedbackKey = "yicheng_suggestion_feedback";
@@ -497,6 +500,7 @@ function initializeWorkspaceNavigation() {
   drawerBackdrop?.addEventListener("click", closeDrawers);
 
   newConversation?.addEventListener("click", () => {
+    activePlanningNowOverride = null;
     setActiveWorkspaceView("chat");
     setResultMode(false);
     clearConversationStream();
@@ -682,6 +686,10 @@ async function buildPersonalDataBackup() {
       || server?.reminder_settings
       || null,
     current_plan: localPlan || server?.current_plan || null,
+    current_plan_published: Boolean(
+      (localPlan && localStorage.getItem(planPublishedKey) === localPlan.id)
+      || (!localPlan && server?.current_plan_published),
+    ),
     client_state: {
       memory_snapshot: localMemories,
       timetable_snapshot: localTimetable,
@@ -865,6 +873,12 @@ profileRestore.addEventListener("click", async () => {
       planSnapshotKey,
       client.plan_snapshot || backup.current_plan || null,
     );
+    const restoredPlan = client.plan_snapshot || backup.current_plan || null;
+    if (backup.current_plan_published && restoredPlan?.id) {
+      localStorage.setItem(planPublishedKey, restoredPlan.id);
+    } else {
+      localStorage.removeItem(planPublishedKey);
+    }
     writeLocalSnapshot(
       campusSnapshotKey,
       client.campus_snapshot || null,
@@ -940,6 +954,10 @@ function clientContextSnapshot() {
       source_ref: item.source_ref || null,
     })),
     previous_plan: previousPlan,
+    previous_plan_published: Boolean(
+      previousPlan
+      && localStorage.getItem(planPublishedKey) === previousPlan.id
+    ),
     campus,
     personalization: personalizationSnapshot(),
   };
@@ -956,6 +974,7 @@ function personalContextPayload() {
     reminder_settings: currentReminderSettings
       || readLocalSnapshot(reminderSettingsSnapshotKey, null),
     current_plan: context.previous_plan,
+    current_plan_published: context.previous_plan_published,
   };
 }
 
@@ -1865,10 +1884,27 @@ function renderResponse(data) {
   answer.textContent = data.answer;
   answer.classList.remove("muted");
   completeConversationTurn(data.answer);
-  saveState.textContent = data.current_plan_saved
-    ? "当前计划已保存"
-    : data.plan ? "结果未写入当前计划" : "尚未生成当前计划";
-  saveState.classList.toggle("saved", data.current_plan_saved);
+  const planPublished = Boolean(
+    data.plan?.id
+    && localStorage.getItem(planPublishedKey) === data.plan.id
+  );
+  if (data.current_plan_saved && data.plan?.status === "valid") {
+    const dateLabel = `${data.plan.date.slice(5, 7).replace(/^0/, "")}月${data.plan.date.slice(8, 10).replace(/^0/, "")}日`;
+    saveState.textContent = planPublished
+      ? `已加入 ${dateLabel} 日程`
+      : "方案已自动保存";
+    if (resultAddAgenda) {
+      resultAddAgenda.hidden = false;
+      resultAddAgenda.disabled = false;
+      resultAddAgenda.textContent = planPublished ? "查看日程" : "加入日程";
+    }
+  } else {
+    saveState.textContent = data.plan
+      ? "结果未写入当前计划"
+      : "尚未生成当前计划";
+    if (resultAddAgenda) resultAddAgenda.hidden = true;
+  }
+  saveState.classList.toggle("saved", planPublished);
   renderTimeline(data);
   renderResultSummary(data);
   renderResultDashboard(data);
@@ -2350,6 +2386,10 @@ async function submitQuery(rawQuery, { keepResultMode = false } = {}) {
   }
   beginConversationTurn(query, { keepResultMode });
   queryInput.value = "";
+  const clientContext = clientContextSnapshot();
+  if (keepResultMode && activePlanningNowOverride) {
+    clientContext.now = activePlanningNowOverride;
+  }
   const data = await runRequest("/api/v1/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2358,7 +2398,8 @@ async function submitQuery(rawQuery, { keepResultMode = false } = {}) {
       thread_id: consoleThreadId,
       query,
       mode: modeSelect.value,
-      client_context: clientContextSnapshot(),
+      publish_to_agenda: false,
+      client_context: clientContext,
     }),
   }).catch(() => null);
   if (data) recordConversationHistory(query, data.answer, data);
@@ -2388,6 +2429,32 @@ resultRerun?.addEventListener("click", async () => {
     setInlineRequestEditing(
       resultRequest.classList.contains("is-editing"),
     );
+  }
+});
+
+resultAddAgenda?.addEventListener("click", async () => {
+  const plan = lastResultData?.plan;
+  if (!plan?.id || plan.status !== "valid") return;
+  const wasPublished = localStorage.getItem(planPublishedKey) === plan.id;
+  resultAddAgenda.disabled = true;
+  resultAddAgenda.textContent = wasPublished ? "正在打开…" : "正在加入…";
+  if (!wasPublished) localStorage.setItem(planPublishedKey, plan.id);
+  try {
+    scheduleCursorDate = plan.date;
+    scheduleViewMode = "day";
+    await loadAgendaRange(plan.date, plan.date);
+    setActiveWorkspaceView("schedule");
+    updateScheduleTabs();
+    const dateLabel = `${plan.date.slice(5, 7).replace(/^0/, "")}月${plan.date.slice(8, 10).replace(/^0/, "")}日`;
+    saveState.textContent = `已加入 ${dateLabel} 日程`;
+    saveState.classList.add("saved");
+    resultAddAgenda.textContent = "查看日程";
+  } catch (error) {
+    if (!wasPublished) localStorage.removeItem(planPublishedKey);
+    resultAddAgenda.textContent = wasPublished ? "查看日程" : "加入日程";
+    renderDebug(error);
+  } finally {
+    resultAddAgenda.disabled = false;
   }
 });
 
@@ -2475,6 +2542,9 @@ resultQuickActions?.addEventListener("click", async (event) => {
   const before = lastResultData;
   const currentRequirement = currentBaseRequirement();
   const query = `${currentRequirement}\n调整要求：${adjustment}`;
+  resultActionStatus.textContent = "正在按你的选择重新规划…";
+  resultActionStatus.classList.remove("is-unchanged");
+  resultActionStatus.hidden = false;
   resultQuickActions.querySelectorAll("button").forEach((item) => {
     item.disabled = true;
     item.classList.toggle("active", item === button);
@@ -2485,6 +2555,7 @@ resultQuickActions?.addEventListener("click", async (event) => {
   } finally {
     resultQuickActions.querySelectorAll("button").forEach((item) => {
       item.disabled = false;
+      item.classList.remove("active");
     });
   }
 });
@@ -2583,7 +2654,10 @@ async function loadDemos({ autoRun = false } = {}) {
       { method: "POST" },
       bindDemoToCurrentVisitor,
     ).catch(() => {});
-    if (data) recordConversationHistory(demo.query, data.answer, data);
+    if (data) {
+      activePlanningNowOverride = data.time_context?.now || null;
+      recordConversationHistory(demo.query, data.answer, data);
+    }
   };
   const buttons = [
     ...demoButtons.querySelectorAll("button"),

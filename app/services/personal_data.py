@@ -169,6 +169,7 @@ def hydrate_personal_data(
             and _plan_signature(latest)
             == _plan_signature(payload.current_plan)
         )
+        active_plan = latest if already_current else None
         if not already_current:
             if authoritative:
                 container.plans.clear_thread(
@@ -189,7 +190,17 @@ def hydrate_personal_data(
                     "created_at": now,
                 }
             )
-            container.plans.save(restored_plan)
+            container.plans.save(
+                restored_plan,
+                agenda_published=payload.current_plan_published,
+            )
+            active_plan = restored_plan
+        elif active_plan is not None:
+            container.plans.set_agenda_published(
+                plan_id=active_plan.id,
+                user_id=user_id,
+                published=payload.current_plan_published,
+            )
     elif authoritative:
         container.plans.clear_thread(
             user_id=user_id,
@@ -204,5 +215,8 @@ def hydrate_personal_data(
         calendar_overrides_restored=len(payload.calendar_overrides),
         reminder_settings_restored=payload.reminder_settings is not None,
         current_plan_restored=plan_available,
+        current_plan_published=(
+            plan_available and payload.current_plan_published
+        ),
         restored_at=now,
     )
