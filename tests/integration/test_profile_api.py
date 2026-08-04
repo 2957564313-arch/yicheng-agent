@@ -91,6 +91,7 @@ def test_profile_backup_restores_long_term_personal_data(tmp_path):
         assert len(backup["calendar_overrides"]) == 1
         assert backup["reminder_settings"]["course_lead_min"] == 35
         assert backup["current_plan"]["date"] == "2026-07-25"
+        assert backup["current_plan_published"] is True
 
         backup["thread_id"] = "backup_target_thread"
         restored = client.post(
@@ -104,6 +105,7 @@ def test_profile_backup_restores_long_term_personal_data(tmp_path):
         assert result["calendar_overrides_restored"] == 1
         assert result["reminder_settings_restored"] is True
         assert result["current_plan_restored"] is True
+        assert result["current_plan_published"] is True
 
         target = client.get(
             "/api/v1/users/backup_target/profile",
@@ -126,6 +128,7 @@ def test_profile_backup_restores_long_term_personal_data(tmp_path):
         assert restored_profile["current_plan"]["thread_id"] == (
             "backup_target_thread"
         )
+        assert restored_profile["current_plan_published"] is True
 
         agenda = client.get(
             "/api/v1/users/backup_target/agenda",

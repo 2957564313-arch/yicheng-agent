@@ -39,6 +39,50 @@ def test_saved_plan_becomes_a_personal_agenda(tmp_path):
         )
 
 
+def test_generated_plan_requires_explicit_agenda_publication(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        generated = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "publish_user",
+                "thread_id": "publish_thread",
+                "query": "2026年7月25日14点去图书馆自习2小时。",
+                "mode": "offline",
+                "publish_to_agenda": False,
+                "client_context": {
+                    "now": "2026-07-24T20:00:00+08:00",
+                },
+            },
+        )
+        assert generated.status_code == 200, generated.text
+        assert generated.json()["current_plan_saved"] is True
+
+        before = client.get(
+            "/api/v1/users/publish_user/agenda",
+            params={"start_date": "2026-07-25", "end_date": "2026-07-25"},
+        )
+        assert before.status_code == 200, before.text
+        assert not any(
+            item["source"] == "plan" for item in before.json()["items"]
+        )
+
+        profile = client.get(
+            "/api/v1/users/publish_user/profile",
+            params={"thread_id": "publish_thread"},
+        ).json()
+        profile["current_plan_published"] = True
+        published = client.post(
+            "/api/v1/users/publish_user/agenda/contextual",
+            params={"start_date": "2026-07-25", "end_date": "2026-07-25"},
+            json=profile,
+        )
+        assert published.status_code == 200, published.text
+        assert any(
+            item["title"] == "图书馆自习"
+            for item in published.json()["items"]
+        )
+
+
 def test_imported_early_course_gets_wakeup_and_class_reminders(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         imported = client.post(
@@ -126,6 +170,7 @@ def test_contextual_agenda_reminders_and_ical_hydrate_browser_snapshot(
             "/api/v1/users/context_source/profile",
             params={"thread_id": "context_source_thread"},
         ).json()
+        backup["current_plan_published"] = True
         backup["thread_id"] = "context_target_thread"
 
         agenda = client.post(
