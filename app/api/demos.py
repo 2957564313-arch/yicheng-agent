@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from fastapi import APIRouter, Request
@@ -95,7 +94,14 @@ async def run_demo(demo_id: str, request: Request) -> ChatResponse:
             now=fixture.now,
         ),
     )
-    return await execute_chat(payload, request)
+    response = await execute_chat(payload, request)
+    if response.current_plan_saved and response.plan is not None:
+        container.plans.set_agenda_published(
+            plan_id=response.plan.id,
+            user_id=response.plan.user_id,
+            published=True,
+        )
+    return response
 
 
 def _same_baseline(plan: Plan, baseline: Plan) -> bool:

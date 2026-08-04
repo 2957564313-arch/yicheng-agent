@@ -931,6 +931,7 @@ async def execute_chat(
             container.plans.save(
                 plan,
                 parent_plan_id=persisted_parent_id,
+                agenda_published=payload.publish_to_agenda,
             )
         container.plans.add_message(
             thread_id=thread_id,

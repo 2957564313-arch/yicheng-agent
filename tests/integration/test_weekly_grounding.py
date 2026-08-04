@@ -361,11 +361,18 @@ async def test_weekly_grounding_publication_rolls_back_without_orphan_plan(
         container.weekly_plans.save(weekly_plan)
         original_insert = container.plans._insert_on_connection
 
-        def fail_after_insert(connection, *, plan, parent_plan_id=None):
+        def fail_after_insert(
+            connection,
+            *,
+            plan,
+            parent_plan_id=None,
+            agenda_published=False,
+        ):
             original_insert(
                 connection,
                 plan=plan,
                 parent_plan_id=parent_plan_id,
+                agenda_published=agenda_published,
             )
             raise RuntimeError("injected publication failure")
 
