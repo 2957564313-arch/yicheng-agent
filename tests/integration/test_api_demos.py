@@ -73,7 +73,67 @@ def test_health_and_demo_catalog(tmp_path):
             "demo_01_normal",
             "demo_02_emergency",
             "demo_03_degraded",
+            "demo_04_second_course",
         ]
+
+
+def test_second_course_demo_keeps_registration_deadline_and_activity_time(
+    tmp_path,
+):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post("/api/v1/demos/demo_04_second_course/run")
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["plan"]["status"] == "valid"
+        tasks = task_items(payload)
+        assert tasks["second_course_registration"]["end_at"] == (
+            "2026-07-24T17:00:00+08:00"
+        )
+        activity = next(
+            item
+            for item in payload["plan"]["items"]
+            if item["task_id"] and item["task_id"].startswith("fixed_1900_2030")
+        )
+        assert activity["start_at"] == "2026-07-24T19:00:00+08:00"
+        assert activity["end_at"] == "2026-07-24T20:30:00+08:00"
+        assert all(check["passed"] for check in payload["constraint_checks"])
+
+        agenda = client.get(
+            "/api/v1/users/demo_user_second_course/agenda",
+            params={
+                "start_date": "2026-07-24",
+                "end_date": "2026-07-24",
+            },
+        )
+        assert agenda.status_code == 200, agenda.text
+        agenda_payload = agenda.json()
+        second_course_item = next(
+            item
+            for item in agenda_payload["items"]
+            if item["title"] == "参加第二课堂讲座"
+        )
+        assert second_course_item["kind"] == "activity"
+        activity_reminder = next(
+            item
+            for item in agenda_payload["reminders"]
+            if item["agenda_item_id"] == second_course_item["id"]
+        )
+        assert activity_reminder["notify_at"] == "2026-07-24T18:30:00+08:00"
+        assert activity_reminder["title"] == "二课活动即将开始"
+        registration_item = next(
+            item
+            for item in agenda_payload["items"]
+            if item["title"] == "完成二课报名"
+        )
+        registration_reminder = next(
+            item
+            for item in agenda_payload["reminders"]
+            if item["agenda_item_id"] == registration_item["id"]
+        )
+        assert registration_reminder["notify_at"] == (
+            "2026-07-24T16:20:00+08:00"
+        )
+        assert registration_reminder["title"] == "二课报名任务即将开始"
 
 
 def test_normal_demo_has_exact_timeline_and_evidence(tmp_path):
@@ -282,6 +342,121 @@ def test_browser_plan_snapshot_supports_replan_after_cold_start(tmp_path):
         assert payload["plan"]["version"] == previous_plan["version"] + 1
         assert payload["plan_diff"]
         assert payload["current_plan_saved"] is True
+
+
+def test_quick_alternative_action_returns_a_visible_plan_diff(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        demo = client.post("/api/v1/demos/demo_01_normal/run")
+        assert demo.status_code == 200, demo.text
+        previous_plan = demo.json()["plan"]
+        previous_plan["user_id"] = "quick_action_user"
+        previous_plan["thread_id"] = "quick_action_thread"
+
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "quick_action_user",
+                "thread_id": "quick_action_thread",
+                "query": (
+                    "今天下午没课，14点以后想去图书馆学习2小时，取快递，"
+                    "然后去东操场跑步30分钟，18点前结束。\n"
+                    "调整要求：在保留所有任务、时长、截止时间和硬约束的"
+                    "前提下，生成另一种可行方案。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "previous_plan": previous_plan,
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["status"] == "completed"
+        assert payload["plan"]["status"] == "valid"
+        assert payload["plan_diff"]
+        assert any(
+            change["change_type"] == "moved"
+            for change in payload["plan_diff"]
+        )
+        before = {
+            item["task_id"]: item["start_at"]
+            for item in previous_plan["items"]
+            if item["item_type"] == "task"
+        }
+        after = {
+            item["task_id"]: item["start_at"]
+            for item in payload["plan"]["items"]
+            if item["item_type"] == "task"
+        }
+        assert before != after
+
+
+def test_quick_objectives_reduce_travel_and_waiting(tmp_path):
+    def idle_minutes(plan: dict) -> int:
+        items = sorted(plan["items"], key=lambda item: item["start_at"])
+        return sum(
+            max(
+                0,
+                int(
+                    (
+                        datetime.fromisoformat(following["start_at"])
+                        - datetime.fromisoformat(current["end_at"])
+                    ).total_seconds()
+                    // 60
+                ),
+            )
+            for current, following in zip(items, items[1:])
+        )
+
+    def run_action(client, *, user_id: str, instruction: str):
+        demo = client.post("/api/v1/demos/demo_01_normal/run")
+        assert demo.status_code == 200, demo.text
+        previous_plan = demo.json()["plan"]
+        previous_plan["user_id"] = user_id
+        previous_plan["thread_id"] = f"{user_id}_thread"
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": user_id,
+                "thread_id": f"{user_id}_thread",
+                "query": (
+                    "今天下午没课，14点以后想去图书馆学习2小时，取快递，"
+                    "然后去东操场跑步30分钟，18点前结束。\n"
+                    f"调整要求：{instruction}"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "previous_plan": previous_plan,
+                },
+            },
+        )
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["plan"]["status"] == "valid"
+        assert payload["plan_diff"]
+        return previous_plan, payload["plan"]
+
+    with TestClient(build_test_app(tmp_path)) as client:
+        travel_before, travel_after = run_action(
+            client,
+            user_id="travel_objective_user",
+            instruction=(
+                "在不遗漏任务的前提下，优先优化通勤时间，并尽量避开拥堵时段。"
+            ),
+        )
+        waiting_before, waiting_after = run_action(
+            client,
+            user_id="waiting_objective_user",
+            instruction="保留任务时长和截止时间，尽量减少行程中的等待时间。",
+        )
+
+    assert travel_after["metrics"]["travel_minutes"] < (
+        travel_before["metrics"]["travel_minutes"]
+    )
+    assert idle_minutes(waiting_after) < idle_minutes(waiting_before)
 
 
 def test_invalid_request_has_stable_error_shape(tmp_path):

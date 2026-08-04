@@ -10,6 +10,7 @@ AgendaSource = Literal["course", "plan", "weekly", "manual"]
 AgendaKind = Literal[
     "course",
     "meeting",
+    "activity",
     "study",
     "exercise",
     "meal",
@@ -49,6 +50,7 @@ class ReminderSettings(BaseModel):
     course_lead_min: int = Field(default=20, ge=5, le=180)
     early_course_wakeup_min: int = Field(default=75, ge=20, le=240)
     meeting_lead_min: int = Field(default=15, ge=5, le=180)
+    activity_lead_min: int = Field(default=30, ge=5, le=240)
     study_lead_min: int = Field(default=10, ge=0, le=120)
     exercise_lead_min: int = Field(default=15, ge=0, le=120)
     task_lead_min: int = Field(default=10, ge=0, le=120)

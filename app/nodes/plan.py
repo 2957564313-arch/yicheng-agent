@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from itertools import permutations
 from zoneinfo import ZoneInfo
 
 from app.container import AppContainer
@@ -13,10 +14,126 @@ from app.services.scheduler import PlanningContext
 from app.state import CampusAgentState
 
 
+def _quick_adjustment_strategy(query: str) -> str | None:
+    if "生成另一种可行方案" in query:
+        return "alternative"
+    if "调整任务顺序" in query:
+        return "reverse_order"
+    if "优化通勤时间" in query:
+        return "travel"
+    if "减少行程中的等待时间" in query:
+        return "waiting"
+    return None
+
+
+def _apply_quick_adjustment_strategy(
+    tasks: list[Task],
+    strategy: str | None,
+) -> list[Task]:
+    if strategy is None or strategy in {"travel", "waiting"}:
+        return tasks
+    movable_indexes = [
+        index
+        for index, task in enumerate(tasks)
+        if task.flexibility == TaskFlexibility.MOVABLE
+    ]
+    movable = [tasks[index] for index in movable_indexes]
+    if len(movable) < 2:
+        return tasks
+    if strategy == "alternative":
+        movable = [*movable[1:], movable[0]]
+    elif strategy == "reverse_order":
+        movable.reverse()
+    previous_id: str | None = None
+    for rank, task in enumerate(movable):
+        movable[rank] = task.model_copy(
+            update={
+                "depends_on": [previous_id] if previous_id else [],
+                "importance": max(1, 5 - rank),
+            }
+        )
+        previous_id = task.id
+    adjusted = list(tasks)
+    for index, task in zip(movable_indexes, movable, strict=True):
+        adjusted[index] = task
+    return adjusted
+
+
+def _tasks_with_movable_order(
+    tasks: list[Task],
+    movable: tuple[Task, ...] | list[Task],
+) -> list[Task]:
+    movable_indexes = [
+        index
+        for index, task in enumerate(tasks)
+        if task.flexibility == TaskFlexibility.MOVABLE
+    ]
+    adjusted = list(tasks)
+    previous_id: str | None = None
+    for rank, (index, task) in enumerate(
+        zip(movable_indexes, movable, strict=True)
+    ):
+        adjusted[index] = task.model_copy(
+            update={
+                "depends_on": [previous_id] if previous_id else [],
+                "importance": max(1, 5 - rank),
+            }
+        )
+        previous_id = task.id
+    return adjusted
+
+
+def _optimization_candidates(
+    tasks: list[Task],
+) -> list[list[Task]]:
+    movable = tuple(
+        task for task in tasks if task.flexibility == TaskFlexibility.MOVABLE
+    )
+    if len(movable) < 2:
+        return [tasks]
+    if len(movable) <= 5:
+        orders = list(permutations(movable))
+    else:
+        orders = [
+            movable,
+            tuple(reversed(movable)),
+            *(
+                movable[index:] + movable[:index]
+                for index in range(1, min(len(movable), 6))
+            ),
+        ]
+    return [_tasks_with_movable_order(tasks, order) for order in orders]
+
+
+def _plan_idle_minutes(plan: Plan) -> int:
+    ordered = sorted(plan.items, key=lambda item: item.start_at)
+    return sum(
+        max(
+            0,
+            int((following.start_at - current.end_at).total_seconds() // 60),
+        )
+        for current, following in zip(ordered, ordered[1:])
+    )
+
+
 def make_plan_node(container: AppContainer):
     async def plan(state: CampusAgentState) -> dict:
         tasks = [Task.model_validate(raw) for raw in state["tasks"]]
+        quick_strategy = (
+            _quick_adjustment_strategy(state["query"])
+            if state["intent"] == "replan"
+            else None
+        )
+        tasks = _apply_quick_adjustment_strategy(tasks, quick_strategy)
         preferences = UserPreferences.model_validate(state["preferences"])
+        if quick_strategy == "travel":
+            preferences = preferences.model_copy(
+                update={"avoid_congestion": True}
+            )
+        elif quick_strategy == "waiting":
+            preferences = preferences.model_copy(
+                update={"buffer_min": 0, "avoid_tight_schedule": False}
+            )
         routes = [
             TravelEstimate.model_validate(raw)
             for raw in state.get("travel_estimates", [])
@@ -102,7 +219,7 @@ def make_plan_node(container: AppContainer):
                 if raw.get("is_outdoor")
             },
             enforce_weather=enforce_weather,
-            old_plan=old_plan,
+            old_plan=(None if quick_strategy else old_plan),
             initial_location_id=state.get("initial_location_id"),
             initial_departure_at=(
                 datetime.fromisoformat(state["initial_departure_at"])
@@ -111,7 +228,11 @@ def make_plan_node(container: AppContainer):
             ),
         )
 
-        if state["intent"] in {"replan", "weather_check"} and old_plan:
+        if (
+            state["intent"] in {"replan", "weather_check"}
+            and old_plan
+            and quick_strategy is None
+        ):
             result = container.replanner.replan(
                 user_id=state["user_id"],
                 thread_id=state["thread_id"],
@@ -121,13 +242,42 @@ def make_plan_node(container: AppContainer):
                 old_plan=old_plan,
             )
         else:
-            result = container.scheduler.schedule(
-                user_id=state["user_id"],
-                thread_id=state["thread_id"],
-                tasks=tasks,
-                preferences=preferences,
-                context=context,
+            candidate_tasks = (
+                _optimization_candidates(tasks)
+                if quick_strategy in {"travel", "waiting"}
+                else [tasks]
             )
+            candidates = [
+                container.scheduler.schedule(
+                    user_id=state["user_id"],
+                    thread_id=state["thread_id"],
+                    tasks=ordered_tasks,
+                    preferences=preferences,
+                    context=context,
+                    version=(old_plan.version + 1 if old_plan else 1),
+                )
+                for ordered_tasks in candidate_tasks
+            ]
+            if quick_strategy == "travel":
+                result = min(
+                    candidates,
+                    key=lambda candidate: (
+                        len(candidate.unscheduled_task_ids),
+                        candidate.plan.metrics.travel_minutes,
+                        _plan_idle_minutes(candidate.plan),
+                    ),
+                )
+            elif quick_strategy == "waiting":
+                result = min(
+                    candidates,
+                    key=lambda candidate: (
+                        len(candidate.unscheduled_task_ids),
+                        _plan_idle_minutes(candidate.plan),
+                        candidate.plan.metrics.travel_minutes,
+                    ),
+                )
+            else:
+                result = candidates[0]
 
         replan_count = state.get("replan_count", 0)
         if state.get("validation_issues"):

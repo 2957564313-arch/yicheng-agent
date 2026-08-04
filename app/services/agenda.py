@@ -196,6 +196,18 @@ class AgendaService:
         lowered = title.lower()
         if any(word in lowered for word in ("课程", "上课", "实验课")):
             return "course"
+        if any(
+            word in lowered
+            for word in (
+                "二课",
+                "第二课堂",
+                "志愿活动",
+                "社团活动",
+                "素质拓展",
+                "讲座",
+            )
+        ):
+            return "activity"
         if any(word in lowered for word in ("会议", "开会", "例会", "答辩")):
             return "meeting"
         if any(
@@ -230,6 +242,7 @@ class AgendaService:
             lead_min = {
                 "course": settings.course_lead_min,
                 "meeting": settings.meeting_lead_min,
+                "activity": settings.activity_lead_min,
                 "study": settings.study_lead_min,
                 "exercise": settings.exercise_lead_min,
                 "meal": settings.task_lead_min,
@@ -244,7 +257,7 @@ class AgendaService:
                             agenda_item_id=item.id,
                             kind=(
                                 "prepare"
-                                if item.kind in {"course", "meeting"}
+                                if item.kind in {"course", "meeting", "activity"}
                                 else "upcoming"
                             ),
                             notify_at=notify_at,
@@ -430,6 +443,15 @@ class AgendaService:
         return {
             "course": "快到上课时间了",
             "meeting": "别忘了接下来的会议",
+            "activity": (
+                "二课报名任务即将开始"
+                if "报名" in item.title
+                else (
+                    "二课活动即将开始"
+                    if any(word in item.title for word in ("二课", "第二课堂"))
+                    else "活动即将开始"
+                )
+            ),
             "study": "准备进入专注时段",
             "exercise": "给身体留出的时间要到了",
             "meal": "记得按时吃饭",

@@ -169,6 +169,17 @@ COMMON_TASK_SPECS = (
         ("daily_life", "errand"),
     ),
     CommonTaskSpec(
+        "second_course",
+        "参加第二课堂活动",
+        ("第二课堂", "二课活动", "二课讲座", "二课"),
+        90,
+        None,
+        time(8, 0),
+        time(22, 0),
+        4,
+        ("activity", "second_course"),
+    ),
+    CommonTaskSpec(
         "club",
         "参加社团活动",
         ("学生会活动", "志愿活动", "社团活动"),
@@ -604,6 +615,40 @@ class RuleBasedRequirementParser:
             )
             overall_start = last_course_end.time()
         overall_deadline = self._overall_deadline(query, target_date)
+        if (
+            any(
+                word in query
+                for word in ("第二课堂", "二课活动", "二课讲座", "二课")
+            )
+            and any(word in query for word in ("报名", "报名截止"))
+        ):
+            registration_deadline = self._task_deadline(
+                query,
+                target_date,
+                ("二课报名", "报名截止", "报名"),
+            )
+            if registration_deadline is not None:
+                registration_start = registration_deadline - timedelta(minutes=10)
+                tasks.append(
+                    Task(
+                        id="second_course_registration",
+                        title="完成二课报名",
+                        date=target_date,
+                        duration_min=10,
+                        location_raw=None,
+                        fixed_start=registration_start,
+                        fixed_end=registration_deadline,
+                        deadline=registration_deadline,
+                        flexibility=TaskFlexibility.FIXED,
+                        importance=5,
+                        tags=[
+                            "second_course",
+                            "registration",
+                            "hard_constraint",
+                        ],
+                        notes="在报名截止前预留10分钟完成第二课堂报名",
+                    )
+                )
         if (
             ("自习" in query or "学习" in query)
             and not any(word in fixed_text for word in ("自习", "学习"))
@@ -1418,6 +1463,10 @@ class RuleBasedRequirementParser:
                     title,
                 ).strip()
             title = re.sub(r"^固定", "", title).strip() or "固定安排"
+            is_second_course = any(
+                word in clause
+                for word in ("第二课堂", "二课活动", "二课讲座", "二课")
+            )
             tasks.append(
                 Task(
                     id=(
@@ -1433,8 +1482,16 @@ class RuleBasedRequirementParser:
                     fixed_end=end_at,
                     flexibility=TaskFlexibility.FIXED,
                     importance=5,
-                    tags=["user_fixed", "hard_constraint"],
-                    notes="用户明确给出的固定时间安排，不可被规划器移动",
+                    tags=[
+                        "user_fixed",
+                        "hard_constraint",
+                        *(["activity", "second_course"] if is_second_course else []),
+                    ],
+                    notes=(
+                        "第二课堂活动时间不可移动，并会生成开始前提醒"
+                        if is_second_course
+                        else "用户明确给出的固定时间安排，不可被规划器移动"
+                    ),
                 )
             )
         return tasks
