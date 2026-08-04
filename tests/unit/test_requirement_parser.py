@@ -74,6 +74,30 @@ def test_chinese_duration_and_deadline_are_parsed():
     assert parcel.deadline.tzinfo is not None
 
 
+def test_second_course_registration_and_fixed_activity_are_parsed():
+    result = parse(
+        "今天17点前完成二课报名，19:00到20:30在第六教学楼"
+        "参加第二课堂讲座，请提前提醒我。"
+    )
+
+    registration = next(
+        task for task in result.tasks if task.id == "second_course_registration"
+    )
+    activity = next(
+        task
+        for task in result.tasks
+        if task.id.startswith("fixed_") and "second_course" in task.tags
+    )
+
+    assert registration.deadline.isoformat() == "2026-07-23T17:00:00+08:00"
+    assert registration.fixed_start.isoformat() == "2026-07-23T16:50:00+08:00"
+    assert registration.fixed_end.isoformat() == "2026-07-23T17:00:00+08:00"
+    assert "hard_constraint" in registration.tags
+    assert activity.fixed_start.isoformat() == "2026-07-23T19:00:00+08:00"
+    assert activity.fixed_end.isoformat() == "2026-07-23T20:30:00+08:00"
+    assert "activity" in activity.tags
+
+
 def test_task_scoped_deadline_does_not_leak_to_evening_run():
     result = parse(
         "明天下课后去图书馆学习90分钟，"

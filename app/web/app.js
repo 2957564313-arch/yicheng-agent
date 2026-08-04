@@ -17,6 +17,19 @@ const resetButton = $("#reset");
 const modeSelect = $("#mode");
 const timeline = $("#timeline");
 const planTitle = $("#plan-title");
+const resultSummary = $("#result-summary");
+const resultRequest = $("#result-request");
+const resultRequestText = $("#result-request-text");
+const resultRequestInput = $("#result-request-input");
+const resultEdit = $("#result-edit");
+const resultRerun = $("#result-rerun");
+const resultDetails = $("#result-details");
+const resultConstraints = $("#result-constraints");
+const resultConstraintTotal = $("#result-constraint-total");
+const resultSources = $("#result-sources");
+const resultQuickActions = $("#result-quick-actions");
+const resultActionStatus = $("#result-action-status");
+const resultChangeSummary = $("#result-change-summary");
 const taskStatuses = $("#task-statuses");
 const answer = $("#answer");
 const conversationStream = $("#conversation-stream");
@@ -26,6 +39,7 @@ const freshness = $("#freshness");
 const health = $("#health");
 const saveState = $("#save-state");
 const demoButtons = $("#demo-buttons");
+const sidebarDemoButtons = $("#sidebar-demo-buttons");
 const execution = $("#execution");
 const constraints = $("#constraints");
 const adjustment = $("#adjustment");
@@ -83,6 +97,7 @@ const careSuggestions = $("#care-suggestions");
 const reminderCourse = $("#reminder-course");
 const reminderWakeup = $("#reminder-wakeup");
 const reminderMeeting = $("#reminder-meeting");
+const reminderActivity = $("#reminder-activity");
 const reminderStudy = $("#reminder-study");
 const reminderBedtime = $("#reminder-bedtime");
 const reminderBedtimeEnabled = $("#reminder-bedtime-enabled");
@@ -133,6 +148,8 @@ let scheduleCursorDate = null;
 let lastAgendaData = null;
 let activeConversationQuery = "";
 let activeConversationAnswer = "";
+let lastResultQuery = "";
+let lastResultData = null;
 const consoleUserId = getOrCreateLocalIdentity(
   "yicheng_user_id",
   "visitor",
@@ -174,6 +191,28 @@ function writeLocalSnapshot(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+const dashboardIconPaths = {
+  feasibility: '<path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="m9 11 3 3L22 4"/>',
+  tasks: '<rect width="14" height="16" x="5" y="4" rx="2"/><path d="M9 4V2h6v2M9 9h6M9 13h6"/>',
+  end: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  buffer: '<path d="M6 2h12M6 22h12M8 2v5l4 5-4 5v5M16 2v5l-4 5 4 5v5"/>',
+  travel: '<circle cx="12" cy="5" r="2"/><path d="m10 22 1-7-3-2 2-5 4 3 3 1M15 22l-2-7"/>',
+  checks: '<path d="M12 22s8-3 8-10V5l-8-3-8 3v7c0 7 8 10 8 10"/><path d="m9 12 2 2 4-4"/>',
+  book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5z"/><path d="M8 7h8"/>',
+  package: '<path d="m12 3 8 4-8 4-8-4 8-4Z"/><path d="m4 7 8 4 8-4v10l-8 4-8-4Z"/>',
+  route: '<path d="M5 18a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M8 15h3a4 4 0 0 0 4-4v-1"/>',
+  activity: '<circle cx="12" cy="5" r="2"/><path d="m5 22 3-8 3-2 2 3 4 1M10 12 8 9l3-2 4 3"/>',
+  map: '<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3Z"/><path d="M9 3v15M15 6v15"/>',
+  building: '<path d="M3 21h18M6 21V5l6-3 6 3v16M9 9h.01M15 9h.01M9 13h.01M15 13h.01M10 21v-4h4v4"/>',
+  cloud: '<path d="M17.5 19H9a7 7 0 1 1 6.7-9H17.5a4.5 4.5 0 1 1 0 9Z"/>',
+  calendar: '<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+};
+
+function dashboardIcon(name, className = "") {
+  const paths = dashboardIconPaths[name] || dashboardIconPaths.tasks;
+  return `<svg class="${escapeHtml(className)}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+}
+
 function renderConversationHistory() {
   if (!historyList || !historyEmpty) return;
   const items = readLocalSnapshot(conversationHistoryKey, [])
@@ -188,7 +227,7 @@ function renderConversationHistory() {
   `).join("");
 }
 
-function recordConversationHistory(query, answerText) {
+function recordConversationHistory(query, answerText, responseData = null) {
   const normalized = String(query || "").trim();
   if (!normalized) return;
   const current = readLocalSnapshot(conversationHistoryKey, [])
@@ -196,6 +235,7 @@ function recordConversationHistory(query, answerText) {
   current.unshift({
     query: normalized,
     answer: String(answerText || "").replace(/\s+/g, " ").slice(0, 120),
+    response: responseData || null,
     created_at: new Date().toISOString(),
   });
   writeLocalSnapshot(conversationHistoryKey, current.slice(0, 24));
@@ -225,13 +265,15 @@ function clearConversationStream() {
   activeConversationAnswer = "";
 }
 
-function beginConversationTurn(query) {
+function beginConversationTurn(query, { keepResultMode = false } = {}) {
   if (activeConversationQuery && activeConversationAnswer) {
     appendConversationMessage("assistant", activeConversationAnswer);
   }
   appendConversationMessage("user", query);
   activeConversationQuery = String(query || "").trim();
+  lastResultQuery = activeConversationQuery;
   activeConversationAnswer = "";
+  if (!keepResultMode) document.body.classList.remove("has-plan-result");
   answer.textContent = "正在结合你的课表、时间和地点认真规划…";
   answer.classList.add("muted");
   assistantActions.innerHTML = "";
@@ -456,6 +498,7 @@ function initializeWorkspaceNavigation() {
 
   newConversation?.addEventListener("click", () => {
     setActiveWorkspaceView("chat");
+    setResultMode(false);
     clearConversationStream();
     queryInput.value = "";
     answer.textContent = "把课程、自习、取快递、吃饭或运动告诉我，我会先判断能否全部完成；如果时间不够，也会说明原因并给你可选方案。";
@@ -477,12 +520,22 @@ function initializeWorkspaceNavigation() {
     setActiveWorkspaceView("chat");
     queryInput.value = item.query;
     restoreConversationSnapshot(item.query, item.answer);
+    lastResultQuery = item.query;
+    historyList.querySelectorAll(".history-item").forEach((historyButton) => {
+      historyButton.classList.toggle("active", historyButton === button);
+    });
+    if (item.response?.plan) {
+      renderResponse(item.response);
+      closeDrawers();
+      return;
+    }
+    setResultMode(false);
     answer.textContent = item.answer || "这条历史对话没有保存回答摘要。";
     answer.classList.toggle("muted", !item.answer);
     assistantActions.innerHTML = "";
     freshness.innerHTML = '<span class="source-tag">本机历史摘要</span>';
     closeDrawers();
-    answer.scrollIntoView({ behavior: "smooth", block: "center" });
+    assistantPanel?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
 
   viewButtons.forEach((button) => {
@@ -1319,6 +1372,51 @@ function renderClock() {
 function renderTimeline(data) {
   const items = data.plan?.items || [];
   const locationNames = data.location_names || {};
+  const changes = data.plan_diff || [];
+  const changesByTask = new Map(
+    changes.map((change) => [change.task_id, change]),
+  );
+  if (resultChangeSummary) {
+    const previousTravel = data.previous_plan?.metrics?.travel_minutes || 0;
+    const currentTravel = data.plan?.metrics?.travel_minutes || 0;
+    const travelDelta = currentTravel - previousTravel;
+    const waitingDelta = (
+      planIdleMinutes(data.plan) - planIdleMinutes(data.previous_plan)
+    );
+    const changeCards = changes.map((change) => {
+      const before = change.before_start
+        ? `${timePart(change.before_start)}—${timePart(change.before_end)}`
+        : "未安排";
+      const after = change.after_start
+        ? `${timePart(change.after_start)}—${timePart(change.after_end)}`
+        : "已移除";
+      return `<span class="result-change-chip ${escapeHtml(change.change_type)}">
+        <b>${escapeHtml(change.title)}</b>
+        <em>${escapeHtml(change.summary)}</em>
+        <small>${before} → ${after}</small>
+      </span>`;
+    });
+    if (travelDelta) {
+      changeCards.push(`<span class="result-change-chip travel-change">
+        <b>通勤时间</b>
+        <em>${travelDelta < 0 ? "减少" : "增加"}${Math.abs(travelDelta)}分钟</em>
+        <small>${previousTravel}分钟 → ${currentTravel}分钟</small>
+      </span>`);
+    }
+    if (waitingDelta) {
+      const previousWaiting = planIdleMinutes(data.previous_plan);
+      const currentWaiting = planIdleMinutes(data.plan);
+      changeCards.push(`<span class="result-change-chip waiting-change">
+        <b>等待空档</b>
+        <em>${waitingDelta < 0 ? "减少" : "增加"}${Math.abs(waitingDelta)}分钟</em>
+        <small>${previousWaiting}分钟 → ${currentWaiting}分钟</small>
+      </span>`);
+    }
+    resultChangeSummary.innerHTML = changeCards.length
+      ? `<strong>本次调整</strong><div>${changeCards.join("")}</div>`
+      : "";
+    resultChangeSummary.hidden = changeCards.length === 0;
+  }
   const pendingCount = (data.task_statuses || [])
     .filter((task) => task.status === "needs_adjustment").length;
   planTitle.textContent = pendingCount
@@ -1350,18 +1448,181 @@ function renderTimeline(data) {
         : item.reason === "固定或用户锁定任务"
           ? "这是你明确给出的固定安排"
           : "已结合优先级、通勤和可用时间安排";
+      const itemIcon = isTravel
+        ? "travel"
+        : title.includes("图书馆") || title.includes("学习") || title.includes("自习")
+          ? "book"
+          : title.includes("快递") || title.includes("报名")
+            ? "package"
+            : title.includes("跑步") || title.includes("运动")
+              ? "activity"
+               : "calendar";
+      const change = isTravel ? null : changesByTask.get(item.task_id);
       return `
-        <div class="timeline-item ${isTravel ? "travel" : ""}">
+        <div class="timeline-item ${isTravel ? "travel" : ""} ${change ? `has-change ${escapeHtml(change.change_type)}` : ""}">
           <div class="time">${timePart(item.start_at)}—${timePart(item.end_at)}</div>
           <div class="rail"><span></span></div>
           <div class="content">
+            <span class="timeline-kind-icon">${dashboardIcon(itemIcon)}</span>
             <strong>${escapeHtml(title)}</strong>
+            ${change ? `<span class="timeline-change-badge">${escapeHtml(change.summary)}</span>` : ""}
             ${location ? `<small>${escapeHtml(location)}</small>` : ""}
+            ${change?.before_start ? `<small class="timeline-before-time">原计划 ${timePart(change.before_start)}—${timePart(change.before_end)}</small>` : ""}
             <p>${escapeHtml(reason)}</p>
           </div>
         </div>`;
     }).join("")
     : "没有生成结构化日程。";
+}
+
+function setResultMode(active) {
+  const wasActive = document.body.classList.contains("has-plan-result");
+  document.body.classList.toggle("has-plan-result", active);
+  if (!active) return;
+  setActiveWorkspaceView("chat");
+  if (wasActive) return;
+  requestAnimationFrame(() => {
+    globalThis.scrollTo({ top: 0, behavior: "smooth" });
+  });
+}
+
+function setInlineRequestEditing(active) {
+  resultRequest.classList.toggle("is-editing", active);
+  resultRequestText.hidden = active;
+  resultRequestInput.hidden = !active;
+  resultEdit.textContent = active ? "取消修改" : "修改需求";
+  resultRerun.textContent = active ? "按新需求规划" : "重新规划";
+  if (active) {
+    resultRequestInput.value = lastResultQuery;
+    resultRequestInput.focus();
+    resultRequestInput.setSelectionRange(
+      resultRequestInput.value.length,
+      resultRequestInput.value.length,
+    );
+  }
+}
+
+function renderResultSummary(data) {
+  const plan = data.plan;
+  if (!plan) {
+    resultSummary.innerHTML = "";
+    resultSummary.hidden = true;
+    return;
+  }
+  const metrics = plan.metrics || {};
+  const statuses = data.task_statuses || [];
+  const scheduled = statuses.length
+    ? statuses.filter((item) => item.status === "scheduled").length
+    : metrics.scheduled_task_count || 0;
+  const requested = statuses.length || metrics.requested_task_count || 0;
+  const checks = data.constraint_checks || [];
+  const passed = checks.filter((item) => item.passed).length;
+  const endTimes = (plan.items || []).map((item) => new Date(item.end_at).getTime());
+  const finalEnd = endTimes.length
+    ? timePart(new Date(Math.max(...endTimes)))
+    : "—";
+  const feasible = plan.status === "valid" && scheduled === requested;
+  const cards = [
+    [
+      feasible ? "可执行" : "需调整",
+      feasible ? "所有任务均已安排" : "有任务需要调整",
+      feasible ? "success" : "attention",
+      "feasibility",
+    ],
+    [
+      `${scheduled}/${requested}`,
+      "任务已安排",
+      scheduled === requested ? "success" : "attention",
+      "tasks",
+    ],
+    [finalEnd, "预计结束时间", "time", "end"],
+    [`${metrics.buffer_minutes || 0}分钟`, "弹性缓冲", "time", "buffer"],
+    [`${metrics.travel_minutes || 0}分钟`, "校园通勤", "time", "travel"],
+    [
+      `${passed}/${checks.length}`,
+      "约束检查通过",
+      passed === checks.length ? "success" : "attention",
+      "checks",
+    ],
+  ];
+  resultSummary.hidden = false;
+  resultSummary.innerHTML = cards.map(([value, label, state, kind]) => `
+    <div class="result-summary-card ${state}" data-kind="${kind}">
+      <span class="result-summary-icon">${dashboardIcon(kind)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <span>${escapeHtml(label)}</span>
+    </div>
+  `).join("");
+}
+
+function renderResultDashboard(data) {
+  if (!data.plan) {
+    resultRequest.hidden = true;
+    resultDetails.hidden = true;
+    return;
+  }
+  const query = lastResultQuery || activeConversationQuery || "本次校园日程规划";
+  resultRequestText.textContent = query;
+  setInlineRequestEditing(false);
+  resultRequest.hidden = false;
+
+  const checks = data.constraint_checks || [];
+  const passed = checks.filter((item) => item.passed).length;
+  resultConstraintTotal.textContent = `${passed}/${checks.length} 通过`;
+  resultConstraints.innerHTML = checks.length
+    ? checks.map((check) => `
+      <div class="result-check-item ${check.passed ? "passed" : "failed"}">
+        <span>${check.passed ? dashboardIcon("feasibility") : "!"}</span>
+        <div>
+          <strong>${escapeHtml(check.label)}</strong>
+          <small>${escapeHtml(check.message)}</small>
+        </div>
+        <em>${check.passed ? "通过" : "注意"}</em>
+      </div>
+    `).join("")
+    : '<p class="result-detail-empty">暂无约束检查。</p>';
+
+  const freshness = data.data_freshness || {};
+  const isLive = (value) => value === "live_api";
+  const sourceEntries = [
+    {
+      icon: "map",
+      name: "高德地图",
+      purpose: isLive(freshness.route)
+        ? "实时路线与通勤计算"
+        : "已接入 · 当前使用校准路线",
+      state: isLive(freshness.route) ? "实时" : "演示",
+    },
+    {
+      icon: "building",
+      name: "场馆规则",
+      purpose: "校园开放时间校验",
+      state: "规则库",
+    },
+    {
+      icon: "cloud",
+      name: "高德天气",
+      purpose: isLive(freshness.weather)
+        ? "实时天气与降雨风险"
+        : "冻结天气场景校验",
+      state: isLive(freshness.weather) ? "实时" : "演示",
+    },
+    {
+      icon: "calendar",
+      name: "个人课表",
+      purpose: "课程与空闲时间确认",
+      state: "个人数据",
+    },
+  ];
+  resultSources.innerHTML = sourceEntries.map((entry) => {
+    return `
+      <div class="result-source-item">
+        <span class="result-source-icon">${dashboardIcon(entry.icon)}</span>
+        <div><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.purpose)}</small></div>
+        <em>${escapeHtml(entry.state)}</em>
+      </div>`;
+  }).join("");
+  resultDetails.hidden = false;
 }
 
 function renderTaskStatuses(statuses = [], locationNames = {}) {
@@ -1589,6 +1850,11 @@ function renderSuggestedActions(actions = []) {
 }
 
 function renderResponse(data) {
+  const shouldStayInDashboard = document.body.classList.contains(
+    "has-plan-result",
+  );
+  lastResultData = data;
+  if (resultActionStatus) resultActionStatus.hidden = true;
   if (data.current_plan_saved && data.plan?.status === "valid") {
     writeLocalSnapshot(planSnapshotKey, data.plan);
   }
@@ -1601,6 +1867,8 @@ function renderResponse(data) {
     : data.plan ? "结果未写入当前计划" : "尚未生成当前计划";
   saveState.classList.toggle("saved", data.current_plan_saved);
   renderTimeline(data);
+  renderResultSummary(data);
+  renderResultDashboard(data);
   renderTaskStatuses(data.task_statuses, data.location_names);
   renderExecution(data.execution_steps);
   renderConstraints(data.constraint_checks);
@@ -1609,6 +1877,18 @@ function renderResponse(data) {
   renderInsights(data.insights || []);
   renderSuggestedActions(data.suggested_actions);
   renderDebug(data);
+  if (data.plan) {
+    setResultMode(true);
+  } else if (shouldStayInDashboard) {
+    resultRequestText.textContent = lastResultQuery;
+    setInlineRequestEditing(false);
+    resultRequest.hidden = false;
+    resultDetails.hidden = true;
+    planTitle.textContent = "需要补充信息";
+    timeline.className = "timeline empty";
+    timeline.textContent = data.answer || "请补充需求后重新规划。";
+    setResultMode(true);
+  }
   if (data.current_plan_saved) {
     loadAgenda(agendaDate.value || shanghaiDateString()).catch((error) =>
       renderDebug(error),
@@ -1783,6 +2063,7 @@ function renderReminderSettings(payload) {
   reminderCourse.value = settings.course_lead_min;
   reminderWakeup.value = settings.early_course_wakeup_min;
   reminderMeeting.value = settings.meeting_lead_min;
+  reminderActivity.value = settings.activity_lead_min ?? 30;
   reminderStudy.value = settings.study_lead_min;
   reminderBedtime.value = settings.bedtime_lead_min;
   reminderBedtimeEnabled.checked = settings.bedtime_enabled !== false;
@@ -1844,6 +2125,7 @@ function reminderPayload(overrides = {}) {
     course_lead_min: Number(reminderCourse.value),
     early_course_wakeup_min: Number(reminderWakeup.value),
     meeting_lead_min: Number(reminderMeeting.value),
+    activity_lead_min: Number(reminderActivity.value),
     study_lead_min: Number(reminderStudy.value),
     exercise_lead_min:
       currentReminderSettings?.exercise_lead_min ?? 15,
@@ -2032,12 +2314,13 @@ function setLoading(active) {
   submitButton.textContent = active ? "正在认真规划…" : "发送给易程智策";
 }
 
-async function runRequest(url, options = {}) {
+async function runRequest(url, options = {}, transformData = null) {
   setLoading(true);
   try {
     const response = await fetch(url, options);
-    const data = await response.json();
+    let data = await response.json();
     if (!response.ok) throw data;
+    if (transformData) data = transformData(data);
     renderResponse(data);
     return data;
   } catch (error) {
@@ -2048,7 +2331,7 @@ async function runRequest(url, options = {}) {
   }
 }
 
-async function submitQuery(rawQuery) {
+async function submitQuery(rawQuery, { keepResultMode = false } = {}) {
   let query = rawQuery.trim();
   if (!query) {
     answer.textContent = "请先输入需要安排或调整的任务。";
@@ -2062,7 +2345,7 @@ async function submitQuery(rawQuery) {
       queryInput.value = action.query;
     }
   }
-  beginConversationTurn(query);
+  beginConversationTurn(query, { keepResultMode });
   queryInput.value = "";
   const data = await runRequest("/api/v1/chat", {
     method: "POST",
@@ -2075,8 +2358,133 @@ async function submitQuery(rawQuery) {
       client_context: clientContextSnapshot(),
     }),
   }).catch(() => null);
-  if (data) recordConversationHistory(query, data.answer);
+  if (data) recordConversationHistory(query, data.answer, data);
+  return data;
 }
+
+resultEdit?.addEventListener("click", () => {
+  setInlineRequestEditing(!resultRequest.classList.contains("is-editing"));
+});
+
+resultRerun?.addEventListener("click", async () => {
+  const query = resultRequest.classList.contains("is-editing")
+    ? resultRequestInput.value.trim()
+    : lastResultQuery;
+  if (!query || submitButton.disabled) {
+    if (!query) resultRequestInput.focus();
+    return;
+  }
+  resultEdit.disabled = true;
+  resultRerun.disabled = true;
+  resultRerun.textContent = "正在重新规划…";
+  try {
+    await submitQuery(query, { keepResultMode: true });
+  } finally {
+    resultEdit.disabled = false;
+    resultRerun.disabled = false;
+    setInlineRequestEditing(
+      resultRequest.classList.contains("is-editing"),
+    );
+  }
+});
+
+resultRequestInput?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+  event.preventDefault();
+  resultRerun.click();
+});
+
+const resultActionQueries = {
+  alternative: "在保留所有任务、时长、截止时间和硬约束的前提下，生成另一种可行方案。",
+  travel: "在不遗漏任务的前提下，优先优化通勤时间，并尽量避开拥堵时段。",
+  waiting: "保留任务时长和截止时间，尽量减少行程中的等待时间。",
+  order: "尝试调整任务顺序，并说明这样调整的原因。",
+};
+
+function planFingerprint(data) {
+  return (data?.plan?.items || []).map((item) => [
+    item.item_type,
+    item.task_id || item.title,
+    item.start_at,
+    item.end_at,
+  ].join("|")).join(";");
+}
+
+function planIdleMinutes(plan) {
+  const ordered = [...(plan?.items || [])].sort(
+    (left, right) => new Date(left.start_at) - new Date(right.start_at),
+  );
+  return ordered.slice(1).reduce((total, item, index) => {
+    const previous = ordered[index];
+    const gap = Math.round(
+      (new Date(item.start_at) - new Date(previous.end_at)) / 60000,
+    );
+    return total + Math.max(0, gap);
+  }, 0);
+}
+
+function renderResultActionOutcome(action, before, after) {
+  if (!resultActionStatus || !after?.plan) return;
+  const changed = planFingerprint(before) !== planFingerprint(after);
+  const beforeMetrics = before?.plan?.metrics || {};
+  const afterMetrics = after.plan.metrics || {};
+  const travelSaved = Math.max(
+    0,
+    (beforeMetrics.travel_minutes || 0) - (afterMetrics.travel_minutes || 0),
+  );
+  const waitingSaved = Math.max(
+    0,
+    planIdleMinutes(before?.plan) - planIdleMinutes(after.plan),
+  );
+  const messages = changed
+    ? {
+        alternative: "已生成不同的可行排法，任务与硬约束仍然保留。",
+        travel: travelSaved
+          ? `已重新规划，通勤时间减少 ${travelSaved} 分钟。`
+          : "已避开更拥堵的时段，并重新计算通勤衔接。",
+        waiting: waitingSaved
+          ? `已把任务排得更紧凑，等待时间减少 ${waitingSaved} 分钟。`
+          : "已重新组合任务顺序，减少不必要的中间空档。",
+        order: "已更换任务先后顺序，并重新校验时间和通勤约束。",
+      }
+    : {
+        alternative: "当前约束下没有找到同样安全的不同排法，已保留原方案。",
+        travel: "当前通勤已是可用路线中的较优结果，无需重复调整。",
+        waiting: "当前任务已经连续衔接，没有可进一步压缩的等待时间。",
+        order: "其他顺序会影响截止时间或通勤约束，因此保留当前顺序。",
+      };
+  resultActionStatus.textContent = messages[action] || "规划已重新校验。";
+  resultActionStatus.classList.toggle("is-unchanged", !changed);
+  resultActionStatus.hidden = false;
+}
+
+function currentBaseRequirement() {
+  const value = resultRequestText.textContent.trim() || lastResultQuery;
+  return value.split(/\n调整要求：/u, 1)[0].trim();
+}
+
+resultQuickActions?.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-result-action]");
+  if (!button || submitButton.disabled) return;
+  const adjustment = resultActionQueries[button.dataset.resultAction];
+  if (!adjustment) return;
+  const action = button.dataset.resultAction;
+  const before = lastResultData;
+  const currentRequirement = currentBaseRequirement();
+  const query = `${currentRequirement}\n调整要求：${adjustment}`;
+  resultQuickActions.querySelectorAll("button").forEach((item) => {
+    item.disabled = true;
+    item.classList.toggle("active", item === button);
+  });
+  try {
+    const data = await submitQuery(query, { keepResultMode: true });
+    if (data) renderResultActionOutcome(action, before, data);
+  } finally {
+    resultQuickActions.querySelectorAll("button").forEach((item) => {
+      item.disabled = false;
+    });
+  }
+});
 
 submitButton.addEventListener("click", async () => {
   await submitQuery(queryInput.value);
@@ -2099,6 +2507,11 @@ resetButton.addEventListener("click", async () => {
     queryInput.value = "";
     timeline.className = "timeline empty";
     timeline.textContent = "演示已复位，请从案例一开始。";
+    resultSummary.innerHTML = "";
+    resultSummary.hidden = true;
+    resultRequest.hidden = true;
+    resultDetails.hidden = true;
+    setResultMode(false);
     planTitle.textContent = "日程时间轴";
     taskStatuses.innerHTML = "";
     execution.className = "execution-list empty";
@@ -2126,25 +2539,62 @@ resetButton.addEventListener("click", async () => {
   }
 });
 
-async function loadDemos() {
+async function loadDemos({ autoRun = false } = {}) {
   const response = await fetch("/api/v1/demos");
   const demos = await response.json();
-  demoButtons.innerHTML = demos.map((demo) => `
-    <button data-demo="${escapeHtml(demo.id)}">${escapeHtml(demo.title)}</button>
+  const demoMarkup = demos.map((demo, index) => `
+    <button data-demo="${escapeHtml(demo.id)}">
+      <span class="demo-play" aria-hidden="true">▶</span>
+      <span>${escapeHtml(demo.title)}</span>
+      <small>案例${"一二三四"[index] || index + 1}</small>
+    </button>
   `).join("");
-  demoButtons.querySelectorAll("button").forEach((button) => {
+  demoButtons.innerHTML = demoMarkup;
+  sidebarDemoButtons.innerHTML = demoMarkup;
+  const bindDemoToCurrentVisitor = (data) => {
+    const bindPlan = (plan) => plan ? {
+      ...plan,
+      user_id: consoleUserId,
+      thread_id: consoleThreadId,
+    } : plan;
+    return {
+      ...data,
+      thread_id: consoleThreadId,
+      plan: bindPlan(data.plan),
+      previous_plan: bindPlan(data.previous_plan),
+    };
+  };
+  const runDemo = async (button, demo) => {
+    if (!demo || submitButton.disabled) return;
+    const keepResultMode = document.body.classList.contains("has-plan-result");
+    queryInput.value = demo.query;
+    modeSelect.value = "auto";
+    beginConversationTurn(demo.query, { keepResultMode });
+    document.querySelectorAll("[data-demo]")
+      .forEach((item) => item.classList.toggle(
+        "active",
+        item.dataset.demo === demo.id,
+      ));
+    const data = await runRequest(
+      `/api/v1/demos/${demo.id}/run`,
+      { method: "POST" },
+      bindDemoToCurrentVisitor,
+    ).catch(() => {});
+    if (data) recordConversationHistory(demo.query, data.answer, data);
+  };
+  const buttons = [
+    ...demoButtons.querySelectorAll("button"),
+    ...sidebarDemoButtons.querySelectorAll("button"),
+  ];
+  buttons.forEach((button) => {
     button.addEventListener("click", async () => {
       const demo = demos.find((item) => item.id === button.dataset.demo);
-      queryInput.value = demo.query;
-      modeSelect.value = "auto";
-      beginConversationTurn(demo.query);
-      demoButtons.querySelectorAll("button")
-        .forEach((item) => item.classList.toggle("active", item === button));
-      await runRequest(`/api/v1/demos/${demo.id}/run`, {
-        method: "POST",
-      }).catch(() => {});
+      await runDemo(button, demo);
     });
   });
+  if (autoRun && demos.length) {
+    await runDemo(demoButtons.querySelector("button"), demos[0]);
+  }
 }
 
 function parseWeeklyDate(rawDate) {
@@ -2979,11 +3429,11 @@ async function initializeApp() {
     campusSummary.textContent = "暂时无法读取校园设置。";
     renderDebug(error);
   });
-  loadDemos().catch(() => {
-    demoButtons.textContent = "案例加载失败";
-  });
   const accessGranted = await initializeAccess();
   if (!accessGranted) return;
+  await loadDemos({ autoRun: true }).catch(() => {
+    demoButtons.textContent = "案例加载失败";
+  });
   agendaDate.value = shanghaiDateString();
   scheduleCursorDate = agendaDate.value;
   weeklyStart.value = nextWeeklyMonday();

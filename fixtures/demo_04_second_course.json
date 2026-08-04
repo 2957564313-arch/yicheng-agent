@@ -1,0 +1,18 @@
+{
+  "id": "demo_04_second_course",
+  "title": "案例四 · 二课提醒",
+  "description": "识别第二课堂报名截止与固定活动时间，生成报名和活动开始提醒。",
+  "now": "2026-07-24T13:15:00+08:00",
+  "query": "今天17点前完成二课报名，19:00到20:30在第六教学楼参加第二课堂讲座，请提前提醒我。",
+  "mode": "offline",
+  "user_id": "demo_user_second_course",
+  "thread_id": "demo_second_course",
+  "initial_context": {
+    "current_location_id": "library"
+  },
+  "expected": {
+    "task_count": 2,
+    "hard_violation_count": 0,
+    "final_end": "2026-07-24T20:30:00+08:00"
+  }
+}

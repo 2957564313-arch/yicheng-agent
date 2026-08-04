@@ -8,9 +8,9 @@
       content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
     <title>易程智策 · 我的校园日程</title>
-    <link rel="stylesheet" href="/styles.css?v=20260803-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260804-5" />
   </head>
-  <body>
+  <body class="has-plan-result">
     <section id="access-gate" class="access-gate" hidden>
       <form id="login-form" class="access-card">
         <div class="brand-mark" aria-hidden="true">易</div>
@@ -75,7 +75,7 @@
       <section class="demo-strip" aria-label="比赛演示案例">
         <div>
           <p class="eyebrow">一键复现</p>
-          <strong>三个连续演示场景</strong>
+          <strong>四个重点演示场景</strong>
         </div>
         <div id="demo-buttons" class="demo-buttons"></div>
         <button id="reset" class="ghost danger">复位演示</button>
@@ -93,8 +93,12 @@
               <button id="history-close" class="icon-button mobile-only" type="button" aria-label="关闭历史">×</button>
             </div>
           </div>
+          <section class="sidebar-demos" aria-label="场景演示">
+            <h2>场景演示</h2>
+            <div id="sidebar-demo-buttons" class="sidebar-demo-buttons"></div>
+          </section>
           <nav class="workspace-nav" aria-label="工作区页面">
-            <p class="workspace-nav-label">工作区</p>
+            <p class="workspace-nav-label">我的空间</p>
             <button type="button" class="workspace-nav-button active" data-view="chat">
               <span class="nav-icon">⌁</span><span>对话</span><small>随时规划与调整</small>
             </button>
@@ -521,6 +525,11 @@
                   <span>分钟提醒</span>
                 </label>
                 <label>
+                  二课活动前
+                  <input id="reminder-activity" type="number" min="5" max="240" />
+                  <span>分钟提醒</span>
+                </label>
+                <label>
                   自习前
                   <input id="reminder-study" type="number" min="0" max="120" />
                   <span>分钟提醒</span>
@@ -605,13 +614,69 @@
             <article class="panel plan-panel">
               <div class="panel-heading">
                 <div>
-                  <p class="step">可视化辅助</p>
+                  <p class="step">规划结果</p>
                   <h2 id="plan-title">日程时间轴</h2>
                 </div>
               </div>
-              <div id="timeline" class="timeline empty">
-                生成后，这里会把任务和通勤转换成时间轴。
+              <div id="result-request" class="result-request" hidden>
+                <div>
+                  <span>本次需求</span>
+                  <strong id="result-request-text"></strong>
+                  <textarea
+                    id="result-request-input"
+                    rows="2"
+                    aria-label="修改本次需求"
+                    hidden
+                  ></textarea>
+                </div>
+                <div class="result-request-actions">
+                  <button id="result-edit" type="button" class="ghost">修改需求</button>
+                  <button id="result-rerun" type="button" class="primary">重新规划</button>
+                </div>
               </div>
+              <div id="result-summary" class="result-summary" hidden></div>
+              <div class="result-dashboard-grid">
+                <section class="result-schedule" aria-labelledby="result-schedule-title">
+                  <div class="result-section-heading">
+                    <div>
+                      <h3 id="result-schedule-title">今天的可执行计划</h3>
+                      <p>已综合任务顺序、校园通勤与时间约束</p>
+                    </div>
+                  </div>
+                  <div id="result-change-summary" class="result-change-summary" hidden></div>
+                  <div id="timeline" class="timeline empty">
+                    正在加载默认规划，请稍候…
+                  </div>
+                </section>
+                <aside id="result-details" class="result-details" hidden>
+                  <section class="result-detail-card">
+                    <div class="result-detail-heading">
+                      <h3>约束检查</h3>
+                      <span id="result-constraint-total"></span>
+                    </div>
+                    <div id="result-constraints" class="result-check-list"></div>
+                  </section>
+                  <details class="result-detail-card result-source-card" open>
+                    <summary>规划依据与数据来源</summary>
+                    <div id="result-sources" class="result-sources"></div>
+                  </details>
+                </aside>
+              </div>
+              <p id="result-action-status" class="result-action-status" hidden></p>
+              <nav id="result-quick-actions" class="result-quick-actions" aria-label="快速调整计划">
+                <button type="button" class="active" data-result-action="alternative">
+                  <span aria-hidden="true">✦</span>生成另一种可行方案
+                </button>
+                <button type="button" data-result-action="travel">
+                  <span aria-hidden="true">⌁</span>优化通勤时间
+                </button>
+                <button type="button" data-result-action="waiting">
+                  <span aria-hidden="true">◷</span>减少等待时间
+                </button>
+                <button type="button" data-result-action="order">
+                  <span aria-hidden="true">⇅</span>调整任务顺序
+                </button>
+              </nav>
               <div id="task-statuses" class="task-statuses"></div>
             </article>
 
@@ -680,6 +745,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260803-1" defer></script>
+    <script src="/app.js?v=20260804-10" defer></script>
   </body>
 </html>
