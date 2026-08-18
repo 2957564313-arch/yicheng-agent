@@ -81,6 +81,8 @@ class ChatResponse(BaseModel):
     request_id: str
     trace_id: str
     thread_id: str
+    user_message_id: str | None = None
+    assistant_message_id: str | None = None
     status: str
     answer: str
     plan: Plan | None = None

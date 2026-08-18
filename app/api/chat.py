@@ -771,7 +771,7 @@ async def execute_chat(
         thread_id=thread_id,
         now=now,
     )
-    container.plans.add_message(
+    user_message_id = container.plans.add_message(
         thread_id=thread_id,
         role="user",
         content=payload.query,
@@ -932,8 +932,9 @@ async def execute_chat(
                 plan,
                 parent_plan_id=persisted_parent_id,
                 agenda_published=payload.publish_to_agenda,
+                source_message_id=user_message_id,
             )
-        container.plans.add_message(
+        assistant_message_id = container.plans.add_message(
             thread_id=thread_id,
             role="assistant",
             content=result["final_answer"],
@@ -978,6 +979,8 @@ async def execute_chat(
             request_id=request_id,
             trace_id=trace_id,
             thread_id=thread_id,
+            user_message_id=user_message_id,
+            assistant_message_id=assistant_message_id,
             status=result["status"],
             answer=result["final_answer"],
             plan=plan,

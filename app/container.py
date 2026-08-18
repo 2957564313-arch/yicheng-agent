@@ -20,6 +20,8 @@ from app.providers.route_static import StaticRouteProvider
 from app.providers.weather_static import StaticWeatherProvider
 from app.repositories.academic_calendar import AcademicCalendarRepository
 from app.repositories.database import Database
+from app.repositories.conversations import ConversationRepository
+from app.repositories.external_events import ExternalEventRepository
 from app.repositories.memories import MemoryRepository
 from app.repositories.plans import PlanRepository
 from app.repositories.reminders import ReminderSettingsRepository
@@ -43,7 +45,9 @@ class AppContainer:
     settings: Settings
     campus_profile: dict
     database: Database
+    conversations: ConversationRepository
     plans: PlanRepository
+    external_events: ExternalEventRepository
     reminders: ReminderSettingsRepository
     memories: MemoryRepository
     timetables: TimetableRepository
@@ -105,6 +109,7 @@ def _load_class_periods(
 def build_container(settings: Settings) -> AppContainer:
     database = Database(settings.app_database_path)
     database.initialize()
+    conversations = ConversationRepository(database)
     locations = LocationRepository(settings.app_data_dir / "locations.json")
     campus_profile = _load_campus_profile(settings.app_data_dir)
     amap_profile = _profile_amap_settings(campus_profile)
@@ -138,6 +143,7 @@ def build_container(settings: Settings) -> AppContainer:
     )
     memories = MemoryRepository(database)
     plans = PlanRepository(database)
+    external_events = ExternalEventRepository(database)
     reminders = ReminderSettingsRepository(database)
     class_periods = _load_class_periods(
         settings.app_data_dir / "class_periods.json"
@@ -176,6 +182,7 @@ def build_container(settings: Settings) -> AppContainer:
     )
     agenda = AgendaService(
         plans=plans,
+        external_events=external_events,
         timetables=timetables,
         academic_calendar=academic_calendar,
         memories=memories,
@@ -220,7 +227,9 @@ def build_container(settings: Settings) -> AppContainer:
         settings=settings,
         campus_profile=campus_profile,
         database=database,
+        conversations=conversations,
         plans=plans,
+        external_events=external_events,
         reminders=reminders,
         memories=memories,
         timetables=timetables,

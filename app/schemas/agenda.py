@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 
-AgendaSource = Literal["course", "plan", "weekly", "manual"]
+AgendaSource = Literal["course", "plan", "weekly", "manual", "external"]
 AgendaKind = Literal[
     "course",
     "meeting",

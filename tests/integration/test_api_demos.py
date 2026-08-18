@@ -694,7 +694,7 @@ def test_student_handbook_questions_keep_the_direct_rule_in_answer(tmp_path):
             assert response.status_code == 200, response.text
             payload = response.json()
             assert payload["status"] == "completed", (
-                f"{case['query']=}; answer={payload['answer']}"
+                f"{query=}; answer={payload['answer']}"
             )
             assert payload["plan"] is None
             for expected in expected_markers:

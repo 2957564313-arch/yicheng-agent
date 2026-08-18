@@ -83,7 +83,7 @@ def test_fresh_homepage_opens_with_a_result_showcase() -> None:
         'await runDemo(demoButtons.querySelector("button"), demos[0]);'
         in javascript
     )
-    assert "await loadDemos({ autoRun: true })" in javascript
+    assert "autoRun: !requestedThreadId && serverConversationThreads.length === 0" in javascript
     assert "homepageModeKey" not in javascript
 
 

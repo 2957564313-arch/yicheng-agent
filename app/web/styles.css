@@ -1702,6 +1702,7 @@ footer {
   background: transparent;
   text-align: left;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .history-item:hover,
@@ -1723,6 +1724,17 @@ footer {
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.history-item.history-branch {
+  width: calc(100% - 12px);
+  margin-left: 12px;
+  border-left: 2px solid #c7d2fe;
+}
+
+.history-item.history-branch strong::before {
+  color: #6366f1;
+  content: "↳ ";
 }
 
 .history-empty {
@@ -2042,6 +2054,13 @@ h2 { font-family: "PingFang SC", "Noto Sans SC", system-ui, sans-serif; }
 .user-message .message-role { text-align: right; }
 .message-content { padding: 13px 15px; border: 1px solid #e7e8f2; border-radius: 5px 16px 16px 16px; background: #fff; box-shadow: 0 6px 18px rgba(30,41,59,.04); line-height: 1.72; overflow-wrap: anywhere; white-space: pre-wrap; }
 .user-message .message-content { border-color: #dfe2ff; border-radius: 16px 5px 16px 16px; background: #eef2ff; }
+.message-branch-action { display: block; margin: 5px 4px 0 auto; padding: 3px 7px; border: 0; color: #6b7280; background: transparent; font-size: 10px; }
+.message-branch-action:hover, .message-branch-action:focus-visible { color: #4338ca; background: #eef2ff; }
+.message-branch-editor { display: grid; gap: 8px; min-width: min(520px, 72vw); margin-top: 8px; padding: 12px; border: 1px solid #c7d2fe; border-radius: 13px; background: #fff; box-shadow: 0 10px 25px rgba(30,41,59,.08); }
+.message-branch-editor label { color: #4b5563; font-size: 11px; font-weight: 700; }
+.message-branch-editor textarea { width: 100%; min-height: 86px; padding: 10px; border: 1px solid #dfe2ed; border-radius: 10px; resize: vertical; font: inherit; line-height: 1.55; }
+.message-branch-editor div { display: flex; justify-content: flex-end; gap: 7px; }
+.message-branch-editor button { padding: 7px 11px; font-size: 11px; }
 .content-column .tool-collapsible:not(.is-open) > *:not(.panel-heading) { display: block; }
 .content-column .tool-collapsible:not(.is-open) { padding: 20px; }
 .content-column .tool-collapsible:not(.is-open) .panel-heading { margin-bottom: 16px; cursor: default; }
@@ -2212,6 +2231,7 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
     max-width: 100%;
   }
   .demo-strip .ghost { width: 100%; }
+  .message-branch-editor { min-width: 0; width: 100%; }
 }
 
 /* Desktop keeps one quiet navigation rail and one focused work surface. */
@@ -2415,7 +2435,7 @@ body.has-plan-result .composer-column,
 body.has-plan-result .conversation-stream,
 body.has-plan-result .assistant-panel,
 body.has-plan-result .adjustment-panel { display: none !important; }
-body.has-plan-result .history-heading { display: none !important; }
+body.has-plan-result .history-heading { display: flex; }
 body.has-plan-result .sidebar-demos { display: block; }
 body.has-plan-result .workspace-nav { margin-top: 10px; }
 body.has-plan-result .workspace-nav-label { color: #273044; font-size: 12px; letter-spacing: 0; text-transform: none; }

@@ -91,9 +91,14 @@ CREATE TABLE IF NOT EXISTS threads (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title TEXT,
+    parent_thread_id TEXT REFERENCES threads(id) ON DELETE SET NULL,
+    forked_from_message_id TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_threads_user_updated
+ON threads(user_id, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
@@ -106,6 +111,29 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_thread_created
 ON messages(thread_id, created_at);
 
+CREATE TABLE IF NOT EXISTS external_events (
+    id TEXT PRIMARY KEY,
+    source_system TEXT NOT NULL,
+    external_event_id TEXT NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    start_at TEXT NOT NULL,
+    end_at TEXT NOT NULL,
+    location_name TEXT,
+    kind TEXT NOT NULL DEFAULT 'activity',
+    notes TEXT,
+    source_url TEXT,
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'cancelled')),
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(source_system, external_event_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_external_events_user_time
+ON external_events(user_id, status, start_at, end_at);
+
 CREATE TABLE IF NOT EXISTS plans (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id),
@@ -117,6 +145,7 @@ CREATE TABLE IF NOT EXISTS plans (
     plan_json TEXT NOT NULL,
     metrics_json TEXT NOT NULL,
     agenda_published INTEGER NOT NULL DEFAULT 0 CHECK (agenda_published IN (0, 1)),
+    source_message_id TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -325,6 +354,27 @@ class Database:
                 connection.execute(
                     "UPDATE plans SET agenda_published = 1"
                 )
+            if "source_message_id" not in columns:
+                connection.execute(
+                    "ALTER TABLE plans ADD COLUMN source_message_id TEXT"
+                )
+            thread_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(threads)")
+            }
+            if "parent_thread_id" not in thread_columns:
+                connection.execute(
+                    "ALTER TABLE threads ADD COLUMN parent_thread_id TEXT "
+                    "REFERENCES threads(id) ON DELETE SET NULL"
+                )
+            if "forked_from_message_id" not in thread_columns:
+                connection.execute(
+                    "ALTER TABLE threads ADD COLUMN forked_from_message_id TEXT"
+                )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_threads_parent "
+                "ON threads(parent_thread_id)"
+            )
         finally:
             connection.close()
 

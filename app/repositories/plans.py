@@ -58,6 +58,24 @@ class PlanRepository:
                     created_at.isoformat(),
                 ),
             )
+            connection.execute(
+                """
+                UPDATE threads
+                SET updated_at = ?,
+                    title = CASE
+                        WHEN ? = 'user' AND (title IS NULL OR title = '')
+                        THEN substr(?, 1, 60)
+                        ELSE title
+                    END
+                WHERE id = ?
+                """,
+                (
+                    created_at.isoformat(),
+                    role,
+                    content.strip(),
+                    thread_id,
+                ),
+            )
         return message_id
 
     def save(
@@ -66,6 +84,7 @@ class PlanRepository:
         parent_plan_id: str | None = None,
         *,
         agenda_published: bool = False,
+        source_message_id: str | None = None,
     ) -> None:
         with self.database.transaction() as connection:
             self._insert_on_connection(
@@ -73,6 +92,7 @@ class PlanRepository:
                 plan=plan,
                 parent_plan_id=parent_plan_id,
                 agenda_published=agenda_published,
+                source_message_id=source_message_id,
             )
 
     def set_agenda_published(
@@ -295,15 +315,16 @@ class PlanRepository:
         plan: Plan,
         parent_plan_id: str | None = None,
         agenda_published: bool = False,
+        source_message_id: str | None = None,
     ) -> None:
         connection.execute(
             """
             INSERT INTO plans(
                 id, user_id, thread_id, parent_plan_id, plan_date,
                 status, version, plan_json, metrics_json,
-                agenda_published, created_at
+                agenda_published, source_message_id, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 plan.id,
@@ -316,6 +337,7 @@ class PlanRepository:
                 plan.model_dump_json(),
                 plan.metrics.model_dump_json(),
                 int(agenda_published),
+                source_message_id,
                 plan.created_at.isoformat(),
             ),
         )

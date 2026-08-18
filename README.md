@@ -19,6 +19,18 @@
 - 在线服务：阿里云大模型接口、高德地图路线和天气接口
 - 可靠性：在线接口失败时使用确定性规划和本地数据兜底
 - 页面：左侧工作区导航；对话、课表、偏好、备份、日/周/月日程均为独立入口
+- 接入：预留二课等校园系统日程接口，支持鉴权、幂等更新和取消
+- 对话：历史记录保存在服务端，可修改旧提问并保留为新分支
+
+## 校园系统接入
+
+接口使用请求头 `X-Yicheng-Integration-Key`，密钥只放在服务器环境变量 `APP_INTEGRATION_API_KEY` 中。活动以“来源系统 + 外部活动 ID + 用户 ID”为唯一键，重复推送不会生成重复日程。
+
+- `PUT /api/v1/integrations/events`：新增或更新活动
+- `DELETE /api/v1/integrations/{source_system}/events/{external_event_id}?user_id=...`：取消活动
+- `GET /api/v1/integrations/capabilities`：查看接口能力
+
+时间必须带时区。接口返回的 `operation` 会明确标注 `created`、`updated`、`unchanged` 或 `cancelled`。
 
 ## 本地运行（D 盘）
 

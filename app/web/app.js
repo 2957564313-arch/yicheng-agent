@@ -156,10 +156,15 @@ const consoleUserId = getOrCreateLocalIdentity(
   "yicheng_user_id",
   "visitor",
 );
-const consoleThreadId = getOrCreateLocalIdentity(
+let consoleThreadId = getOrCreateLocalIdentity(
   "yicheng_thread_id",
   "thread",
 );
+const requestedThreadId = new URLSearchParams(location.search).get("thread_id");
+if (/^[A-Za-z0-9_-]{1,128}$/.test(requestedThreadId || "")) {
+  consoleThreadId = requestedThreadId;
+  localStorage.setItem("yicheng_thread_id", requestedThreadId);
+}
 let lastSuggestedActions = [];
 let lastDebugPayload = null;
 let serverClockBaseMs = null;
@@ -181,6 +186,7 @@ const shownReminderKey = "yicheng_shown_reminders";
 const reminderSettingsSnapshotKey = "yicheng_reminder_settings_snapshot";
 let currentReminderSettings = null;
 let reminderPollTimer = null;
+let serverConversationThreads = [];
 
 function readLocalSnapshot(key, fallback) {
   try {
@@ -218,6 +224,16 @@ function dashboardIcon(name, className = "") {
 
 function renderConversationHistory() {
   if (!historyList || !historyEmpty) return;
+  if (serverConversationThreads.length) {
+    historyEmpty.hidden = true;
+    historyList.innerHTML = serverConversationThreads.map((item) => `
+      <a class="history-item ${item.parent_thread_id ? "history-branch" : ""} ${item.id === consoleThreadId ? "active" : ""}" href="/?thread_id=${encodeURIComponent(item.id)}" data-thread-id="${escapeHtml(item.id)}" aria-label="打开对话：${escapeHtml(item.title || "未命名对话")}">
+        <strong>${escapeHtml(item.title || "未命名对话")}</strong>
+        <small>${item.parent_thread_id ? "分支 · " : ""}${escapeHtml(item.last_message || `${item.message_count || 0} 条消息`)}</small>
+      </a>
+    `).join("");
+    return;
+  }
   const items = readLocalSnapshot(conversationHistoryKey, [])
     .filter((item) => item && item.query)
     .slice(0, 24);
@@ -234,8 +250,13 @@ function recordConversationHistory(query, answerText, responseData = null) {
   const normalized = String(query || "").trim();
   if (!normalized) return;
   const current = readLocalSnapshot(conversationHistoryKey, [])
-    .filter((item) => item && item.query && item.query !== normalized);
+    .filter((item) => item && item.query && !(
+      item.query === normalized && item.thread_id === consoleThreadId
+    ));
   current.unshift({
+    thread_id: responseData?.thread_id || consoleThreadId,
+    user_message_id: responseData?.user_message_id || null,
+    assistant_message_id: responseData?.assistant_message_id || null,
     query: normalized,
     answer: String(answerText || "").replace(/\s+/g, " ").slice(0, 120),
     response: responseData || null,
@@ -245,20 +266,80 @@ function recordConversationHistory(query, answerText, responseData = null) {
   renderConversationHistory();
 }
 
-function appendConversationMessage(role, text) {
+function appendConversationMessage(role, text, { messageId = "" } = {}) {
   if (!conversationStream || !String(text || "").trim()) return;
   const isUser = role === "user";
   conversationStream.hidden = false;
   conversationStream.insertAdjacentHTML(
     "beforeend",
-    `<article class="conversation-message ${isUser ? "user-message" : "assistant-message"}">
+    `<article class="conversation-message ${isUser ? "user-message" : "assistant-message"}" ${messageId ? `data-message-id="${escapeHtml(messageId)}"` : ""}>
       <span class="message-avatar" aria-hidden="true">${isUser ? "你" : "易"}</span>
       <div class="message-body">
         <p class="message-role">${isUser ? "你" : "易程智策"}</p>
         <div class="message-content">${escapeHtml(String(text))}</div>
+        ${isUser && messageId ? `<button class="message-branch-action" type="button" data-branch-message="${escapeHtml(messageId)}">修改并新建分支</button>` : ""}
       </div>
     </article>`,
   );
+}
+
+function setConsoleThreadId(threadId) {
+  if (!threadId) return;
+  consoleThreadId = threadId;
+  localStorage.setItem("yicheng_thread_id", threadId);
+}
+
+function attachMessageIdsToCurrentTurn(data) {
+  const userMessage = [...(conversationStream?.querySelectorAll(".user-message") || [])]
+    .findLast((item) => !item.dataset.messageId);
+  if (userMessage && data?.user_message_id) {
+    userMessage.dataset.messageId = data.user_message_id;
+    userMessage.querySelector(".message-body")?.insertAdjacentHTML(
+      "beforeend",
+      `<button class="message-branch-action" type="button" data-branch-message="${escapeHtml(data.user_message_id)}">修改并新建分支</button>`,
+    );
+  }
+}
+
+async function loadConversationThreads() {
+  const response = await fetch(`/api/v1/users/${consoleUserId}/threads`);
+  const data = await response.json();
+  if (!response.ok) throw data;
+  serverConversationThreads = data;
+  renderConversationHistory();
+}
+
+async function openConversationThread(threadId) {
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/threads/${encodeURIComponent(threadId)}`,
+  );
+  const data = await response.json();
+  if (!response.ok) throw data;
+  setConsoleThreadId(threadId);
+  history.replaceState(
+    null,
+    "",
+    `/?thread_id=${encodeURIComponent(threadId)}`,
+  );
+  clearConversationStream();
+  const messages = data.messages || [];
+  const finalAssistant = messages.at(-1)?.role === "assistant"
+    ? messages.at(-1)
+    : null;
+  messages.slice(0, finalAssistant ? -1 : undefined).forEach((item) => {
+    appendConversationMessage(item.role, item.content, { messageId: item.id });
+  });
+  const finalUser = [...messages].reverse().find((item) => item.role === "user");
+  activeConversationQuery = finalUser?.content || "";
+  activeConversationAnswer = finalAssistant?.content || "";
+  lastResultQuery = activeConversationQuery;
+  queryInput.value = "";
+  setResultMode(false);
+  answer.textContent = finalAssistant?.content || "这条分支还没有回复。";
+  answer.classList.toggle("muted", !finalAssistant);
+  freshness.innerHTML = '<span class="source-tag">服务端对话记录</span>';
+  renderConversationHistory();
+  closeDrawers();
 }
 
 function clearConversationStream() {
@@ -500,7 +581,13 @@ function initializeWorkspaceNavigation() {
   drawerBackdrop?.addEventListener("click", closeDrawers);
 
   newConversation?.addEventListener("click", () => {
+    setConsoleThreadId(`thread_${crypto.randomUUID().replaceAll("-", "")}`);
+    history.replaceState(null, "", "/");
     activePlanningNowOverride = null;
+    lastResultData = null;
+    lastResultQuery = "";
+    localStorage.removeItem(planSnapshotKey);
+    localStorage.removeItem(planPublishedKey);
     setActiveWorkspaceView("chat");
     setResultMode(false);
     clearConversationStream();
@@ -514,6 +601,7 @@ function initializeWorkspaceNavigation() {
   });
 
   historyList?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-thread-id]")) return;
     const button = event.target.closest("[data-history-index]");
     if (!button) return;
     const items = readLocalSnapshot(conversationHistoryKey, [])
@@ -522,6 +610,7 @@ function initializeWorkspaceNavigation() {
     const item = items[Number(button.dataset.historyIndex)];
     if (!item) return;
     setActiveWorkspaceView("chat");
+    if (item.thread_id) setConsoleThreadId(item.thread_id);
     queryInput.value = item.query;
     restoreConversationSnapshot(item.query, item.answer);
     lastResultQuery = item.query;
@@ -540,6 +629,84 @@ function initializeWorkspaceNavigation() {
     freshness.innerHTML = '<span class="source-tag">本机历史摘要</span>';
     closeDrawers();
     assistantPanel?.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+
+  conversationStream?.addEventListener("click", (event) => {
+    const branchButton = event.target.closest("[data-branch-message]");
+    if (!branchButton) return;
+    const message = branchButton.closest(".conversation-message");
+    if (!message) return;
+    const existing = message.querySelector(".message-branch-editor");
+    if (existing) {
+      existing.remove();
+      branchButton.hidden = false;
+      return;
+    }
+    branchButton.hidden = true;
+    const original = message.querySelector(".message-content")?.textContent || "";
+    message.querySelector(".message-body")?.insertAdjacentHTML(
+      "beforeend",
+      `<form class="message-branch-editor">
+        <label>修改这条提问并从这里开始新分支</label>
+        <textarea maxlength="2000" required>${escapeHtml(original)}</textarea>
+        <div><button type="button" class="ghost" data-branch-cancel>取消</button><button type="submit" class="primary">创建分支</button></div>
+      </form>`,
+    );
+    message.querySelector(".message-branch-editor textarea")?.focus();
+  });
+
+  conversationStream?.addEventListener("click", (event) => {
+    const cancel = event.target.closest("[data-branch-cancel]");
+    if (!cancel) return;
+    const message = cancel.closest(".conversation-message");
+    message?.querySelector(".message-branch-editor")?.remove();
+    const action = message?.querySelector(".message-branch-action");
+    if (action) action.hidden = false;
+  });
+
+  conversationStream?.addEventListener("submit", async (event) => {
+    const form = event.target.closest(".message-branch-editor");
+    if (!form) return;
+    event.preventDefault();
+    const message = form.closest(".conversation-message");
+    const query = form.querySelector("textarea")?.value.trim();
+    const fromMessageId = message?.dataset.messageId;
+    if (!query || !fromMessageId || submitButton.disabled) return;
+    const submit = form.querySelector('[type="submit"]');
+    submit.disabled = true;
+    submit.textContent = "正在创建…";
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `/api/v1/users/${consoleUserId}/threads/${encodeURIComponent(consoleThreadId)}/fork`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from_message_id: fromMessageId,
+            query,
+            mode: modeSelect.value,
+            publish_to_agenda: false,
+            client_context: clientContextSnapshot(),
+          }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) throw data;
+      setConsoleThreadId(data.branch.id);
+      recordConversationHistory(query, data.response.answer, data.response);
+      await loadConversationThreads();
+      await openConversationThread(data.branch.id);
+      renderResponse(data.response);
+      saveState.textContent = "已保留原对话，并创建新的分支";
+      saveState.classList.add("saved");
+    } catch (error) {
+      renderError(error);
+      submit.disabled = false;
+      submit.textContent = "创建分支";
+    } finally {
+      setLoading(false);
+    }
   });
 
   viewButtons.forEach((button) => {
@@ -2407,7 +2574,11 @@ async function submitQuery(rawQuery, { keepResultMode = false } = {}) {
       client_context: clientContext,
     }),
   }).catch(() => null);
-  if (data) recordConversationHistory(query, data.answer, data);
+  if (data) {
+    attachMessageIdsToCurrentTurn(data);
+    recordConversationHistory(query, data.answer, data);
+    loadConversationThreads().catch(() => {});
+  }
   return data;
 }
 
@@ -3513,7 +3684,20 @@ async function initializeApp() {
   });
   const accessGranted = await initializeAccess();
   if (!accessGranted) return;
-  await loadDemos({ autoRun: true }).catch(() => {
+  await loadConversationThreads().catch(() => {
+    serverConversationThreads = [];
+    renderConversationHistory();
+  });
+  if (requestedThreadId && serverConversationThreads.some(
+    (item) => item.id === requestedThreadId,
+  )) {
+    await openConversationThread(requestedThreadId).catch((error) => {
+      renderError(error);
+    });
+  }
+  await loadDemos({
+    autoRun: !requestedThreadId && serverConversationThreads.length === 0,
+  }).catch(() => {
     demoButtons.textContent = "案例加载失败";
   });
   agendaDate.value = shanghaiDateString();

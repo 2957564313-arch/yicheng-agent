@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     app_test_password: str = Field(default="", repr=False)
     app_auth_secret: str = Field(default="", repr=False)
     app_access_hours: int = Field(default=8, ge=1, le=72)
+    app_integration_api_key: str = Field(default="", repr=False)
     # Keep API documentation private on the public site unless explicitly
     # enabled for local development or an authenticated maintenance window.
     app_docs_enabled: bool = False
