@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from app.nodes.understand import (
     _apply_timetable_relative_constraints,
     _can_apply_rule_guard,
+    _drop_journey_origin_marker_tasks,
     _merge_llm_with_rule_constraints,
 )
 from app.schemas.common import Intent, TaskFlexibility
@@ -97,6 +98,45 @@ def test_open_ended_request_still_allows_a_real_clarification():
         llm_result=llm_result,
         rule_result=rule_result,
     )
+
+
+def test_departure_point_is_not_kept_as_a_model_task():
+    tasks = [
+        Task(
+            id="origin_marker",
+            title="从第七教学楼出发",
+            date=NOW.date(),
+            duration_min=5,
+            location_raw="第七教学楼",
+        ),
+        Task(
+            id="study",
+            title="图书馆学习",
+            date=NOW.date(),
+            duration_min=90,
+            location_raw="图书馆",
+            depends_on=["origin_marker"],
+        ),
+    ]
+
+    filtered = _drop_journey_origin_marker_tasks(tasks, "第七教学楼")
+
+    assert [task.id for task in filtered] == ["study"]
+    assert filtered[0].depends_on == []
+
+
+def test_real_origin_task_with_an_action_is_preserved():
+    task = Task(
+        id="pickup",
+        title="从第七教学楼取资料后出发",
+        date=NOW.date(),
+        duration_min=10,
+        location_raw="第七教学楼",
+    )
+
+    assert _drop_journey_origin_marker_tasks([task], "第七教学楼") == [
+        task
+    ]
 
 
 def test_after_class_constraint_only_applies_to_its_clause():

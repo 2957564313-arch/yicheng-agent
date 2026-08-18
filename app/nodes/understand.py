@@ -106,6 +106,15 @@ def make_understand_node(container: AppContainer):
             if result.intent.value == "plan"
             else None
         )
+        if initial_location_raw:
+            result = result.model_copy(
+                update={
+                    "tasks": _drop_journey_origin_marker_tasks(
+                        result.tasks,
+                        initial_location_raw,
+                    )
+                }
+            )
         initial_departure_at = (
             container.parser.journey_start_from_query(
                 state["query"],
@@ -863,6 +872,37 @@ def _merge_llm_with_rule_constraints(
             ),
         }
     )
+
+
+def _drop_journey_origin_marker_tasks(
+    tasks: list[Task],
+    origin: str,
+) -> list[Task]:
+    """Keep a stated departure point as context, never as a fake task."""
+    origin_pattern = re.escape(origin.strip())
+    marker_pattern = re.compile(
+        rf"^\s*(?:从|自)?\s*{origin_pattern}\s*(?:出发|启程)\s*$"
+    )
+    removed_ids = {
+        task.id
+        for task in tasks
+        if task.duration_min <= 15 and marker_pattern.fullmatch(task.title)
+    }
+    if not removed_ids:
+        return tasks
+    return [
+        task.model_copy(
+            update={
+                "depends_on": [
+                    task_id
+                    for task_id in task.depends_on
+                    if task_id not in removed_ids
+                ]
+            }
+        )
+        for task in tasks
+        if task.id not in removed_ids
+    ]
 
 
 def _best_rule_task_match(
