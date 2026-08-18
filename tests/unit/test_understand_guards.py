@@ -8,6 +8,7 @@ from app.nodes.understand import (
     _can_apply_rule_guard,
     _drop_journey_origin_marker_tasks,
     _merge_llm_with_rule_constraints,
+    _release_destination_from_departure_anchor,
 )
 from app.schemas.common import Intent, TaskFlexibility
 from app.schemas.task import Task
@@ -137,6 +138,49 @@ def test_real_origin_task_with_an_action_is_preserved():
     assert _drop_journey_origin_marker_tasks([task], "第七教学楼") == [
         task
     ]
+
+
+def test_departure_time_is_not_a_fixed_start_for_destination_task():
+    departure_at = NOW.replace(hour=16, minute=0)
+    task = Task(
+        id="study",
+        title="图书馆学习",
+        date=NOW.date(),
+        duration_min=90,
+        location_raw="图书馆",
+        fixed_start=departure_at,
+        fixed_end=departure_at + timedelta(minutes=90),
+        flexibility=TaskFlexibility.FIXED,
+        tags=["model_interpreted"],
+    )
+
+    normalized = _release_destination_from_departure_anchor(
+        task,
+        departure_at,
+    )
+
+    assert normalized.fixed_start is None
+    assert normalized.fixed_end is None
+    assert normalized.flexibility == TaskFlexibility.MOVABLE
+
+
+def test_hard_fixed_task_at_departure_time_is_preserved():
+    departure_at = NOW.replace(hour=16, minute=0)
+    task = Task(
+        id="meeting",
+        title="固定会议",
+        date=NOW.date(),
+        duration_min=60,
+        fixed_start=departure_at,
+        fixed_end=departure_at + timedelta(minutes=60),
+        flexibility=TaskFlexibility.FIXED,
+        tags=["hard_constraint"],
+    )
+
+    assert _release_destination_from_departure_anchor(
+        task,
+        departure_at,
+    ) == task
 
 
 def test_after_class_constraint_only_applies_to_its_clause():

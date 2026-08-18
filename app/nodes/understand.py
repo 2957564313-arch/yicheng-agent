@@ -124,6 +124,13 @@ def make_understand_node(container: AppContainer):
             else None
         )
         if initial_departure_at is not None:
+            normalized_tasks = [
+                _release_destination_from_departure_anchor(
+                    task,
+                    initial_departure_at,
+                )
+                for task in result.tasks
+            ]
             result = result.model_copy(
                 update={
                     "tasks": [
@@ -142,7 +149,7 @@ def make_understand_node(container: AppContainer):
                         )
                         if task.flexibility == TaskFlexibility.MOVABLE
                         else task
-                        for task in result.tasks
+                        for task in normalized_tasks
                     ]
                 }
             )
@@ -903,6 +910,28 @@ def _drop_journey_origin_marker_tasks(
         for task in tasks
         if task.id not in removed_ids
     ]
+
+
+def _release_destination_from_departure_anchor(
+    task: Task,
+    departure_at: datetime,
+) -> Task:
+    """Do not confuse the journey start with a destination task start."""
+    if (
+        task.fixed_start != departure_at
+        or task.flexibility
+        not in {TaskFlexibility.FIXED, TaskFlexibility.LOCKED}
+        or "hard_constraint" in task.tags
+        or "course" in task.tags
+    ):
+        return task
+    return task.model_copy(
+        update={
+            "fixed_start": None,
+            "fixed_end": None,
+            "flexibility": TaskFlexibility.MOVABLE,
+        }
+    )
 
 
 def _best_rule_task_match(
