@@ -126,6 +126,29 @@ def test_departure_point_is_not_kept_as_a_model_task():
     assert filtered[0].depends_on == []
 
 
+def test_departure_leg_to_first_destination_is_not_a_separate_task():
+    tasks = [
+        Task(
+            id="travel_like_task",
+            title="从第七教学楼出发前往图书馆",
+            date=NOW.date(),
+            duration_min=30,
+            location_raw="图书馆",
+        ),
+        Task(
+            id="study",
+            title="在图书馆学习",
+            date=NOW.date(),
+            duration_min=90,
+            location_raw="图书馆",
+        ),
+    ]
+
+    filtered = _drop_journey_origin_marker_tasks(tasks, "第七教学楼")
+
+    assert [task.id for task in filtered] == ["study"]
+
+
 def test_real_origin_task_with_an_action_is_preserved():
     task = Task(
         id="pickup",

@@ -888,12 +888,16 @@ def _drop_journey_origin_marker_tasks(
     """Keep a stated departure point as context, never as a fake task."""
     origin_pattern = re.escape(origin.strip())
     marker_pattern = re.compile(
-        rf"^\s*(?:从|自)?\s*{origin_pattern}\s*(?:出发|启程)\s*$"
+        rf"^\s*(?:从|自)?\s*{origin_pattern}\s*"
+        rf"(?:"
+        rf"(?:出发|启程)(?:\s*(?:前往|去|到).*)?"
+        rf"|(?:前往|去|到).+"
+        rf")\s*$"
     )
     removed_ids = {
         task.id
         for task in tasks
-        if task.duration_min <= 15 and marker_pattern.fullmatch(task.title)
+        if marker_pattern.fullmatch(task.title)
     }
     if not removed_ids:
         return tasks
