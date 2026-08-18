@@ -12,7 +12,6 @@ from pypdf import PdfReader
 
 from app.schemas.timetable import CourseSessionCreate
 
-
 HEADER_ALIASES = {
     "course_name": ("课程名称", "课程", "course_name", "course"),
     "weekday": ("星期", "周几", "weekday", "day"),
@@ -72,6 +71,9 @@ def parse_timetable(
     skipped = 0
     messages: list[str] = []
     for index, raw in enumerate(rows, start=2):
+        if raw.get("_warning"):
+            messages.append(str(raw["_warning"]))
+            continue
         try:
             normalized = _normalize_row(raw)
             if not normalized["course_name"]:
@@ -90,7 +92,11 @@ def parse_timetable(
 def _load_rows(*, content: str, format_name: str) -> list[dict[str, Any]]:
     if format_name == "json":
         payload = json.loads(content)
-        rows = payload.get("entries", []) if isinstance(payload, dict) else payload
+        rows = (
+            payload.get("entries", [])
+            if isinstance(payload, dict)
+            else payload
+        )
         if not isinstance(rows, list):
             raise ValueError("JSON需要是课程数组，或包含entries数组")
         return [row for row in rows if isinstance(row, dict)]
@@ -98,7 +104,9 @@ def _load_rows(*, content: str, format_name: str) -> list[dict[str, Any]]:
         return list(csv.DictReader(io.StringIO(content.lstrip("\ufeff"))))
     if format_name == "xlsx_base64":
         binary = base64.b64decode(content, validate=True)
-        workbook = load_workbook(io.BytesIO(binary), read_only=True, data_only=True)
+        workbook = load_workbook(
+            io.BytesIO(binary), read_only=True, data_only=True
+        )
         sheet = workbook.active
         values = list(sheet.iter_rows(values_only=True))
         if not values:
@@ -153,6 +161,20 @@ def _load_hdu_pdf_rows(binary: bytes) -> list[dict[str, Any]]:
         page.extract_text(visitor_text=visitor_text)
         positioned_pages.append(positioned)
     rows = _rows_from_hdu_positioned_pages(positioned_pages)
+    if any(
+        x < 40 and y < 220 and font_size >= 9.5 and "/" in text and ";" in text
+        for positioned in positioned_pages
+        for x, y, font_size, text in positioned
+    ):
+        rows.append(
+            {
+                "_warning": (
+                    "检测到课表底部“其他课程/集中实践”说明；这类条目没有"
+                    "标准星期与节次，系统未自动猜测，请在预览后手动补充"
+                    "具体日期和时间。"
+                )
+            }
+        )
     if not rows:
         raise ValueError(
             "没有识别到杭电教务系统课表网格；请确认文件来自杭电"
@@ -199,11 +221,7 @@ def _weekday_from_column_x(value: float) -> int | None:
         HDU_WEEKDAY_COLUMN_X.items(),
         key=lambda item: abs(item[1] - value),
     )
-    return (
-        weekday
-        if abs(column_x - value) <= HDU_COLUMN_TOLERANCE
-        else None
-    )
+    return weekday if abs(column_x - value) <= HDU_COLUMN_TOLERANCE else None
 
 
 def _append_hdu_pdf_row(
@@ -224,11 +242,7 @@ def _append_hdu_pdf_row(
         r"(?:^|/)场地:(.*?)(?=/教师:|/教学班:|$)",
         details,
     )
-    location = (
-        location_match.group(1).strip()
-        if location_match
-        else None
-    )
+    location = location_match.group(1).strip() if location_match else None
     if location and "不在教室" in location:
         location = None
     rows.append(
@@ -262,8 +276,7 @@ def _merge_duplicate_pdf_rows(
             }
             continue
         merged[key]["weeks"] = sorted(
-            set(merged[key]["weeks"])
-            | set(_weeks_value(row.get("weeks")))
+            set(merged[key]["weeks"]) | set(_weeks_value(row.get("weeks")))
         )
     return list(merged.values())
 
@@ -305,11 +318,7 @@ def _period_value(value: Any) -> int | None:
 def _weeks_value(value: Any) -> list[int]:
     if isinstance(value, (list, tuple, set)):
         return sorted(
-            {
-                int(week)
-                for week in value
-                if str(week).strip().isdigit()
-            }
+            {int(week) for week in value if str(week).strip().isdigit()}
         )
     text = str(value or "").strip()
     if not text:

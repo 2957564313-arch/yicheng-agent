@@ -216,9 +216,7 @@ COMMON_TASK_SPECS = (
 
 COMMON_TASK_KEYWORDS = tuple(
     dict.fromkeys(
-        keyword
-        for spec in COMMON_TASK_SPECS
-        for keyword in spec.keywords
+        keyword for spec in COMMON_TASK_SPECS for keyword in spec.keywords
     )
 )
 
@@ -269,10 +267,7 @@ class RuleBasedRequirementParser:
         old_plan: Plan | None = None,
     ) -> UnderstandResult:
         target_date = self._target_date(query, now, old_plan)
-        if (
-            old_plan is None
-            and self._is_knowledge_query(query)
-        ):
+        if old_plan is None and self._is_knowledge_query(query):
             intent = Intent.QUERY
         elif old_plan and any(
             keyword in query
@@ -295,7 +290,10 @@ class RuleBasedRequirementParser:
         else:
             intent = Intent.PLAN
 
-        if intent in {Intent.REPLAN, Intent.WEATHER_CHECK} and old_plan is None:
+        if (
+            intent in {Intent.REPLAN, Intent.WEATHER_CHECK}
+            and old_plan is None
+        ):
             return UnderstandResult(
                 intent=intent,
                 requested_date=target_date,
@@ -334,10 +332,7 @@ class RuleBasedRequirementParser:
         if (
             not tasks
             and intent != Intent.QUERY
-            and not (
-                old_plan is not None
-                and self._is_removal_request(query)
-            )
+            and not (old_plan is not None and self._is_removal_request(query))
         ):
             clarifications.append("请告诉我需要安排的具体任务。")
         return UnderstandResult(
@@ -347,9 +342,7 @@ class RuleBasedRequirementParser:
             preferences=preferences,
             clarifications=clarifications,
             confidence=(
-                0.9
-                if intent == Intent.QUERY
-                else (0.92 if tasks else 0.2)
+                0.9 if intent == Intent.QUERY else (0.92 if tasks else 0.2)
             ),
         )
 
@@ -434,44 +427,37 @@ class RuleBasedRequirementParser:
         if (
             not any(marker in query for marker in explicit_planning_markers)
             and any(domain in query for domain in operational_domains)
-            and any(
-                marker in query
-                for marker in operational_question_markers
-            )
+            and any(marker in query for marker in operational_question_markers)
         ):
             # 场馆、门禁、快递和校医院等“什么时候开放/能否计入”
             # 是校园事实查询。不能因为句子里同时出现“看病、长跑”等
             # 任务词，就误创建一项日程。
             return True
-        if (
-            any(keyword in query for keyword in ("热水", "供水"))
-            and any(
-                marker in query
-                for marker in (
-                    "几点",
-                    "什么时候",
-                    "开放时间",
-                    "供应时间",
-                    "有热水吗",
-                    "有没有热水",
-                    "到几点",
-                )
+        if any(keyword in query for keyword in ("热水", "供水")) and any(
+            marker in query
+            for marker in (
+                "几点",
+                "什么时候",
+                "开放时间",
+                "供应时间",
+                "有热水吗",
+                "有没有热水",
+                "到几点",
             )
         ):
             return True
-        if (
-            any(marker in query for marker in ("几点", "什么时候", "何时"))
-            and any(
-                marker in query
-                for marker in (
-                    "开门",
-                    "关门",
-                    "关闭",
-                    "开放",
-                    "营业",
-                    "就诊",
-                    "计入",
-                )
+        if any(
+            marker in query for marker in ("几点", "什么时候", "何时")
+        ) and any(
+            marker in query
+            for marker in (
+                "开门",
+                "关门",
+                "关闭",
+                "开放",
+                "营业",
+                "就诊",
+                "计入",
             )
         ):
             # “顺丰几点关闭”“校医院什么时候可以就诊”是在询问
@@ -603,32 +589,31 @@ class RuleBasedRequirementParser:
     ) -> tuple[list[Task], UserPreferences]:
         course_tasks = self._course_tasks(query, target_date)
         fixed_tasks = self._fixed_arrangement_tasks(query, target_date)
+        fixed_tasks.extend(self._fixed_point_tasks(query, target_date))
         fixed_text = " ".join(task.title for task in fixed_tasks)
         tasks: list[Task] = []
         overall_start = self._overall_start(query)
-        if (
-            course_tasks
-            and any(keyword in query for keyword in ("下课后", "课后"))
+        if course_tasks and any(
+            keyword in query for keyword in ("下课后", "课后")
         ):
             last_course_end = max(
                 task.fixed_end for task in course_tasks if task.fixed_end
             )
             overall_start = last_course_end.time()
         overall_deadline = self._overall_deadline(query, target_date)
-        if (
-            any(
-                word in query
-                for word in ("第二课堂", "二课活动", "二课讲座", "二课")
-            )
-            and any(word in query for word in ("报名", "报名截止"))
-        ):
+        if any(
+            word in query
+            for word in ("第二课堂", "二课活动", "二课讲座", "二课")
+        ) and any(word in query for word in ("报名", "报名截止")):
             registration_deadline = self._task_deadline(
                 query,
                 target_date,
                 ("二课报名", "报名截止", "报名"),
             )
             if registration_deadline is not None:
-                registration_start = registration_deadline - timedelta(minutes=10)
+                registration_start = registration_deadline - timedelta(
+                    minutes=10
+                )
                 tasks.append(
                     Task(
                         id="second_course_registration",
@@ -649,9 +634,8 @@ class RuleBasedRequirementParser:
                         notes="在报名截止前预留10分钟完成第二课堂报名",
                     )
                 )
-        if (
-            ("自习" in query or "学习" in query)
-            and not any(word in fixed_text for word in ("自习", "学习"))
+        if ("自习" in query or "学习" in query) and not any(
+            word in fixed_text for word in ("自习", "学习")
         ):
             study_keyword = "自习" if "自习" in query else "学习"
             study_deadline = self._task_deadline(
@@ -677,15 +661,9 @@ class RuleBasedRequirementParser:
                         or (time(13, 0) if "下午" in query else time(8, 0))
                     ),
                     latest=(
-                        study_limit.time()
-                        if study_limit
-                        else time(22, 30)
+                        study_limit.time() if study_limit else time(22, 30)
                     ),
-                    deadline=(
-                        study_limit.time()
-                        if study_limit
-                        else None
-                    ),
+                    deadline=(study_limit.time() if study_limit else None),
                     preferred_period=(
                         "afternoon"
                         if "下午" in query and overall_start is None
@@ -694,22 +672,19 @@ class RuleBasedRequirementParser:
                     importance=5,
                 )
             )
-        if (
-            not any(word in fixed_text for word in ("快递", "驿站"))
-            and any(
-                keyword in query
-                for keyword in (
-                    "取快递",
-                    "拿快递",
-                    "去快递站",
-                    "取件",
-                    "取顺丰",
-                    "拿顺丰",
-                    "顺丰快递",
-                    "取京东",
-                    "拿京东",
-                    "京东快递",
-                )
+        if not any(word in fixed_text for word in ("快递", "驿站")) and any(
+            keyword in query
+            for keyword in (
+                "取快递",
+                "拿快递",
+                "去快递站",
+                "取件",
+                "取顺丰",
+                "拿顺丰",
+                "顺丰快递",
+                "取京东",
+                "拿京东",
+                "京东快递",
             )
         ):
             (
@@ -752,9 +727,7 @@ class RuleBasedRequirementParser:
                     time(stated_closing_hour, 0)
                     if stated_closing_hour is not None
                     else (
-                        service_close
-                        if parcel_location != "快递站"
-                        else None
+                        service_close if parcel_location != "快递站" else None
                     )
                 )
             )
@@ -767,11 +740,7 @@ class RuleBasedRequirementParser:
                     location_raw=parcel_location,
                     earliest=(
                         overall_start
-                        or (
-                            time(13, 0)
-                            if "下午" in query
-                            else service_open
-                        )
+                        or (time(13, 0) if "下午" in query else service_open)
                     ),
                     latest=parcel_latest,
                     deadline=parcel_deadline,
@@ -788,10 +757,9 @@ class RuleBasedRequirementParser:
                     ),
                 }
             )
-        if (
-            not any(word in fixed_text for word in ("晚饭", "吃饭", "食堂"))
-            and any(keyword in query for keyword in ("吃晚饭", "晚饭", "吃饭"))
-        ):
+        if not any(
+            word in fixed_text for word in ("晚饭", "吃饭", "食堂")
+        ) and any(keyword in query for keyword in ("吃晚饭", "晚饭", "吃饭")):
             tasks.append(
                 self._movable_task(
                     task_id="dinner",
@@ -805,15 +773,12 @@ class RuleBasedRequirementParser:
                     importance=3,
                 )
             )
-        if (
-            not any(
-                word in fixed_text
-                for word in ("校医院", "看医生", "就诊", "医务室")
-            )
-            and any(
-                keyword in query
-                for keyword in ("校医院", "看医生", "就诊", "医务室")
-            )
+        if not any(
+            word in fixed_text
+            for word in ("校医院", "看医生", "就诊", "医务室")
+        ) and any(
+            keyword in query
+            for keyword in ("校医院", "看医生", "就诊", "医务室")
         ):
             clinic_keyword = next(
                 keyword
@@ -842,15 +807,9 @@ class RuleBasedRequirementParser:
                         or (time(13, 30) if "下午" in query else time(8, 0))
                     ),
                     latest=(
-                        clinic_limit.time()
-                        if clinic_limit
-                        else time(20, 0)
+                        clinic_limit.time() if clinic_limit else time(20, 0)
                     ),
-                    deadline=(
-                        clinic_limit.time()
-                        if clinic_limit
-                        else None
-                    ),
+                    deadline=(clinic_limit.time() if clinic_limit else None),
                     importance=5,
                 )
             )
@@ -868,15 +827,11 @@ class RuleBasedRequirementParser:
                     ),
                 }
             )
-        if (
-            not any(
-                word in fixed_text
-                for word in ("洗澡", "洗漱", "热水")
-            )
-            and any(
-                keyword in query
-                for keyword in ("洗澡", "洗漱", "用热水", "打热水")
-            )
+        if not any(
+            word in fixed_text for word in ("洗澡", "洗漱", "热水")
+        ) and any(
+            keyword in query
+            for keyword in ("洗澡", "洗漱", "用热水", "打热水")
         ):
             bath_keyword = next(
                 keyword
@@ -904,23 +859,12 @@ class RuleBasedRequirementParser:
                         overall_start
                         or (
                             time(16, 30)
-                            if any(
-                                word in query
-                                for word in ("下午", "晚上")
-                            )
+                            if any(word in query for word in ("下午", "晚上"))
                             else time(6, 0)
                         )
                     ),
-                    latest=(
-                        bath_limit.time()
-                        if bath_limit
-                        else time(23, 59)
-                    ),
-                    deadline=(
-                        bath_limit.time()
-                        if bath_limit
-                        else None
-                    ),
+                    latest=(bath_limit.time() if bath_limit else time(23, 59)),
+                    deadline=(bath_limit.time() if bath_limit else None),
                     preferred_period="evening" if "晚上" in query else None,
                     importance=3,
                 )
@@ -972,15 +916,9 @@ class RuleBasedRequirementParser:
                         or (time(13, 0) if "下午" in query else time(11, 30))
                     ),
                     latest=(
-                        sport_limit.time()
-                        if sport_limit
-                        else time(20, 30)
+                        sport_limit.time() if sport_limit else time(20, 30)
                     ),
-                    deadline=(
-                        sport_limit.time()
-                        if sport_limit
-                        else None
-                    ),
+                    deadline=(sport_limit.time() if sport_limit else None),
                     preferred_period="evening" if "晚上" in query else None,
                     importance=3,
                 )
@@ -999,15 +937,11 @@ class RuleBasedRequirementParser:
                     ),
                 }
             )
-        if (
-            not any(
-                word in fixed_text
-                for word in ("跑步", "长跑", "阳光长跑", "运动")
-            )
-            and any(
-                keyword in query
-                for keyword in ("阳光长跑", "长跑", "跑步", "运动")
-            )
+        if not any(
+            word in fixed_text for word in ("跑步", "长跑", "阳光长跑", "运动")
+        ) and any(
+            keyword in query
+            for keyword in ("阳光长跑", "长跑", "跑步", "运动")
         ):
             run_keyword = next(
                 keyword
@@ -1036,16 +970,8 @@ class RuleBasedRequirementParser:
                         overall_start
                         or (time(18, 0) if "晚上" in query else time(8, 0))
                     ),
-                    latest=(
-                        run_limit.time()
-                        if run_limit
-                        else time(22, 0)
-                    ),
-                    deadline=(
-                        run_limit.time()
-                        if run_limit
-                        else None
-                    ),
+                    latest=(run_limit.time() if run_limit else time(22, 0)),
+                    deadline=(run_limit.time() if run_limit else None),
                     preferred_period="evening" if "晚上" in query else None,
                     importance=3,
                 )
@@ -1105,9 +1031,7 @@ class RuleBasedRequirementParser:
             if spec.id in existing_ids:
                 continue
             matches = [
-                keyword
-                for keyword in spec.keywords
-                if keyword in query
+                keyword for keyword in spec.keywords if keyword in query
             ]
             if not matches:
                 continue
@@ -1125,8 +1049,7 @@ class RuleBasedRequirementParser:
             task_limit = task_deadline or overall_deadline
             preferred_period = self._period_from_clause(clause)
             location = (
-                self._location_from_clause(clause)
-                or spec.default_location
+                self._location_from_clause(clause) or spec.default_location
             )
             task = self._movable_task(
                 task_id=spec.id,
@@ -1143,16 +1066,8 @@ class RuleBasedRequirementParser:
                     or self._period_start(preferred_period)
                     or spec.earliest
                 ),
-                latest=(
-                    task_limit.time()
-                    if task_limit
-                    else spec.latest
-                ),
-                deadline=(
-                    task_limit.time()
-                    if task_limit
-                    else None
-                ),
+                latest=(task_limit.time() if task_limit else spec.latest),
+                deadline=(task_limit.time() if task_limit else None),
                 preferred_period=preferred_period or spec.preferred_period,
                 importance=spec.importance,
             )
@@ -1280,10 +1195,7 @@ class RuleBasedRequirementParser:
             "run": ("阳光长跑", "长跑", "跑步", "运动"),
         }
         known_keywords.update(
-            {
-                spec.id: spec.keywords
-                for spec in COMMON_TASK_SPECS
-            }
+            {spec.id: spec.keywords for spec in COMMON_TASK_SPECS}
         )
 
         def position(task: Task) -> int:
@@ -1339,6 +1251,195 @@ class RuleBasedRequirementParser:
                 )
             previous_id = task.id
         return [updates.get(task.id, task) for task in movable_tasks]
+
+    def _fixed_point_tasks(
+        self,
+        query: str,
+        target_date: date,
+    ) -> list[Task]:
+        """Extract events with a fixed start but no explicit end time.
+
+        Students commonly write ``12:40有20分钟的视频会议`` or
+        ``晚上21:00乐团排练``.  Treating those as movable tasks loses the
+        user's strongest fact: the start time.  Explicit ranges are handled
+        by :meth:`_fixed_arrangement_tasks`; this method only owns a single
+        clock inside one clause and derives the duration from that clause.
+        """
+
+        event_specs = (
+            (
+                "video_meeting",
+                "视频会议",
+                ("视频会议", "线上会议", "视频通话"),
+                30,
+                ("meeting", "online"),
+            ),
+            (
+                "rehearsal",
+                "乐团排练",
+                ("乐团排练", "排练", "合练"),
+                60,
+                ("activity", "rehearsal"),
+            ),
+            (
+                "meeting",
+                "参加会议",
+                (
+                    "项目讨论",
+                    "小组讨论",
+                    "社团例会",
+                    "组会",
+                    "班会",
+                    "开会",
+                    "会议",
+                ),
+                60,
+                ("meeting", "collaboration"),
+            ),
+            (
+                "training",
+                "参加训练",
+                ("训练",),
+                60,
+                ("activity", "training"),
+            ),
+            (
+                "exam",
+                "参加考试",
+                ("考试",),
+                120,
+                ("academic", "exam"),
+            ),
+            (
+                "interview",
+                "参加面试",
+                ("面试",),
+                60,
+                ("meeting", "interview"),
+            ),
+        )
+        clock_pattern = re.compile(
+            r"(?P<period>早上|上午|中午|下午|傍晚|晚上)?"
+            r"(?:的时候)?\s*"
+            r"(?P<hour>\d{1,2})"
+            r"(?:\s*[:：]\s*(?P<minute>\d{1,2})|"
+            r"\s*点(?:\s*(?P<minute_point>\d{1,2})\s*分?)?)"
+        )
+        clauses = [
+            clause.strip()
+            for clause in re.split(r"[，。；,;]", query)
+            if clause.strip()
+        ]
+        tasks: list[Task] = []
+        used_keys: set[tuple[time, str]] = set()
+        for clause in clauses:
+            if re.search(
+                r"\d{1,2}\s*(?:(?:[:：]\s*\d{1,2})|"
+                r"(?:点(?:\s*\d{1,2}\s*分?)?))?\s*"
+                r"(?:到|至|[-—~～])\s*"
+                r"(?:早上|上午|中午|下午|傍晚|晚上)?\s*\d{1,2}",
+                clause,
+            ):
+                continue
+            matches = list(clock_pattern.finditer(clause))
+            if not matches:
+                continue
+            for (
+                task_id,
+                title,
+                keywords,
+                default_duration,
+                tags,
+            ) in event_specs:
+                keyword = next(
+                    (value for value in keywords if value in clause), None
+                )
+                if keyword is None:
+                    continue
+                keyword_position = clause.find(keyword)
+                clock_match = min(
+                    matches,
+                    key=lambda item: min(
+                        abs(item.start() - keyword_position),
+                        abs(item.end() - keyword_position),
+                    ),
+                )
+                suffix = clause[clock_match.end() : clock_match.end() + 4]
+                if re.match(r"\s*(?:前|后|以后|之前|截止|结束|出发)", suffix):
+                    continue
+                hour = int(clock_match.group("hour"))
+                minute = int(
+                    clock_match.group("minute")
+                    or clock_match.group("minute_point")
+                    or 0
+                )
+                period = clock_match.group("period")
+                if (
+                    period in {"下午", "傍晚", "晚上"}
+                    and hour < 12
+                    or period == "中午"
+                    and hour < 11
+                ):
+                    hour += 12
+                if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                    continue
+                start_time = time(hour, minute)
+                key = (start_time, task_id)
+                if key in used_keys:
+                    continue
+                duration = self._duration_near(
+                    clause,
+                    keyword,
+                    default=default_duration,
+                )
+                duration_was_explicit = bool(
+                    re.search(r"\d+\s*(?:分钟|个?小时)", clause)
+                )
+                start_at = datetime.combine(
+                    target_date,
+                    start_time,
+                    self.timezone,
+                )
+                end_at = start_at + timedelta(minutes=duration)
+                location = self._location_from_clause(clause)
+                task_title = title
+                if task_id == "rehearsal" and "乐团" not in clause:
+                    task_title = "排练"
+                tasks.append(
+                    Task(
+                        id=f"fixed_point_{task_id}_{hour:02d}{minute:02d}",
+                        title=task_title,
+                        date=target_date,
+                        duration_min=duration,
+                        location_raw=location,
+                        fixed_start=start_at,
+                        fixed_end=end_at,
+                        flexibility=TaskFlexibility.FIXED,
+                        importance=5,
+                        tags=[
+                            "user_fixed",
+                            "hard_constraint",
+                            "point_time",
+                            *tags,
+                            *(
+                                []
+                                if duration_was_explicit
+                                else ["duration_estimated"]
+                            ),
+                        ],
+                        notes=(
+                            "用户明确给出的开始时间不可移动；"
+                            + (
+                                f"未说明时长，暂按{duration}分钟，可在结果页修改"
+                                if not duration_was_explicit
+                                else "时长来自本句中的明确说明"
+                            )
+                        ),
+                    )
+                )
+                used_keys.add(key)
+                break
+        return tasks
 
     def _fixed_arrangement_tasks(
         self,
@@ -1469,9 +1570,7 @@ class RuleBasedRequirementParser:
             )
             tasks.append(
                 Task(
-                    id=(
-                        f"fixed_{start_time:%H%M}_{end_time:%H%M}_{index}"
-                    ),
+                    id=(f"fixed_{start_time:%H%M}_{end_time:%H%M}_{index}"),
                     title=title[:120],
                     date=target_date,
                     duration_min=int(
@@ -1485,7 +1584,11 @@ class RuleBasedRequirementParser:
                     tags=[
                         "user_fixed",
                         "hard_constraint",
-                        *(["activity", "second_course"] if is_second_course else []),
+                        *(
+                            ["activity", "second_course"]
+                            if is_second_course
+                            else []
+                        ),
                     ],
                     notes=(
                         "第二课堂活动时间不可移动，并会生成开始前提醒"
@@ -1509,9 +1612,7 @@ class RuleBasedRequirementParser:
             or match.group(f"minute_point{suffix}")
             or 0
         )
-        if (
-            period in {"下午", "晚上"} and 1 <= hour <= 11
-        ) or (
+        if (period in {"下午", "晚上"} and 1 <= hour <= 11) or (
             period == "中午" and 1 <= hour <= 10
         ):
             hour += 12
@@ -1597,12 +1698,8 @@ class RuleBasedRequirementParser:
                 continue
             clause = self._course_clause(query, match)
             tail = query[match.end() : match.end() + 6]
-            if (
-                re.match(r"\s*(?:以后|之后|后)", tail)
-                and not any(
-                    marker in clause
-                    for marker in ("有课", "上课", "下课", "课程")
-                )
+            if re.match(r"\s*(?:以后|之后|后)", tail) and not any(
+                marker in clause for marker in ("有课", "上课", "下课", "课程")
             ):
                 # “第四节以后去自习” uses the period as a time anchor;
                 # it does not assert that the user has a fourth-period class.
@@ -1746,7 +1843,9 @@ class RuleBasedRequirementParser:
         locked_ids = []
         old_task_items = [
             item
-            for item in sorted(old_plan.items, key=lambda value: value.start_at)
+            for item in sorted(
+                old_plan.items, key=lambda value: value.start_at
+            )
             if item.item_type == "task" and item.task_id
         ]
         removed_ids = self._removed_task_ids(query, old_task_items)
@@ -1765,15 +1864,11 @@ class RuleBasedRequirementParser:
                 continue
             if item.task_id in removed_ids:
                 continue
-            duration = int(
-                (item.end_at - item.start_at).total_seconds() // 60
-            )
+            duration = int((item.end_at - item.start_at).total_seconds() // 60)
             title = item.title
             if item.task_id in rescheduled:
                 start_at, end_at = rescheduled[item.task_id]
-                duration = int(
-                    (end_at - start_at).total_seconds() // 60
-                )
+                duration = int((end_at - start_at).total_seconds() // 60)
                 flexibility = TaskFlexibility.FIXED
             elif item.task_id in duration_changes:
                 start_at = item.start_at
@@ -1785,9 +1880,8 @@ class RuleBasedRequirementParser:
                 end_at = item.end_at + timedelta(hours=1)
                 flexibility = TaskFlexibility.FIXED
             elif (
-                ("跑步" in title or item.task_id == "run")
-                and "不要动" in query
-            ):
+                "跑步" in title or item.task_id == "run"
+            ) and "不要动" in query:
                 start_at = item.start_at
                 end_at = item.end_at
                 flexibility = TaskFlexibility.LOCKED
@@ -1937,11 +2031,7 @@ class RuleBasedRequirementParser:
             marker in compact
             for marker in ("清空安排", "全部取消", "取消全部", "都取消")
         ):
-            return {
-                item.task_id
-                for item in old_task_items
-                if item.task_id
-            }
+            return {item.task_id for item in old_task_items if item.task_id}
         removed: set[str] = set()
         clauses = [
             clause
@@ -1956,8 +2046,7 @@ class RuleBasedRequirementParser:
                 title=item.title,
             )
             if any(
-                any(alias in clause for alias in aliases)
-                for clause in clauses
+                any(alias in clause for alias in aliases) for clause in clauses
             ):
                 removed.add(item.task_id)
         return removed
@@ -2008,18 +2097,15 @@ class RuleBasedRequirementParser:
         if not any(marker in query for marker in move_markers):
             return {}
         relative_minutes = self._relative_shift_minutes(query)
-        if (
-            relative_minutes is not None
-            and any(
-                marker in query
-                for marker in (
-                    "所有安排",
-                    "全部安排",
-                    "整个日程",
-                    "全天安排",
-                    "所有任务",
-                    "全部任务",
-                )
+        if relative_minutes is not None and any(
+            marker in query
+            for marker in (
+                "所有安排",
+                "全部安排",
+                "整个日程",
+                "全天安排",
+                "所有任务",
+                "全部任务",
             )
         ):
             protected = self._protected_task_ids(
@@ -2238,10 +2324,13 @@ class RuleBasedRequirementParser:
             for item in old_task_items
             if item.task_id
             and any(
-                any(alias in clause for alias in self._task_removal_aliases(
-                    task_id=item.task_id,
-                    title=item.title,
-                ))
+                any(
+                    alias in clause
+                    for alias in self._task_removal_aliases(
+                        task_id=item.task_id,
+                        title=item.title,
+                    )
+                )
                 for clause in clauses
             )
         }
@@ -2251,8 +2340,7 @@ class RuleBasedRequirementParser:
         return bool(
             (item.task_id and item.task_id.startswith("course_"))
             or any(
-                marker in item.title
-                for marker in ("上课", "课程", "实验课")
+                marker in item.title for marker in ("上课", "课程", "实验课")
             )
         )
 
@@ -2597,9 +2685,7 @@ class RuleBasedRequirementParser:
         minute = int(match.group("minute") or 0)
         period = match.group("period")
         day_offset = 0
-        if (
-            period in {"下午", "傍晚", "晚上"} and hour < 12
-        ) or (
+        if (period in {"下午", "傍晚", "晚上"} and hour < 12) or (
             period == "中午" and hour < 11
         ):
             hour += 12
@@ -2647,12 +2733,7 @@ class RuleBasedRequirementParser:
             "table_tennis": ("乒乓球",),
             "run": ("阳光长跑", "长跑", "跑步", "运动"),
         }
-        keywords.update(
-            {
-                spec.id: spec.keywords
-                for spec in COMMON_TASK_SPECS
-            }
-        )
+        keywords.update({spec.id: spec.keywords for spec in COMMON_TASK_SPECS})
 
         def position(task: Task) -> int:
             positions = [

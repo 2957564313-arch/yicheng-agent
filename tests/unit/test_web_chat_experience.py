@@ -21,16 +21,23 @@ def test_history_restore_and_keyboard_send_are_available() -> None:
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
 
     assert 'data-history-index="${index}"' in javascript
-    assert "restoreConversationSnapshot(item.query, item.answer);" in javascript
+    assert (
+        "restoreConversationSnapshot(item.query, item.answer);" in javascript
+    )
     assert "本机历史摘要" in javascript
     assert 'queryInput.addEventListener("keydown"' in javascript
-    assert 'event.key !== "Enter" || event.shiftKey || event.isComposing' in javascript
+    assert (
+        'event.key !== "Enter" || event.shiftKey || event.isComposing'
+        in javascript
+    )
     assert "response: responseData || null" in javascript
     assert "if (item.response?.plan)" in javascript
     assert "renderResponse(item.response);" in javascript
 
 
-def test_mobile_overflow_guards_and_compact_result_summary_are_present() -> None:
+def test_mobile_overflow_guards_and_compact_result_summary_are_present() -> (
+    None
+):
     html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
     styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
@@ -52,12 +59,16 @@ def test_result_first_dashboard_keeps_key_plan_information_together() -> None:
     assert 'id="result-constraints"' in html
     assert 'id="result-sources"' in html
     assert "function renderResultDashboard(data)" in javascript
-    assert '[`${metrics.buffer_minutes || 0}分钟`' in javascript
-    assert '[`${metrics.travel_minutes || 0}分钟`' in javascript
-    assert 'document.body.classList.toggle("has-plan-result", active);' in javascript
+    assert "[`${metrics.buffer_minutes || 0}分钟`" in javascript
+    assert "[`${metrics.travel_minutes || 0}分钟`" in javascript
+    assert (
+        'document.body.classList.toggle("has-plan-result", active);'
+        in javascript
+    )
     assert "body.has-plan-result .composer-column" in styles
     assert ".result-summary { grid-template-columns: repeat(6" in styles
     assert 'data-kind="buffer"]' in styles
+    assert "const items = [...(data.plan?.items || [])].sort(" in javascript
 
 
 def test_fresh_homepage_opens_with_a_result_showcase() -> None:
@@ -68,7 +79,10 @@ def test_fresh_homepage_opens_with_a_result_showcase() -> None:
     assert "正在加载默认规划，请稍候…" in html
     assert "async function loadDemos({ autoRun = false } = {})" in javascript
     assert "if (autoRun && demos.length)" in javascript
-    assert 'await runDemo(demoButtons.querySelector("button"), demos[0]);' in javascript
+    assert (
+        'await runDemo(demoButtons.querySelector("button"), demos[0]);'
+        in javascript
+    )
     assert "await loadDemos({ autoRun: true })" in javascript
     assert "homepageModeKey" not in javascript
 
@@ -80,8 +94,10 @@ def test_result_request_can_be_edited_without_leaving_dashboard() -> None:
 
     assert 'id="result-request-input"' in html
     assert "function setInlineRequestEditing(active)" in javascript
-    assert 'resultRequest.classList.toggle("is-editing", active);' in javascript
-    assert 'submitQuery(query, { keepResultMode: true })' in javascript
+    assert (
+        'resultRequest.classList.toggle("is-editing", active);' in javascript
+    )
+    assert "submitQuery(query, { keepResultMode: true })" in javascript
     assert "if (!keepResultMode) document.body.classList.remove" in javascript
     assert ".result-request.is-editing" in styles
 
@@ -92,7 +108,7 @@ def test_demo_scenarios_move_into_result_sidebar() -> None:
     styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
 
     assert 'id="sidebar-demo-buttons"' in html
-    assert '<h2>场景演示</h2>' in html
+    assert "<h2>场景演示</h2>" in html
     assert "const sidebarDemoButtons" in javascript
     assert "sidebarDemoButtons.innerHTML = demoMarkup;" in javascript
     assert 'document.querySelectorAll("[data-demo]")' in javascript
@@ -103,12 +119,22 @@ def test_demo_scenarios_move_into_result_sidebar() -> None:
     assert "thread_id: consoleThreadId" in javascript
 
 
-def test_switching_demo_keeps_dashboard_visible_without_forced_scroll() -> None:
+def test_switching_demo_keeps_dashboard_visible_without_forced_scroll() -> (
+    None
+):
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
 
-    assert 'const keepResultMode = document.body.classList.contains("has-plan-result");' in javascript
-    assert "beginConversationTurn(demo.query, { keepResultMode });" in javascript
-    assert 'const wasActive = document.body.classList.contains("has-plan-result");' in javascript
+    assert (
+        'const keepResultMode = document.body.classList.contains("has-plan-result");'
+        in javascript
+    )
+    assert (
+        "beginConversationTurn(demo.query, { keepResultMode });" in javascript
+    )
+    assert (
+        'const wasActive = document.body.classList.contains("has-plan-result");'
+        in javascript
+    )
     assert "if (wasActive) return;" in javascript
 
 
@@ -123,15 +149,18 @@ def test_result_dashboard_has_icons_sources_and_four_quick_actions() -> None:
     assert 'name: "高德地图"' in javascript
     assert 'name: "高德天气"' in javascript
     assert "const resultActionQueries" in javascript
-    assert 'submitQuery(query, { keepResultMode: true })' in javascript
+    assert "submitQuery(query, { keepResultMode: true })" in javascript
     assert ".timeline-kind-icon" in styles
     assert ".result-source-icon" in styles
     assert 'id="result-action-status"' in html
-    assert "function renderResultActionOutcome(action, before, after)" in javascript
+    assert (
+        "function renderResultActionOutcome(action, before, after)"
+        in javascript
+    )
     assert ".result-action-status.is-unchanged" in styles
     assert ".result-quick-actions button:first-child" not in styles
     assert "function currentBaseRequirement()" in javascript
-    assert 'split(/\\n调整要求：/u, 1)' in javascript
+    assert "split(/\\n调整要求：/u, 1)" in javascript
     assert 'id="result-change-summary"' in html
     assert "const changesByTask = new Map" in javascript
     assert "timeline-change-badge" in javascript

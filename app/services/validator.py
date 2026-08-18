@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from app.schemas.common import (
     Issue,
     IssueSeverity,
@@ -70,9 +68,7 @@ class PlanValidator:
                     Issue(
                         code="TIME_OVERLAP",
                         severity=IssueSeverity.ERROR,
-                        message=(
-                            f"{previous.title}与{current.title}时间重叠"
-                        ),
+                        message=(f"{previous.title}与{current.title}时间重叠"),
                         task_ids=[
                             value
                             for value in (
@@ -114,18 +110,15 @@ class PlanValidator:
         issues = []
         for item in self._task_items(items):
             task = task_by_id.get(item.task_id or "")
-            is_outdoor = (
-                item.location_id in context.outdoor_location_ids
-                or (task is not None and "outdoor" in task.tags)
+            is_outdoor = item.location_id in context.outdoor_location_ids or (
+                task is not None and "outdoor" in task.tags
             )
             if is_outdoor and item.end_at > risk_start:
                 issues.append(
                     Issue(
                         code="WEATHER_RISK",
                         severity=IssueSeverity.ERROR,
-                        message=(
-                            f"室外任务“{item.title}”与降雨风险时段重叠"
-                        ),
+                        message=(f"室外任务“{item.title}”与降雨风险时段重叠"),
                         task_ids=[item.task_id] if item.task_id else [],
                         details={
                             "risk_start_at": risk_start.isoformat(),
@@ -328,8 +321,7 @@ class PlanValidator:
                         code="INSUFFICIENT_TRAVEL_TIME",
                         severity=IssueSeverity.ERROR,
                         message=(
-                            f"{previous.title}到{current.title}"
-                            "之间通勤时间不足"
+                            f"{previous.title}到{current.title}之间通勤时间不足"
                         ),
                         task_ids=[
                             value
@@ -358,10 +350,7 @@ class PlanValidator:
         affected = [
             item
             for item in items
-            if (
-                item.item_type == "travel"
-                and item.congestion_delay_min > 0
-            )
+            if (item.item_type == "travel" and item.congestion_delay_min > 0)
         ]
         if not affected:
             return []
@@ -437,25 +426,15 @@ class PlanValidator:
             for item in plan.items
             if item.item_type == "travel"
         )
-        buffer_minutes = 0
-        for previous, current in zip(task_items, task_items[1:]):
-            required = 0
-            if previous.location_id and current.location_id:
-                required = (
-                    context.travel_minutes(
-                        previous.location_id,
-                        current.location_id,
-                        departure_at=previous.end_at,
-                    )
-                    or 0
-                )
-            gap = max(
-                0,
-                int(
-                    (current.start_at - previous.end_at).total_seconds() // 60
-                ),
-            )
-            buffer_minutes += max(0, gap - required)
+        # A long free block between two tasks is availability, not a buffer.
+        # Counting every idle minute made a plan with a morning class and an
+        # evening activity report thousands of “buffer” minutes.  Only
+        # explicit buffer items are safe to present as protected slack.
+        buffer_minutes = sum(
+            int((item.end_at - item.start_at).total_seconds() // 60)
+            for item in plan.items
+            if item.item_type == "buffer"
+        )
 
         moved_task_count = 0
         total_shift_minutes = 0

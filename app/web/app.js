@@ -1389,7 +1389,12 @@ function renderClock() {
 }
 
 function renderTimeline(data) {
-  const items = data.plan?.items || [];
+  const items = [...(data.plan?.items || [])].sort(
+    (left, right) => (
+      new Date(left.start_at).getTime() - new Date(right.start_at).getTime()
+      || new Date(left.end_at).getTime() - new Date(right.end_at).getTime()
+    ),
+  );
   const locationNames = data.location_names || {};
   const changes = data.plan_diff || [];
   const changesByTask = new Map(

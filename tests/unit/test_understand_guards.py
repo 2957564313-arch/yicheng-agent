@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.nodes.understand import (
+    _apply_timetable_relative_constraints,
     _can_apply_rule_guard,
     _merge_llm_with_rule_constraints,
 )
@@ -96,6 +97,43 @@ def test_open_ended_request_still_allows_a_real_clarification():
         llm_result=llm_result,
         rule_result=rule_result,
     )
+
+
+def test_after_class_constraint_only_applies_to_its_clause():
+    class_start = NOW.replace(hour=15, minute=15)
+    class_end = NOW.replace(hour=16, minute=50)
+    timetable_course = Task(
+        id="timetable_math",
+        title="数学建模",
+        date=NOW.date(),
+        duration_min=95,
+        fixed_start=class_start,
+        fixed_end=class_end,
+        flexibility=TaskFlexibility.FIXED,
+        tags=["course", "personal_timetable"],
+    )
+    parcel = Task(
+        id="parcel",
+        title="取快递",
+        date=NOW.date(),
+        duration_min=30,
+    )
+    morning_study = Task(
+        id="study",
+        title="图书馆自习",
+        date=NOW.date(),
+        duration_min=60,
+        earliest_start=NOW.replace(hour=10, minute=0),
+    )
+
+    result = _apply_timetable_relative_constraints(
+        query="下午上完课拿快递，上午10点后去图书馆自习",
+        timetable_tasks=[timetable_course],
+        tasks=[parcel, morning_study],
+    )
+
+    assert result[0].earliest_start == class_end
+    assert result[1].earliest_start == morning_study.earliest_start
 
 
 def test_online_merge_keeps_model_tasks_and_adds_verified_constraints():

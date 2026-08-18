@@ -13,6 +13,8 @@ DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 def test_location_alias_resolution():
     repository = LocationRepository(DATA_DIR / "locations.json")
     assert repository.resolve("六教").id == "teaching_building_6"
+    assert repository.resolve("第6教研楼北304").id == "teaching_building_6"
+    assert repository.resolve("西北田径场").id == "northwest_track"
     assert repository.resolve(" 菜鸟驿站 ").id == "parcel_station"
     assert repository.resolve("不存在的地点") is None
 
@@ -36,10 +38,7 @@ def test_location_aliases_are_isolated_by_campus():
     )
 
     assert other_library.id != "library"
-    assert (
-        repository.resolve("图书馆", campus_id="hdu_xiasha").id
-        == "library"
-    )
+    assert repository.resolve("图书馆", campus_id="hdu_xiasha").id == "library"
     assert (
         repository.resolve(
             "图书馆",
@@ -47,10 +46,7 @@ def test_location_aliases_are_isolated_by_campus():
         ).id
         == other_library.id
     )
-    assert (
-        repository.get("library", campus_id="other_university")
-        is None
-    )
+    assert repository.get("library", campus_id="other_university") is None
 
 
 @pytest.mark.asyncio

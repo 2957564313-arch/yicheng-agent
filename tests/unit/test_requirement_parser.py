@@ -81,7 +81,9 @@ def test_second_course_registration_and_fixed_activity_are_parsed():
     )
 
     registration = next(
-        task for task in result.tasks if task.id == "second_course_registration"
+        task
+        for task in result.tasks
+        if task.id == "second_course_registration"
     )
     activity = next(
         task
@@ -100,8 +102,7 @@ def test_second_course_registration_and_fixed_activity_are_parsed():
 
 def test_task_scoped_deadline_does_not_leak_to_evening_run():
     result = parse(
-        "明天下课后去图书馆学习90分钟，"
-        "18点前到菜鸟驿站取快递，晚上去东操场跑步30分钟。"
+        "明天下课后去图书馆学习90分钟，18点前到菜鸟驿站取快递，晚上去东操场跑步30分钟。"
     )
     study = next(task for task in result.tasks if task.id == "study")
     parcel = next(task for task in result.tasks if task.id == "parcel")
@@ -123,8 +124,7 @@ def test_empty_task_request_requires_clarification():
 
 def test_timetable_reference_does_not_turn_planning_request_into_query():
     result = parse(
-        "根据我的课表帮我安排明天下午去图书馆自习2小时"
-        "和跑步30分钟。"
+        "根据我的课表帮我安排明天下午去图书馆自习2小时和跑步30分钟。"
     )
 
     assert result.intent == "plan"
@@ -168,9 +168,7 @@ def test_student_handbook_questions_do_not_become_empty_plans():
 
 
 def test_question_word_does_not_hide_explicit_planning_request():
-    result = parse(
-        "明天下午去图书馆七楼自习2小时，可以帮我安排吗？"
-    )
+    result = parse("明天下午去图书馆七楼自习2小时，可以帮我安排吗？")
 
     assert result.intent == "plan"
     assert [task.id for task in result.tasks] == ["study"]
@@ -178,8 +176,7 @@ def test_question_word_does_not_hide_explicit_planning_request():
 
 def test_competition_demo_parses_minutes_without_cross_task_capture():
     result = parse(
-        "今天14点以后去图书馆学习2小时，取快递，"
-        "再去东操场跑步30分钟，18点前结束。"
+        "今天14点以后去图书馆学习2小时，取快递，再去东操场跑步30分钟，18点前结束。"
     )
     run = next(task for task in result.tasks if task.id == "run")
     study = next(task for task in result.tasks if task.id == "study")
@@ -203,8 +200,7 @@ def test_departure_time_and_origin_are_hard_start_context():
     parser = RuleBasedRequirementParser("Asia/Shanghai")
     result = parser.parse(
         query=(
-            "今天下午4点从第七教学楼出发，"
-            "去图书馆学习90分钟，之后去东操场跑步30分钟。"
+            "今天下午4点从第七教学楼出发，去图书馆学习90分钟，之后去东操场跑步30分钟。"
         ),
         now=datetime(
             2026,
@@ -324,8 +320,7 @@ def test_named_subject_periods_are_still_hard_class_constraints():
     )
     result = parser.parse(
         query=(
-            "今天第1至2节有高等数学课，第3至4节有大学英语课。"
-            "下课后去图书馆自习90分钟。"
+            "今天第1至2节有高等数学课，第3至4节有大学英语课。下课后去图书馆自习90分钟。"
         ),
         now=datetime(
             2026,
@@ -359,15 +354,15 @@ def test_parcel_without_user_deadline_uses_opening_hours_not_fake_18_deadline():
 
 
 def test_transport_mode_defaults_to_walk_and_honors_non_motor_request():
-    assert parse("明天去图书馆学习一小时。").preferences.transport_mode == "walk"
     assert (
-        parse("明天骑自行车去图书馆学习一小时。")
-        .preferences.transport_mode
+        parse("明天去图书馆学习一小时。").preferences.transport_mode == "walk"
+    )
+    assert (
+        parse("明天骑自行车去图书馆学习一小时。").preferences.transport_mode
         == "bicycle"
     )
     assert (
-        parse("明天骑电瓶车去图书馆学习一小时。")
-        .preferences.transport_mode
+        parse("明天骑电瓶车去图书馆学习一小时。").preferences.transport_mode
         == "electrobike"
     )
 
@@ -425,8 +420,7 @@ def test_complex_hdu_plan_keeps_courier_floor_and_sunshine_run_constraints():
 
 def test_hdu_health_hot_water_and_indoor_sports_are_plannable_tasks():
     result = parse(
-        "明天下午去校医院就诊30分钟，之后打羽毛球1小时，"
-        "晚上回宿舍洗澡30分钟。"
+        "明天下午去校医院就诊30分钟，之后打羽毛球1小时，晚上回宿舍洗澡30分钟。"
     )
 
     tasks = {task.id: task for task in result.tasks}
@@ -447,16 +441,24 @@ def test_hdu_health_hot_water_and_indoor_sports_are_plannable_tasks():
 def test_explicit_calendar_date_does_not_hide_following_clock_time():
     parser = RuleBasedRequirementParser("Asia/Shanghai")
 
-    assert str(parser._overall_start("7月24日21点后去顺丰取快递")) == "21:00:00"
-    assert str(parser._overall_start("7月24日19点去西北田径场长跑")) == "19:00:00"
-    assert str(parser._overall_start("7月26日晚上23点30分回宿舍")) == "23:30:00"
-    assert str(parser._overall_start("7月25日15点45分去综合馆打羽毛球")) == "15:45:00"
+    assert (
+        str(parser._overall_start("7月24日21点后去顺丰取快递")) == "21:00:00"
+    )
+    assert (
+        str(parser._overall_start("7月24日19点去西北田径场长跑")) == "19:00:00"
+    )
+    assert (
+        str(parser._overall_start("7月26日晚上23点30分回宿舍")) == "23:30:00"
+    )
+    assert (
+        str(parser._overall_start("7月25日15点45分去综合馆打羽毛球"))
+        == "15:45:00"
+    )
 
 
 def test_common_academic_tasks_are_supported_without_online_model():
     result = parse(
-        "明天下午2点后在图书馆复习高数2小时，"
-        "然后写作业90分钟，晚上7点前全部完成。"
+        "明天下午2点后在图书馆复习高数2小时，然后写作业90分钟，晚上7点前全部完成。"
     )
 
     tasks = {task.id: task for task in result.tasks}
@@ -476,8 +478,7 @@ def test_common_academic_tasks_are_supported_without_online_model():
 
 def test_common_daily_life_and_activity_tasks_keep_explicit_order():
     result = parse(
-        "明天中午吃午饭45分钟，然后回宿舍洗衣服30分钟，"
-        "最后参加社团活动1小时。"
+        "明天中午吃午饭45分钟，然后回宿舍洗衣服30分钟，最后参加社团活动1小时。"
     )
 
     tasks = {task.id: task for task in result.tasks}
@@ -492,9 +493,7 @@ def test_common_daily_life_and_activity_tasks_keep_explicit_order():
 
 
 def test_fixed_common_task_is_not_duplicated_by_fallback_catalog():
-    result = parse(
-        "明天下午3点到4点开组会，然后在图书馆复习2小时。"
-    )
+    result = parse("明天下午3点到4点开组会，然后在图书馆复习2小时。")
 
     fixed = [task for task in result.tasks if task.fixed_start]
     assert len(fixed) == 1
@@ -503,10 +502,29 @@ def test_fixed_common_task_is_not_duplicated_by_fallback_catalog():
     assert [task.id for task in result.tasks].count("review") == 1
 
 
-def test_common_task_location_is_scoped_to_its_own_clause():
+def test_single_clock_events_keep_fixed_start_and_local_duration():
     result = parse(
-        "明天下午在实验室写代码2小时，再回宿舍休息30分钟。"
+        "今天下午上完课拿快递，然后晚上21:00要乐团排练。"
+        "中午12:40有一个20分钟的视频会议。"
     )
+
+    tasks = {task.id: task for task in result.tasks}
+    video = tasks["fixed_point_video_meeting_1240"]
+    rehearsal = tasks["fixed_point_rehearsal_2100"]
+
+    assert video.fixed_start.isoformat() == "2026-07-23T12:40:00+08:00"
+    assert video.fixed_end.isoformat() == "2026-07-23T13:00:00+08:00"
+    assert video.duration_min == 20
+    assert "duration_estimated" not in video.tags
+    assert rehearsal.fixed_start.isoformat() == "2026-07-23T21:00:00+08:00"
+    assert rehearsal.fixed_end.isoformat() == "2026-07-23T22:00:00+08:00"
+    assert "duration_estimated" in rehearsal.tags
+    assert "未说明时长" in (rehearsal.notes or "")
+    assert "meeting" not in tasks
+
+
+def test_common_task_location_is_scoped_to_its_own_clause():
+    result = parse("明天下午在实验室写代码2小时，再回宿舍休息30分钟。")
 
     tasks = {task.id: task for task in result.tasks}
     assert tasks["project"].location_raw == "实验室"

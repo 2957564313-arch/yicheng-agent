@@ -116,7 +116,14 @@ def run_weekly_demo(
             if previous
             else WeeklyTriggerType.INITIAL
         ),
-        now=datetime.now(ZoneInfo(payload.timezone)),
+        # Demo fixtures use a frozen historical week.  Anchor the demo clock
+        # to that week so the same example remains executable after its
+        # calendar date has passed; real user-created plans still use now.
+        now=datetime.combine(
+            payload.week_start,
+            time.min,
+            ZoneInfo(payload.timezone),
+        ),
     )
     container.weekly_plans.save(plan)
     return WeeklyPlanResponse(

@@ -4,10 +4,15 @@ from fastapi.testclient import TestClient
 
 from tests.integration.test_api_demos import build_test_app, task_items
 
-
 CSV_CONTENT = """课程名称,星期,开始节次,结束节次,地点,周次
 高等数学,星期五,1,2,第六教学楼,1-16
 大学英语,星期五,3,4,第七教学楼,1-16
+"""
+
+MONDAY_REALISTIC_CONTENT = """课程名称,星期,开始节次,结束节次,地点,周次
+高等数学A2,星期一,1,2,第6教研楼北204,1-17
+中国建筑设计赏析,星期一,6,7,第6教研楼北304,1-17
+数学建模,星期一,8,9,第6教研楼北304,2-16
 """
 
 
@@ -108,14 +113,17 @@ def test_timetable_preview_does_not_replace_saved_timetable(tmp_path):
 
 def test_explicit_no_class_statement_is_a_one_day_exception(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
-        assert client.post(
-            "/api/v1/users/no_class_user/timetable/import",
-            json={
-                "format": "csv",
-                "content": CSV_CONTENT,
-                "term_start": "2026-07-20",
-            },
-        ).status_code == 201
+        assert (
+            client.post(
+                "/api/v1/users/no_class_user/timetable/import",
+                json={
+                    "format": "csv",
+                    "content": CSV_CONTENT,
+                    "term_start": "2026-07-20",
+                },
+            ).status_code
+            == 201
+        )
         response = client.post(
             "/api/v1/chat",
             json={
@@ -134,14 +142,17 @@ def test_explicit_no_class_statement_is_a_one_day_exception(tmp_path):
 
 def test_timetable_question_uses_personal_schedule(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
-        assert client.post(
-            "/api/v1/users/question_user/timetable/import",
-            json={
-                "format": "csv",
-                "content": CSV_CONTENT,
-                "term_start": "2026-07-20",
-            },
-        ).status_code == 201
+        assert (
+            client.post(
+                "/api/v1/users/question_user/timetable/import",
+                json={
+                    "format": "csv",
+                    "content": CSV_CONTENT,
+                    "term_start": "2026-07-20",
+                },
+            ).status_code
+            == 201
+        )
         response = client.post(
             "/api/v1/chat",
             json={
@@ -170,14 +181,17 @@ def test_imported_courses_fixed_event_and_deadline_are_jointly_feasible(
     tmp_path,
 ):
     with TestClient(build_test_app(tmp_path)) as client:
-        assert client.post(
-            "/api/v1/users/joint_user/timetable/import",
-            json={
-                "format": "csv",
-                "content": CSV_CONTENT,
-                "term_start": "2026-07-20",
-            },
-        ).status_code == 201
+        assert (
+            client.post(
+                "/api/v1/users/joint_user/timetable/import",
+                json={
+                    "format": "csv",
+                    "content": CSV_CONTENT,
+                    "term_start": "2026-07-20",
+                },
+            ).status_code
+            == 201
+        )
         response = client.post(
             "/api/v1/chat",
             json={
@@ -205,6 +219,66 @@ def test_imported_courses_fixed_event_and_deadline_are_jointly_feasible(
         assert "实时骑行路线不可用" not in payload["answer"]
         assert all(check["passed"] for check in payload["constraint_checks"])
         assert payload["status"] == "completed"
+
+
+def test_realistic_monday_plan_uses_timetable_and_orders_fixed_point_events(
+    tmp_path,
+):
+    with TestClient(build_test_app(tmp_path)) as client:
+        imported = client.post(
+            "/api/v1/users/realistic_user/timetable/import",
+            json={
+                "name": "2025-2026-2课表",
+                "format": "csv",
+                "content": MONDAY_REALISTIC_CONTENT,
+                "term_start": "2026-02-23",
+            },
+        )
+        assert imported.status_code == 201, imported.text
+
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "realistic_user",
+                "thread_id": "realistic_monday",
+                "query": (
+                    "根据我的课表安排今天：下午上完课拿快递，"
+                    "晚上21:00要乐团排练，中午12:40有一个20分钟的视频会议。"
+                ),
+                "mode": "offline",
+                "client_context": {"now": "2026-03-02T12:00:00+08:00"},
+            },
+        )
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        items = payload["plan"]["items"]
+        task_by_id = {
+            item["task_id"]: item
+            for item in items
+            if item["item_type"] == "task"
+        }
+
+        assert [item["start_at"] for item in items] == sorted(
+            item["start_at"] for item in items
+        )
+        assert "高等数学A2" not in {item["title"] for item in items}
+        assert "中国建筑设计赏析" in {item["title"] for item in items}
+        assert "数学建模" in {item["title"] for item in items}
+        assert "下午课程" not in {item["title"] for item in items}
+        assert task_by_id["fixed_point_video_meeting_1240"]["start_at"] == (
+            "2026-03-02T12:40:00+08:00"
+        )
+        assert task_by_id["fixed_point_video_meeting_1240"]["end_at"] == (
+            "2026-03-02T13:00:00+08:00"
+        )
+        assert task_by_id["parcel"]["start_at"] >= (
+            "2026-03-02T16:50:00+08:00"
+        )
+        assert task_by_id["fixed_point_rehearsal_2100"]["start_at"] == (
+            "2026-03-02T21:00:00+08:00"
+        )
+        assert payload["plan"]["metrics"]["buffer_minutes"] == 0
+        assert all(check["passed"] for check in payload["constraint_checks"])
 
 
 def test_complete_new_request_with_weather_does_not_reuse_old_plan(tmp_path):
@@ -246,21 +320,23 @@ def test_holiday_allows_personal_plan_but_does_not_add_regular_courses(
     tmp_path,
 ):
     with TestClient(build_test_app(tmp_path)) as client:
-        assert client.post(
-            "/api/v1/users/holiday_plan/timetable/import",
-            json={
-                "format": "csv",
-                "content": CSV_CONTENT,
-                "term_start": "2026-09-28",
-            },
-        ).status_code == 201
+        assert (
+            client.post(
+                "/api/v1/users/holiday_plan/timetable/import",
+                json={
+                    "format": "csv",
+                    "content": CSV_CONTENT,
+                    "term_start": "2026-09-28",
+                },
+            ).status_code
+            == 201
+        )
         response = client.post(
             "/api/v1/chat",
             json={
                 "user_id": "holiday_plan",
                 "query": (
-                    "2026年10月2日14点以后去图书馆自习1小时，"
-                    "再去东操场跑步30分钟。"
+                    "2026年10月2日14点以后去图书馆自习1小时，再去东操场跑步30分钟。"
                 ),
                 "mode": "offline",
                 "client_context": {"now": "2026-09-30T12:00:00+08:00"},
@@ -284,14 +360,17 @@ def test_holiday_allows_personal_plan_but_does_not_add_regular_courses(
 
 def test_school_makeup_override_uses_replacement_weekday_courses(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
-        assert client.post(
-            "/api/v1/users/makeup_plan/timetable/import",
-            json={
-                "format": "csv",
-                "content": CSV_CONTENT,
-                "term_start": "2026-09-28",
-            },
-        ).status_code == 201
+        assert (
+            client.post(
+                "/api/v1/users/makeup_plan/timetable/import",
+                json={
+                    "format": "csv",
+                    "content": CSV_CONTENT,
+                    "term_start": "2026-09-28",
+                },
+            ).status_code
+            == 201
+        )
         override = client.post(
             "/api/v1/users/makeup_plan/calendar-overrides",
             json={

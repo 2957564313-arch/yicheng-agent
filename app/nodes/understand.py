@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from app.container import AppContainer
 from app.nodes.common import append_trace
@@ -66,19 +66,14 @@ def make_understand_node(container: AppContainer):
                     llm_result=llm_result,
                     rule_result=rule_result,
                 )
-                if (
-                    llm_result.clarifications
-                    and _can_apply_rule_guard(
-                        query=state["query"],
-                        llm_result=llm_result,
-                        rule_result=rule_result,
-                    )
+                if llm_result.clarifications and _can_apply_rule_guard(
+                    query=state["query"],
+                    llm_result=llm_result,
+                    rule_result=rule_result,
                 ):
                     result = result.model_copy(
                         update={
-                            "clarifications": list(
-                                rule_result.clarifications
-                            ),
+                            "clarifications": list(rule_result.clarifications),
                         }
                     )
                 parser_name = "llm_with_rule_constraints"
@@ -181,12 +176,26 @@ def make_understand_node(container: AppContainer):
             and result.intent.value != "query"
             and not _explicit_no_class_exception(state["query"])
         ):
+            planning_now = datetime.fromisoformat(state["now_iso"])
+            active_timetable_tasks = [
+                task
+                for task in timetable_tasks
+                if not (
+                    result.requested_date == planning_now.date()
+                    and task.fixed_end is not None
+                    and task.fixed_end <= planning_now
+                )
+            ]
             result = result.model_copy(
                 update={
-                    "tasks": _merge_timetable_tasks(
-                        result.tasks,
-                        timetable_tasks,
-                    )
+                    "tasks": _apply_timetable_relative_constraints(
+                        query=state["query"],
+                        timetable_tasks=active_timetable_tasks,
+                        tasks=_merge_timetable_tasks(
+                            result.tasks,
+                            active_timetable_tasks,
+                        ),
+                    ),
                 }
             )
 
@@ -207,7 +216,9 @@ def make_understand_node(container: AppContainer):
                 )
             }
         )
-        explicit_mode = container.parser.transport_mode_from_query(state["query"])
+        explicit_mode = container.parser.transport_mode_from_query(
+            state["query"]
+        )
         explicit_avoid_congestion = (
             container.parser.avoid_congestion_from_query(state["query"])
         )
@@ -228,10 +239,7 @@ def make_understand_node(container: AppContainer):
         return {
             "intent": result.intent.value,
             "requested_date": result.requested_date.isoformat(),
-            "tasks": [
-                task.model_dump(mode="json")
-                for task in result.tasks
-            ],
+            "tasks": [task.model_dump(mode="json") for task in result.tasks],
             "preferences": preferences.model_dump(mode="json"),
             "user_memories": [
                 memory.model_dump(mode="json") for memory in memories
@@ -332,9 +340,7 @@ def _client_timetable_tasks(
     if term_end and target_date > term_end:
         return []
     academic_week = (
-        ((target_date - term_start).days // 7) + 1
-        if term_start
-        else None
+        ((target_date - term_start).days // 7) + 1 if term_start else None
     )
     tasks: list[Task] = []
     for index, value in enumerate(raw.get("entries", []), start=1):
@@ -409,25 +415,96 @@ def _merge_timetable_tasks(
     timetable_tasks,
 ):
     """Merge personal courses without duplicating explicitly stated classes."""
-    merged = list(parsed_tasks)
-    existing_fixed = [
+    verified_course_tags = {
+        "verified_timetable",
+        "personal_timetable",
+        "browser_snapshot",
+    }
+    merged = [
         task
         for task in parsed_tasks
+        if not (
+            timetable_tasks
+            and "course" in task.tags
+            and not verified_course_tags.intersection(task.tags)
+        )
+    ]
+    existing_fixed = [
+        task
+        for task in merged
         if task.fixed_start is not None and task.fixed_end is not None
     ]
     for task in timetable_tasks:
         overlaps = any(
             existing.fixed_start < task.fixed_end
             and task.fixed_start < existing.fixed_end
-            and (
-                "course" in existing.tags
-                or existing.title == task.title
-            )
+            and ("course" in existing.tags or existing.title == task.title)
             for existing in existing_fixed
         )
         if not overlaps:
             merged.append(task)
     return merged
+
+
+def _apply_timetable_relative_constraints(
+    *,
+    query: str,
+    timetable_tasks,
+    tasks,
+):
+    """Ground “after class” against the imported timetable.
+
+    The rule parser can anchor a task when the user writes explicit periods,
+    but imported courses are merged later.  Without this second guard,
+    “下午上完课拿快递” can be placed before the actual afternoon class.
+    """
+
+    marker = re.search(
+        r"(?P<period>上午|下午|晚上)?\s*(?:上完课|下课后|课后)",
+        query,
+    )
+    if marker is None or not timetable_tasks:
+        return tasks
+    courses = [
+        task
+        for task in timetable_tasks
+        if task.fixed_end is not None
+        and (
+            marker.group("period") != "上午"
+            or task.fixed_end.time() <= time(12, 30)
+        )
+        and (
+            marker.group("period") not in {"下午", "晚上"}
+            or task.fixed_end.time() > time(12)
+        )
+    ]
+    if not courses:
+        return tasks
+    class_end = max(task.fixed_end for task in courses if task.fixed_end)
+    clause_boundaries = [
+        position
+        for separator in ("，", "。", "；", ",", ";")
+        if (position := query.find(separator, marker.end())) >= 0
+    ]
+    marker_clause_end = min(clause_boundaries, default=len(query))
+    updated = []
+    for task in tasks:
+        query_position = _task_query_position(query, task)
+        if (
+            task.flexibility == TaskFlexibility.MOVABLE
+            and marker.start() <= query_position <= marker_clause_end
+        ):
+            earliest_start = (
+                max(task.earliest_start, class_end)
+                if task.earliest_start is not None
+                else class_end
+            )
+            updated.append(
+                task.model_copy(update={"earliest_start": earliest_start})
+            )
+        else:
+            updated.append(task)
+    return updated
 
 
 def _timetable_summary(
@@ -467,9 +544,7 @@ def _timetable_summary(
         effective_weekday = "一二三四五六日"[
             int(calendar_context.effective_weekday) - 1
         ]
-        summary += (
-            f"学校校历设置为当天按星期{effective_weekday}课表执行。"
-        )
+        summary += f"学校校历设置为当天按星期{effective_weekday}课表执行。"
     return summary
 
 
@@ -533,7 +608,9 @@ def _apply_memory_preferences(
                 "电动车": "electrobike",
             }.get(str(value), value)
         if memory.key == "preferred_locations" and isinstance(value, str):
-            value = [item.strip() for item in value.split("、") if item.strip()]
+            value = [
+                item.strip() for item in value.split("、") if item.strip()
+            ]
         if memory.key == "preferred_study_location":
             if not isinstance(value, str) or not value.strip():
                 continue
@@ -541,11 +618,7 @@ def _apply_memory_preferences(
             existing = update.get(target_key, preferences.preferred_locations)
             value = [
                 value.strip(),
-                *[
-                    item
-                    for item in existing
-                    if item and item != value.strip()
-                ],
+                *[item for item in existing if item and item != value.strip()],
             ]
         update[target_key] = value
     if (
@@ -612,9 +685,7 @@ def _apply_study_memory_period(
                 update={
                     "preferred_period": period,
                     "tags": list(
-                        dict.fromkeys(
-                            [*task.tags, "memory_period_preference"]
-                        )
+                        dict.fromkeys([*task.tags, "memory_period_preference"])
                     ),
                 }
             )
@@ -831,7 +902,10 @@ def _best_rule_task_match(
         if rule_location and model_location:
             if rule_location == model_location:
                 score += 30
-            elif rule_location in model_location or model_location in rule_location:
+            elif (
+                rule_location in model_location
+                or model_location in rule_location
+            ):
                 score += 15
         if score > best_score:
             best_index = index
@@ -924,9 +998,7 @@ def _merge_task_constraints(
         ),
         "importance": max(model_task.importance, rule_task.importance),
         "depends_on": list(
-            dict.fromkeys(
-                [*model_task.depends_on, *rule_task.depends_on]
-            )
+            dict.fromkeys([*model_task.depends_on, *rule_task.depends_on])
         ),
         "tags": tags,
         "notes": notes,
@@ -1011,14 +1083,10 @@ def _can_apply_rule_guard(
     rule_result: UnderstandResult,
 ) -> bool:
     """Use deterministic constraints only for fully recognized common plans."""
-    if any(
-        "hard_constraint" in task.tags
-        for task in rule_result.tasks
-    ):
+    if any("hard_constraint" in task.tags for task in rule_result.tasks):
         return True
     rule_kinds = {
-        _task_kind(task.title, task.location_raw)
-        for task in rule_result.tasks
+        _task_kind(task.title, task.location_raw) for task in rule_result.tasks
     }
     explicit_common_plan = (
         rule_result.intent.value == "plan"
@@ -1034,8 +1102,7 @@ def _can_apply_rule_guard(
             )
         )
         and all(
-            task.fixed_start is not None
-            or task.earliest_start is not None
+            task.fixed_start is not None or task.earliest_start is not None
             for task in rule_result.tasks
         )
     )
@@ -1059,8 +1126,7 @@ def _can_apply_rule_guard(
         # which can even change the apparent task category.
         return True
     llm_kinds = {
-        _task_kind(task.title, task.location_raw)
-        for task in llm_result.tasks
+        _task_kind(task.title, task.location_raw) for task in llm_result.tasks
     }
     if None in llm_kinds or None in rule_kinds or llm_kinds != rule_kinds:
         return False

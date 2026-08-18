@@ -49,10 +49,25 @@ class LocationRepository:
         if not raw_name:
             return None
         active_campus_id = campus_id or self.campus_id
-        location_id = self._alias_index.get(
-            f"{active_campus_id}:{_normalize_name(raw_name)}"
-        )
-        return self._locations.get(location_id) if location_id else None
+        normalized = _normalize_name(raw_name)
+        location_id = self._alias_index.get(f"{active_campus_id}:{normalized}")
+        if location_id:
+            return self._locations.get(location_id)
+
+        # Timetable cells normally contain a room suffix, for example
+        # “第6教学科研楼北204”.  Resolve the longest known building alias as
+        # a prefix/substring while keeping exact aliases authoritative.
+        candidates = [
+            (len(index_key.rsplit(":", 1)[-1]), candidate_id)
+            for index_key, candidate_id in self._alias_index.items()
+            if index_key.startswith(f"{active_campus_id}:")
+            and len(index_key.rsplit(":", 1)[-1]) >= 2
+            and index_key.rsplit(":", 1)[-1] in normalized
+        ]
+        if not candidates:
+            return None
+        _, location_id = max(candidates, key=lambda item: item[0])
+        return self._locations.get(location_id)
 
     def get(
         self,
@@ -120,10 +135,7 @@ class LocationRepository:
                 return merged
             return existing
         id_collision = self._locations.get(location.id)
-        if (
-            id_collision is not None
-            and id_collision.campus_id != campus_id
-        ):
+        if id_collision is not None and id_collision.campus_id != campus_id:
             location = location.model_copy(
                 update={"id": f"{campus_id}__{location.id}"}
             )

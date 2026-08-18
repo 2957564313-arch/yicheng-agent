@@ -495,6 +495,7 @@ results.push(await runCase("personal_data_backup_and_restore", async () => {
     }],
     reminder_settings: savedReminders.settings,
     current_plan: generated.plan,
+    current_plan_published: true,
   };
   assert(backup.memories.length === 1, "备份漏掉长期记忆");
   assert(backup.timetable.entries.length === 2, "备份漏掉课表");

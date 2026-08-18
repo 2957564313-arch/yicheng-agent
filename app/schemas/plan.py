@@ -25,7 +25,7 @@ class PlanItem(BaseModel):
     congestion_delay_min: int = Field(default=0, ge=0, le=120)
 
     @model_validator(mode="after")
-    def validate_interval(self) -> "PlanItem":
+    def validate_interval(self) -> PlanItem:
         if self.start_at.tzinfo is None or self.end_at.tzinfo is None:
             raise ValueError("plan item datetimes must include timezone")
         if self.end_at <= self.start_at:
@@ -58,9 +58,13 @@ class Plan(BaseModel):
     created_at: datetime
 
     @model_validator(mode="after")
-    def validate_created_at(self) -> "Plan":
+    def validate_created_at(self) -> Plan:
         if self.created_at.tzinfo is None:
             raise ValueError("created_at must include timezone")
+        self.items = sorted(
+            self.items,
+            key=lambda item: (item.start_at, item.end_at, item.id),
+        )
         return self
 
 

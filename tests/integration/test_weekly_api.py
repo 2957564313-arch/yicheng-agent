@@ -376,6 +376,36 @@ def test_three_weekly_demos_cover_valid_shortage_and_personalization(tmp_path):
         assert visitor_memories.json()["items"] == []
 
 
+def test_weekly_demo_remains_replayable_after_fixture_week(
+    tmp_path,
+    monkeypatch,
+):
+    class LateDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = datetime(
+                2026,
+                8,
+                17,
+                12,
+                0,
+                tzinfo=ZoneInfo("Asia/Shanghai"),
+            )
+            return value.astimezone(tz) if tz else value.replace(tzinfo=None)
+
+    monkeypatch.setattr(weekly_api, "datetime", LateDateTime)
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/weeks/demos/weekly_demo_01_sprint/run",
+            params={"user_id": "late_fixture_user"},
+        )
+
+    assert response.status_code == 200, response.text
+    plan = response.json()["weekly_plan"]
+    assert plan["status"] == "valid"
+    assert plan["metrics"]["allocated_duration_min"] == 740
+
+
 def test_user_can_create_a_real_weekly_plan_from_natural_language(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         response = client.post(
