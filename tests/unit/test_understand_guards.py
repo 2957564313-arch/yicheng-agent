@@ -149,6 +149,24 @@ def test_departure_leg_to_first_destination_is_not_a_separate_task():
     assert [task.id for task in filtered] == ["study"]
 
 
+def test_matched_explicit_task_is_not_removed_by_journey_cleanup():
+    study = Task(
+        id="study",
+        title="从第七教学楼出发前往图书馆学习",
+        date=NOW.date(),
+        duration_min=90,
+        location_raw="图书馆",
+    )
+
+    filtered = _drop_journey_origin_marker_tasks(
+        [study],
+        "第七教学楼",
+        protected_task_ids={"study"},
+    )
+
+    assert filtered == [study]
+
+
 def test_real_origin_task_with_an_action_is_preserved():
     task = Task(
         id="pickup",

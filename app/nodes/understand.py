@@ -112,6 +112,9 @@ def make_understand_node(container: AppContainer):
                     "tasks": _drop_journey_origin_marker_tasks(
                         result.tasks,
                         initial_location_raw,
+                        protected_task_ids={
+                            task.id for task in rule_result.tasks
+                        },
                     )
                 }
             )
@@ -884,8 +887,11 @@ def _merge_llm_with_rule_constraints(
 def _drop_journey_origin_marker_tasks(
     tasks: list[Task],
     origin: str,
+    *,
+    protected_task_ids: set[str] | None = None,
 ) -> list[Task]:
     """Keep a stated departure point as context, never as a fake task."""
+    protected = protected_task_ids or set()
     origin_pattern = re.escape(origin.strip())
     marker_pattern = re.compile(
         rf"^\s*(?:从|自)?\s*{origin_pattern}\s*"
@@ -897,7 +903,7 @@ def _drop_journey_origin_marker_tasks(
     removed_ids = {
         task.id
         for task in tasks
-        if marker_pattern.fullmatch(task.title)
+        if task.id not in protected and marker_pattern.fullmatch(task.title)
     }
     if not removed_ids:
         return tasks
