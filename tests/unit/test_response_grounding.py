@@ -3,7 +3,9 @@ from zoneinfo import ZoneInfo
 
 from app.nodes.respond import (
     _claims_peak_was_avoided,
+    _direct_calendar_answer,
     _ensure_query_guardrails,
+    _fact_source_label,
     _facts_answer,
     _plain_text_answer,
     _polished_answer_is_grounded,
@@ -466,6 +468,34 @@ def test_holiday_query_keeps_school_calendar_caveat():
 
     assert "学校校历" in answer
     assert "教务通知" in answer
+
+
+def test_holiday_answer_is_complete_and_uses_official_source_label():
+    fact = RetrievedFact(
+        id="holiday_2026",
+        content=(
+            "- 国庆节：10月1日（星期四）至10月7日（星期三）放假调休，"
+            "共7天。9月20日（星期日）、10月10日（星期六）上班。"
+        ),
+        source=DataSource.RAG,
+        source_ref=(
+            "https://www.gov.cn/zhengce/content/202511/content_7047090.htm"
+        ),
+        metadata={"title": "第七章 毕业设计（论文）答辩"},
+    )
+
+    answer = _direct_calendar_answer(
+        "2026年国庆节什么时候放假？",
+        [fact],
+    )
+
+    assert answer is not None
+    assert "10月1日" in answer
+    assert "10月7日" in answer
+    assert "10月10日" in answer
+    assert "国务院办公厅" in answer
+    assert "毕业设计" not in answer
+    assert "毕业设计" not in _fact_source_label(fact)
 
 
 def test_fallback_knowledge_answer_cites_handbook_page_and_section():

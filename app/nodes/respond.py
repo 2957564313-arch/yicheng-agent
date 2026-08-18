@@ -44,6 +44,10 @@ def make_respond_node(container: AppContainer):
                 state["query"],
                 facts,
             )
+            direct_calendar_answer = _direct_calendar_answer(
+                state["query"],
+                facts,
+            )
             timetable_fact = next(
                 (fact for fact in facts if fact.id == "personal_timetable"),
                 None,
@@ -53,6 +57,9 @@ def make_respond_node(container: AppContainer):
                 used_llm = False
             elif direct_policy_answer is not None:
                 answer = direct_policy_answer
+                used_llm = False
+            elif direct_calendar_answer is not None:
+                answer = direct_calendar_answer
                 used_llm = False
             elif timetable_fact is not None:
                 answer = _timetable_answer(timetable_fact.content)
@@ -1440,6 +1447,8 @@ def _facts_answer(
 
 def _fact_source_label(fact: RetrievedFact) -> str:
     source = fact.source_ref or ""
+    if "gov.cn" in source:
+        return f"国务院办公厅（{source}）"
     page = fact.metadata.get("page")
     title = str(fact.metadata.get("title") or "").strip()
     parts = [source] if source else []
@@ -1448,6 +1457,56 @@ def _fact_source_label(fact: RetrievedFact) -> str:
     if title:
         parts.append(title)
     return " · ".join(parts)
+
+
+def _direct_calendar_answer(
+    query: str,
+    facts: list[RetrievedFact],
+) -> str | None:
+    """Return verified holiday dates without model-dependent omissions.
+
+    Holiday ranges and adjusted workdays are exact calendar facts. A
+    rendering model must not drop an adjusted workday or mix an unrelated
+    retrieved section title into the official citation.
+    """
+    holiday_names = (
+        "元旦",
+        "春节",
+        "清明节",
+        "劳动节",
+        "端午节",
+        "中秋节",
+        "国庆节",
+    )
+    holiday_name = next(
+        (name for name in holiday_names if name in query),
+        None,
+    )
+    if holiday_name is None or not any(
+        marker in query for marker in ("放假", "调休", "假期")
+    ):
+        return None
+
+    candidates: list[tuple[int, RetrievedFact, str]] = []
+    for fact in facts:
+        if holiday_name not in fact.content:
+            continue
+        excerpt = _knowledge_answer_excerpt(fact.content, query)
+        if holiday_name not in excerpt:
+            continue
+        score = _answer_relevance_score(excerpt, query)
+        if "gov.cn" in (fact.source_ref or ""):
+            score += 1000
+        candidates.append((score, fact, excerpt))
+    if not candidates:
+        return None
+
+    _, fact, excerpt = max(candidates, key=lambda item: item[0])
+    source_label = _fact_source_label(fact)
+    lines = [excerpt]
+    if source_label:
+        lines.extend(["", f"依据来源：{source_label}"])
+    return "\n".join(lines)
 
 
 def _direct_policy_answer(

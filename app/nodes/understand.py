@@ -941,6 +941,15 @@ def _merge_task_constraints(
 
     update = {
         "id": rule_task.id,
+        # Course blocks come from the deterministic period parser. Keep its
+        # canonical title (including the ``课程`` marker) so the API and UI
+        # can identify course items consistently even when the LLM calls the
+        # same block ``第1节课`` or another free-form variant.
+        "title": (
+            rule_task.title
+            if "course" in rule_task.tags
+            else model_task.title
+        ),
         "date": rule_task.date,
         "duration_min": (
             rule_task.duration_min
