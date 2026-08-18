@@ -1020,6 +1020,13 @@ def _merge_task_constraints(
             else model_task.title
         ),
         "date": rule_task.date,
+        # Whether a task is fixed is a hard scheduling fact, not a wording
+        # choice. The deterministic parser is the final authority here; an
+        # LLM must not turn a journey departure time into the fixed start of
+        # the first destination task.
+        "fixed_start": rule_task.fixed_start,
+        "fixed_end": rule_task.fixed_end,
+        "flexibility": rule_task.flexibility,
         "duration_min": (
             rule_task.duration_min
             if fixed_by_rule
@@ -1081,14 +1088,6 @@ def _merge_task_constraints(
         "tags": tags,
         "notes": notes,
     }
-    if fixed_by_rule:
-        update.update(
-            {
-                "fixed_start": rule_task.fixed_start,
-                "fixed_end": rule_task.fixed_end,
-                "flexibility": rule_task.flexibility,
-            }
-        )
     return model_task.model_copy(update=update)
 
 

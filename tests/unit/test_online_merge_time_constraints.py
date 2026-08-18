@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -79,3 +79,48 @@ def test_course_merge_keeps_canonical_course_titles():
         task.title for task in merged.tasks if "course" in task.tags
     ]
     assert course_titles == ["第1节课程", "第3节课程"]
+
+
+def test_model_cannot_lock_movable_destination_to_departure_time():
+    query = (
+        "今天下午4点从第七教学楼出发，去图书馆学习90分钟，"
+        "之后到东操场跑步30分钟。"
+    )
+    parser = RuleBasedRequirementParser(
+        "Asia/Shanghai",
+        class_periods_path=Path("data/class_periods.json"),
+    )
+    parsed = parser.parse(query=query, now=NOW)
+    rule_study = next(task for task in parsed.tasks if task.id == "study")
+    departure_at = parser.journey_start_from_query(
+        query,
+        parsed.requested_date,
+    )
+    assert departure_at is not None
+    model_study = rule_study.model_copy(
+        update={
+            "title": "出发去图书馆学习",
+            "fixed_start": departure_at,
+            "fixed_end": departure_at + timedelta(minutes=90),
+            "flexibility": "fixed",
+        }
+    )
+    llm_result = parsed.model_copy(
+        update={
+            "tasks": [
+                model_study if task.id == "study" else task
+                for task in parsed.tasks
+            ]
+        }
+    )
+
+    merged = _merge_llm_with_rule_constraints(
+        query=query,
+        llm_result=llm_result,
+        rule_result=parsed,
+    )
+    study = next(task for task in merged.tasks if task.id == "study")
+
+    assert study.fixed_start is None
+    assert study.fixed_end is None
+    assert study.flexibility == rule_study.flexibility
