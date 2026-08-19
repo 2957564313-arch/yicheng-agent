@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from secrets import token_hex
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field, field_validator
@@ -58,6 +57,26 @@ def _session_payload(
     }
 
 
+def _require_bootstrap(request: Request) -> None:
+    manager = request.app.state.access_manager
+    if not manager.enabled:
+        return
+    authorization = request.headers.get("authorization", "")
+    token = (
+        authorization.removeprefix("Bearer ").strip()
+        if authorization.startswith("Bearer ")
+        else ""
+    )
+    claims = manager.verify_claims(token) if token else None
+    if not claims or claims.get("mode") != "bootstrap":
+        raise AppError(
+            "PRODUCT_ACCESS_REQUIRED",
+            "请先输入产品统一入口账号和密码。",
+            status_code=401,
+            retryable=False,
+        )
+
+
 @router.get("/status")
 def access_status(request: Request) -> dict:
     manager = request.app.state.access_manager
@@ -81,6 +100,7 @@ def access_status(request: Request) -> dict:
 
 @router.post("/register")
 def register(payload: RegisterRequest, request: Request) -> dict:
+    _require_bootstrap(request)
     account = request.app.state.container.accounts.create(
         username=payload.username,
         password=payload.password,
@@ -104,6 +124,7 @@ def register(payload: RegisterRequest, request: Request) -> dict:
 
 @router.post("/account/login")
 def account_login(payload: AccountLoginRequest, request: Request) -> dict:
+    _require_bootstrap(request)
     account = request.app.state.container.accounts.authenticate(
         username=payload.username,
         password=payload.password,
@@ -125,26 +146,35 @@ def account_login(payload: AccountLoginRequest, request: Request) -> dict:
 
 
 @router.post("/login")
-def test_login(payload: LoginRequest, request: Request) -> dict:
-    """Enter an isolated workspace with the shared competition account."""
+def product_login(payload: LoginRequest, request: Request) -> dict:
+    """Pass the shared product gate before choosing a personal/test space."""
     manager = request.app.state.access_manager
-    if not manager.configured:
-        raise AppError(
-            "ACCESS_NOT_CONFIGURED",
-            "测试入口尚未完成安全配置，请联系项目负责人。",
-            status_code=503,
-            retryable=False,
-        )
-    if manager.login(payload.username, payload.password) is None:
+    login = manager.login(payload.username, payload.password)
+    if login is None:
         raise AppError(
             "INVALID_CREDENTIALS",
-            "测试账号或密码不正确。",
+            "产品入口账号或密码不正确。",
             status_code=401,
             retryable=False,
         )
+    token, expires_at = login
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_at": expires_at.isoformat(),
+        "session_mode": "bootstrap",
+        "user_id": None,
+        "account_name": None,
+    }
+
+
+@router.post("/test-session")
+def test_session(request: Request) -> dict:
+    """Enter the stable shared workspace used for debugging and judging."""
+    _require_bootstrap(request)
     return _session_payload(
         request,
         mode="test",
-        user_id=f"test_{token_hex(12)}",
-        account_name="测试体验",
+        user_id="test_shared",
+        account_name="共享测试空间",
     )

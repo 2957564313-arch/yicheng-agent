@@ -102,6 +102,10 @@ def test_self_hosted_accounts_replace_external_login_choices() -> None:
     assert 'data-auth-view="test"' in html
     assert "/api/v1/auth/account/login" in javascript
     assert "/api/v1/auth/register" in javascript
+    assert "/api/v1/auth/test-session" in javascript
+    assert "/api/v1/auth/login" in javascript
+    assert "正在进入共享测试空间" in javascript
+    assert "setBootstrapView" in javascript
     assert "微信扫码" not in html
     assert "统一认证" not in html
     assert "hduhelp-wechat" not in html

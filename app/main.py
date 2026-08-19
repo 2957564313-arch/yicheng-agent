@@ -106,19 +106,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
             mode = str(claims.get("mode") or "")
             user_id = str(claims.get("uid") or "")
             user_match = re.match(r"^/api/v1/users/([^/]+)", path)
-            if mode == "test" and "/connections/hduhelp" in path:
-                return JSONResponse(
-                    status_code=403,
-                    content={
-                        "error": {
-                            "code": "TEST_HDUHELP_DISABLED",
-                            "message": "测试体验不会连接任何个人杭助账号",
-                            "details": [],
-                            "retryable": False,
-                        }
-                    },
-                )
-            if user_match and mode not in {"test", "normal"}:
+            if mode not in {"test", "normal"}:
                 return JSONResponse(
                     status_code=403,
                     content={
@@ -130,7 +118,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
                         }
                     },
                 )
-            if user_match and mode in {"test", "normal"} and user_match.group(1) != user_id:
+            if user_match and user_match.group(1) != user_id:
                 return JSONResponse(
                     status_code=403,
                     content={

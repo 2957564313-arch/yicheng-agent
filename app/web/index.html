@@ -14,10 +14,10 @@
     <section id="access-gate" class="access-gate" hidden>
       <form id="login-form" class="access-card">
         <div class="brand-mark" aria-hidden="true">易</div>
-        <p class="eyebrow">云端账号</p>
-        <h1 id="access-title">登录易程智策</h1>
-        <p id="access-description">手机和电脑登录同一账号，课表、偏好、对话和日程自动同步。</p>
-        <div class="access-tabs" role="tablist" aria-label="登录方式">
+        <p class="eyebrow">产品入口</p>
+        <h1 id="access-title">进入易程智策</h1>
+        <p id="access-description">请先输入产品统一入口账号和密码。</p>
+        <div class="access-tabs" role="tablist" aria-label="登录方式" hidden>
           <button type="button" class="active" data-auth-view="login">账号登录</button>
           <button type="button" data-auth-view="register">创建账号</button>
           <button type="button" data-auth-view="test">测试入口</button>
@@ -49,7 +49,7 @@
           <input id="login-password-confirm" type="password" autocomplete="new-password" />
         </label>
         <button id="login-submit" class="primary" type="submit">登录</button>
-        <small id="login-message">还没有账号可以直接创建；测试入口使用参赛材料中的账号。</small>
+        <small id="login-message">验证后可登录个人账号，或直接进入共享测试空间。</small>
       </form>
     </section>
     <header class="masthead">
@@ -697,6 +697,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260819-4" defer></script>
+    <script src="/app.js?v=20260819-5" defer></script>
   </body>
 </html>

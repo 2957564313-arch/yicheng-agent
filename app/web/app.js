@@ -118,6 +118,7 @@ const loginUsernameLabel = $("#login-username-label");
 const loginSubmit = $("#login-submit");
 const accessTitle = $("#access-title");
 const accessDescription = $("#access-description");
+const authTabs = $(".access-tabs");
 const authViewButtons = document.querySelectorAll("[data-auth-view]");
 const loginMessage = $("#login-message");
 const logoutButton = $("#logout");
@@ -153,8 +154,8 @@ const weeklyPanel = $(".weekly-panel");
 const agendaPanel = $(".agenda-panel");
 let activeWorkspaceView = "chat";
 let activeAccessMode = "";
-let activeAuthView = "login";
-let testEntryUsername = "";
+let activeAuthView = "bootstrap";
+let productEntryUsername = "";
 let scheduleViewMode = "day";
 let scheduleCursorDate = null;
 let lastAgendaData = null;
@@ -1099,37 +1100,70 @@ function clearLocalUserCache() {
 
 function setAuthView(view) {
   activeAuthView = view;
+  authTabs.hidden = false;
   const registering = view === "register";
-  const testing = view === "test";
   authViewButtons.forEach((button) => {
     button.classList.toggle("active", button.dataset.authView === view);
   });
   accessTitle.textContent = registering
     ? "创建易程智策账号"
-    : testing ? "进入测试空间" : "登录易程智策";
+    : "登录易程智策";
   accessDescription.textContent = registering
     ? "创建一次，手机和电脑登录后自动同步同一份个人数据。"
-    : testing
-      ? "测试空间与真实用户隔离，也不会连接个人杭助数据。"
-      : "手机和电脑登录同一账号，课表、偏好、对话和日程自动同步。";
+    : "手机和电脑登录同一账号，课表、偏好、对话和日程自动同步。";
   loginDisplayNameField.hidden = !registering;
   loginPasswordConfirmField.hidden = !registering;
   loginPasswordConfirm.required = registering;
   loginPassword.autocomplete = registering ? "new-password" : "current-password";
-  loginUsernameLabel.textContent = testing ? "测试账号" : "账号";
-  loginSubmit.textContent = registering ? "创建并登录" : testing ? "进入测试" : "登录";
-  loginUsername.value = testing ? testEntryUsername : "";
+  loginUsernameLabel.textContent = "账号";
+  loginSubmit.textContent = registering ? "创建并登录" : "登录";
+  loginUsername.value = "";
   loginPassword.value = "";
   loginPasswordConfirm.value = "";
-  loginMessage.textContent = testing
-    ? "请输入参赛材料中提供的测试账号和密码。"
-    : registering
-      ? "账号可使用学号、邮箱或自定义名称；密码至少 8 位。"
-      : "还没有账号可以直接创建。";
+  loginMessage.textContent = registering
+    ? "账号可使用学号、邮箱或自定义名称；密码至少 8 位。"
+    : "还没有账号可以直接创建。";
+}
+
+function setBootstrapView() {
+  activeAuthView = "bootstrap";
+  authTabs.hidden = true;
+  accessTitle.textContent = "进入易程智策";
+  accessDescription.textContent = "请先输入产品统一入口账号和密码。";
+  loginDisplayNameField.hidden = true;
+  loginPasswordConfirmField.hidden = true;
+  loginPasswordConfirm.required = false;
+  loginUsernameLabel.textContent = "产品账号";
+  loginUsername.value = productEntryUsername;
+  loginPassword.value = "";
+  loginPassword.autocomplete = "current-password";
+  loginSubmit.textContent = "继续";
+  loginMessage.textContent = "验证后可登录个人账号，或直接进入共享测试空间。";
 }
 
 authViewButtons.forEach((button) => {
-  button.addEventListener("click", () => setAuthView(button.dataset.authView));
+  button.addEventListener("click", async () => {
+    if (button.dataset.authView !== "test") {
+      setAuthView(button.dataset.authView);
+      return;
+    }
+    button.disabled = true;
+    loginMessage.textContent = "正在进入共享测试空间…";
+    try {
+      const response = await fetch("/api/v1/auth/test-session", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw data;
+      const previousUserId = localStorage.getItem("yicheng_user_id");
+      if (previousUserId !== data.user_id) clearLocalUserCache();
+      localStorage.setItem(accessTokenKey, data.access_token);
+      localStorage.setItem(sessionModeKey, data.session_mode);
+      localStorage.setItem("yicheng_user_id", data.user_id);
+      globalThis.location.reload();
+    } catch (error) {
+      loginMessage.textContent = error?.error?.message || "测试空间暂时无法进入，请稍后重试。";
+      button.disabled = false;
+    }
+  });
 });
 
 async function initializeAccess() {
@@ -1142,7 +1176,7 @@ async function initializeAccess() {
       logoutButton.hidden = true;
       return true;
     }
-    testEntryUsername = status.test_username || "";
+    productEntryUsername = status.test_username || "";
     if (status.authenticated && ["test", "normal"].includes(status.session_mode)) {
       activeAccessMode = status.session_mode;
       const previousUserId = localStorage.getItem("yicheng_user_id");
@@ -1160,9 +1194,17 @@ async function initializeAccess() {
         : "退出";
       return true;
     }
+    if (status.authenticated && status.session_mode === "bootstrap") {
+      activeAccessMode = "bootstrap";
+      localStorage.setItem(sessionModeKey, "bootstrap");
+      setAuthView("login");
+      accessGate.hidden = false;
+      logoutButton.hidden = true;
+      return false;
+    }
     localStorage.removeItem(accessTokenKey);
     localStorage.removeItem(sessionModeKey);
-    setAuthView("login");
+    setBootstrapView();
     accessGate.hidden = false;
     logoutButton.hidden = true;
     return false;
@@ -1180,10 +1222,14 @@ loginForm.addEventListener("submit", async (event) => {
     return;
   }
   loginSubmit.disabled = true;
-  loginMessage.textContent = activeAuthView === "register" ? "正在创建账号…" : "正在登录…";
-  const endpoint = activeAuthView === "register"
-    ? "/api/v1/auth/register"
-    : activeAuthView === "test" ? "/api/v1/auth/login" : "/api/v1/auth/account/login";
+  loginMessage.textContent = activeAuthView === "bootstrap"
+    ? "正在验证产品入口…"
+    : activeAuthView === "register" ? "正在创建账号…" : "正在登录…";
+  const endpoint = activeAuthView === "bootstrap"
+    ? "/api/v1/auth/login"
+    : activeAuthView === "register"
+      ? "/api/v1/auth/register"
+      : "/api/v1/auth/account/login";
   const payload = {
     username: loginUsername.value.trim(),
     password: loginPassword.value,
@@ -1198,10 +1244,10 @@ loginForm.addEventListener("submit", async (event) => {
     const data = await response.json();
     if (!response.ok) throw data;
     const previousUserId = localStorage.getItem("yicheng_user_id");
-    if (previousUserId && previousUserId !== data.user_id) clearLocalUserCache();
+    if (data.user_id && previousUserId && previousUserId !== data.user_id) clearLocalUserCache();
     localStorage.setItem(accessTokenKey, data.access_token);
     localStorage.setItem(sessionModeKey, data.session_mode);
-    localStorage.setItem("yicheng_user_id", data.user_id);
+    if (data.user_id) localStorage.setItem("yicheng_user_id", data.user_id);
     globalThis.location.reload();
   } catch (error) {
     loginMessage.textContent = error?.error?.message || "登录没有成功，请稍后重试。";
@@ -1219,13 +1265,6 @@ logoutButton.addEventListener("click", () => {
 
 function configureSessionWorkspace() {
   const mode = activeAccessMode || localStorage.getItem(sessionModeKey);
-  document.querySelectorAll('[data-view="hduhelp"]').forEach((button) => {
-    button.hidden = mode === "test";
-  });
-  if (mode === "test") {
-    document.querySelector(".hduhelp-panel").hidden = true;
-    if (activeWorkspaceView === "hduhelp") setActiveWorkspaceView("chat");
-  }
   return { mode, onboarding: false };
 }
 
@@ -3847,9 +3886,7 @@ async function initializeApp() {
     renderDebug(error);
   });
   loadMemories().catch((error) => renderDebug(error));
-  if (session.mode !== "test") {
-    loadHduHelpConnection().catch((error) => renderDebug(error));
-  }
+  loadHduHelpConnection().catch((error) => renderDebug(error));
   loadTimetable().catch((error) => renderDebug(error));
   loadCalendarOverrides().catch((error) => renderDebug(error));
 }
