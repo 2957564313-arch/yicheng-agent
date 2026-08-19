@@ -14,14 +14,15 @@ from app.providers.amap import (
 )
 from app.providers.campus_rules import CampusRulesRepository
 from app.providers.fallback import RouteFallbackService, WeatherFallbackService
+from app.providers.hduhelp import HduHelpClient
 from app.providers.location_repository import LocationRepository
 from app.providers.rag import KnowledgeRepository
 from app.providers.route_static import StaticRouteProvider
 from app.providers.weather_static import StaticWeatherProvider
 from app.repositories.academic_calendar import AcademicCalendarRepository
-from app.repositories.database import Database
+from app.repositories.connections import ExternalConnectionRepository
 from app.repositories.conversations import ConversationRepository
-from app.repositories.external_events import ExternalEventRepository
+from app.repositories.database import Database
 from app.repositories.memories import MemoryRepository
 from app.repositories.plans import PlanRepository
 from app.repositories.reminders import ReminderSettingsRepository
@@ -29,6 +30,7 @@ from app.repositories.runs import RunRepository
 from app.repositories.timetables import TimetableRepository
 from app.repositories.weekly import WeeklyPlanRepository
 from app.services.agenda import AgendaService
+from app.services.credentials import CredentialCipher
 from app.services.llm import OpenAICompatibleLLM
 from app.services.replanner import Replanner
 from app.services.requirement_parser import RuleBasedRequirementParser
@@ -46,8 +48,10 @@ class AppContainer:
     campus_profile: dict
     database: Database
     conversations: ConversationRepository
+    external_connections: ExternalConnectionRepository
+    credential_cipher: CredentialCipher
+    hduhelp: HduHelpClient
     plans: PlanRepository
-    external_events: ExternalEventRepository
     reminders: ReminderSettingsRepository
     memories: MemoryRepository
     timetables: TimetableRepository
@@ -110,6 +114,12 @@ def build_container(settings: Settings) -> AppContainer:
     database = Database(settings.app_database_path)
     database.initialize()
     conversations = ConversationRepository(database)
+    external_connections = ExternalConnectionRepository(database)
+    credential_cipher = CredentialCipher(settings.credential_secret)
+    hduhelp = HduHelpClient(
+        base_url=settings.hduhelp_api_base_url,
+        timeout_seconds=settings.hduhelp_timeout_seconds,
+    )
     locations = LocationRepository(settings.app_data_dir / "locations.json")
     campus_profile = _load_campus_profile(settings.app_data_dir)
     amap_profile = _profile_amap_settings(campus_profile)
@@ -143,7 +153,6 @@ def build_container(settings: Settings) -> AppContainer:
     )
     memories = MemoryRepository(database)
     plans = PlanRepository(database)
-    external_events = ExternalEventRepository(database)
     reminders = ReminderSettingsRepository(database)
     class_periods = _load_class_periods(
         settings.app_data_dir / "class_periods.json"
@@ -182,7 +191,6 @@ def build_container(settings: Settings) -> AppContainer:
     )
     agenda = AgendaService(
         plans=plans,
-        external_events=external_events,
         timetables=timetables,
         academic_calendar=academic_calendar,
         memories=memories,
@@ -228,8 +236,10 @@ def build_container(settings: Settings) -> AppContainer:
         campus_profile=campus_profile,
         database=database,
         conversations=conversations,
+        external_connections=external_connections,
+        credential_cipher=credential_cipher,
+        hduhelp=hduhelp,
         plans=plans,
-        external_events=external_events,
         reminders=reminders,
         memories=memories,
         timetables=timetables,

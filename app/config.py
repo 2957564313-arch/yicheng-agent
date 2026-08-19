@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from functools import lru_cache
 import os
+from functools import lru_cache
 from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -45,8 +44,8 @@ class Settings(BaseSettings):
     app_test_username: str = ""
     app_test_password: str = Field(default="", repr=False)
     app_auth_secret: str = Field(default="", repr=False)
+    app_credential_secret: str = Field(default="", repr=False)
     app_access_hours: int = Field(default=8, ge=1, le=72)
-    app_integration_api_key: str = Field(default="", repr=False)
     # Keep API documentation private on the public site unless explicitly
     # enabled for local development or an authenticated maintenance window.
     app_docs_enabled: bool = False
@@ -75,6 +74,14 @@ class Settings(BaseSettings):
     weather_api_key: str = Field(default="", repr=False)
     weather_timeout_seconds: float = Field(default=3, ge=0.5, le=30)
     weather_city_adcode: str = ""
+
+    hduhelp_api_base_url: str = "https://api.hduhelp.com"
+    hduhelp_timeout_seconds: float = Field(default=20, ge=2, le=60)
+
+    @property
+    def credential_secret(self) -> str:
+        """Return the server-only key used for external account tokens."""
+        return self.app_credential_secret or self.app_auth_secret
 
     @property
     def llm_models(self) -> list[str]:

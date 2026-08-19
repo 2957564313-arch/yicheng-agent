@@ -68,6 +68,15 @@ const timetableImport = $("#timetable-import");
 const timetableConfirm = $("#timetable-confirm");
 const timetableSummary = $("#timetable-summary");
 const timetableClear = $("#timetable-clear");
+const hduhelpToken = $("#hduhelp-token");
+const hduhelpConnect = $("#hduhelp-connect");
+const hduhelpDisconnect = $("#hduhelp-disconnect");
+const hduhelpSync = $("#hduhelp-sync");
+const hduhelpTerm = $("#hduhelp-term");
+const hduhelpBadge = $("#hduhelp-badge");
+const hduhelpState = $("#hduhelp-state");
+const hduhelpConnectForm = $("#hduhelp-connect-form");
+const hduhelpSyncForm = $("#hduhelp-sync-form");
 const calendarDate = $("#calendar-date");
 const calendarAction = $("#calendar-action");
 const calendarWeekday = $("#calendar-weekday");
@@ -3668,13 +3677,162 @@ async function fileToImportPayload(file) {
   throw new Error("请选择 .pdf、.xlsx、.csv 或 .json 课表文件。");
 }
 
+function hduhelpTermLabel(term) {
+  const semester = { 1: "第一学期", 2: "第二学期", 3: "短学期" }[
+    term.semester
+  ] || `第${term.semester}学期`;
+  return `${term.school_year} · ${semester}`;
+}
+
+function renderHduHelpConnection(data) {
+  const connected = Boolean(data?.connected);
+  hduhelpBadge.textContent = connected ? "已连接" : "未连接";
+  hduhelpBadge.classList.toggle("connected", connected);
+  hduhelpConnectForm.hidden = connected;
+  hduhelpSyncForm.hidden = !connected;
+  hduhelpTerm.innerHTML = (data?.available_terms || []).map((term) => `
+    <option value="${escapeHtml(`${term.school_year}|${term.semester}`)}">
+      ${escapeHtml(hduhelpTermLabel(term))}
+    </option>
+  `).join("");
+  hduhelpState.classList.remove("error", "ready");
+  if (!connected) {
+    hduhelpState.textContent = (
+      "建议只授予身份读取和课表读取权限，并设置较短有效期。"
+    );
+    return;
+  }
+  hduhelpState.textContent = data.last_synced_at
+    ? `已连接${data.display_name ? `：${data.display_name}` : ""}，课表同步过。`
+    : `已连接${data.display_name ? `：${data.display_name}` : ""}，请选择学期同步。`;
+  hduhelpState.classList.add("ready");
+}
+
+async function loadHduHelpConnection() {
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/connections/hduhelp`,
+  );
+  const data = await response.json();
+  if (!response.ok) throw data;
+  renderHduHelpConnection(data);
+}
+
+hduhelpConnect.addEventListener("click", async () => {
+  const token = hduhelpToken.value.trim();
+  if (!token) {
+    hduhelpState.textContent = "请先粘贴自己的个人访问令牌。";
+    hduhelpState.classList.add("error");
+    hduhelpToken.focus();
+    return;
+  }
+  hduhelpConnect.disabled = true;
+  hduhelpConnect.textContent = "正在验证…";
+  hduhelpState.textContent = "正在核验身份和可用学期，不会读取或显示令牌内容。";
+  hduhelpState.classList.remove("error", "ready");
+  try {
+    const response = await fetch(
+      `/api/v1/users/${consoleUserId}/connections/hduhelp`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      },
+    );
+    const data = await response.json();
+    if (!response.ok) throw data;
+    hduhelpToken.value = "";
+    renderHduHelpConnection(data);
+  } catch (error) {
+    hduhelpState.textContent = error?.error?.message
+      || "杭电助手暂时没有连接成功。";
+    hduhelpState.classList.add("error");
+    renderDebug(error);
+  } finally {
+    hduhelpConnect.disabled = false;
+    hduhelpConnect.textContent = "验证并连接";
+  }
+});
+
+hduhelpDisconnect.addEventListener("click", async () => {
+  hduhelpDisconnect.disabled = true;
+  try {
+    const response = await fetch(
+      `/api/v1/users/${consoleUserId}/connections/hduhelp`,
+      { method: "DELETE" },
+    );
+    if (!response.ok && response.status !== 404) {
+      const data = await response.json();
+      throw data;
+    }
+    renderHduHelpConnection({ connected: false, available_terms: [] });
+  } catch (error) {
+    hduhelpState.textContent = error?.error?.message || "暂时无法断开连接。";
+    hduhelpState.classList.add("error");
+    renderDebug(error);
+  } finally {
+    hduhelpDisconnect.disabled = false;
+  }
+});
+
+hduhelpSync.addEventListener("click", async () => {
+  if (!termStart.value) {
+    hduhelpState.textContent = "请先填写第一教学周周一。";
+    hduhelpState.classList.add("error");
+    termStart.focus();
+    return;
+  }
+  const [schoolYear, semester] = hduhelpTerm.value.split("|");
+  if (!schoolYear || !semester) {
+    hduhelpState.textContent = "请先选择要同步的学期。";
+    hduhelpState.classList.add("error");
+    return;
+  }
+  hduhelpSync.disabled = true;
+  hduhelpSync.textContent = "正在同步…";
+  hduhelpState.textContent = "正在合并重复周次并校验课程节次。";
+  hduhelpState.classList.remove("error", "ready");
+  try {
+    const response = await fetch(
+      `/api/v1/users/${consoleUserId}/connections/hduhelp/sync-timetable`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          school_year: schoolYear,
+          semester: Number(semester),
+          term_start: termStart.value,
+          term_end: termEnd.value || null,
+          name: `${schoolYear} 杭电课表`,
+        }),
+      },
+    );
+    const data = await response.json();
+    if (!response.ok) throw data;
+    writeLocalSnapshot(timetableSnapshotKey, data);
+    timetableName.value = data.timetable?.name || "我的课表";
+    termEnd.value = data.timetable?.term_end || termEnd.value;
+    renderTimetable(data);
+    hduhelpState.textContent = `已同步 ${data.imported_count} 个课程时段。`;
+    hduhelpState.classList.add("ready");
+    await loadAgenda(agendaDate.value || shanghaiDateString());
+  } catch (error) {
+    hduhelpState.textContent = error?.error?.message
+      || "杭电助手课表暂时没有同步成功。";
+    hduhelpState.classList.add("error");
+    renderDebug(error);
+  } finally {
+    hduhelpSync.disabled = false;
+    hduhelpSync.textContent = "同步所选学期课表";
+  }
+});
+
 function renderTimetable(data) {
   const entries = data.entries || [];
   const isPreview = Boolean(entries.length && !data.timetable?.id);
   timetableSummary.classList.toggle("muted", entries.length === 0);
   timetableClear.hidden = entries.length === 0 || isPreview;
   if (!entries.length) {
-    timetableSummary.textContent = "当前还没有导入个人课表。";
+    timetableSummary.textContent = "当前还没有同步个人课表。";
     return;
   }
   const grouped = new Map();
@@ -4036,6 +4194,7 @@ async function initializeApp() {
     renderDebug(error);
   });
   loadMemories().catch((error) => renderDebug(error));
+  loadHduHelpConnection().catch((error) => renderDebug(error));
   loadTimetable().catch((error) => renderDebug(error));
   loadCalendarOverrides().catch((error) => renderDebug(error));
 }

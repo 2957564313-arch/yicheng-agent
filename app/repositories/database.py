@@ -40,6 +40,25 @@ CREATE TABLE IF NOT EXISTS user_memories (
 CREATE INDEX IF NOT EXISTS idx_user_memories_user_enabled
 ON user_memories(user_id, enabled);
 
+CREATE TABLE IF NOT EXISTS external_account_connections (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,
+    external_user_id TEXT NOT NULL,
+    display_name TEXT,
+    credential_ciphertext TEXT NOT NULL,
+    terms_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'error', 'revoked')),
+    last_synced_at TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(user_id, provider)
+);
+
+CREATE INDEX IF NOT EXISTS idx_external_connections_provider
+ON external_account_connections(provider, external_user_id);
+
 CREATE TABLE IF NOT EXISTS timetables (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
@@ -110,29 +129,6 @@ CREATE TABLE IF NOT EXISTS messages (
 
 CREATE INDEX IF NOT EXISTS idx_messages_thread_created
 ON messages(thread_id, created_at);
-
-CREATE TABLE IF NOT EXISTS external_events (
-    id TEXT PRIMARY KEY,
-    source_system TEXT NOT NULL,
-    external_event_id TEXT NOT NULL,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    start_at TEXT NOT NULL,
-    end_at TEXT NOT NULL,
-    location_name TEXT,
-    kind TEXT NOT NULL DEFAULT 'activity',
-    notes TEXT,
-    source_url TEXT,
-    status TEXT NOT NULL DEFAULT 'active'
-        CHECK (status IN ('active', 'cancelled')),
-    payload_json TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    UNIQUE(source_system, external_event_id, user_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_external_events_user_time
-ON external_events(user_id, status, start_at, end_at);
 
 CREATE TABLE IF NOT EXISTS plans (
     id TEXT PRIMARY KEY,

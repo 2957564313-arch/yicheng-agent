@@ -8,7 +8,7 @@
       content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
     <title>易程智策 · 我的校园日程</title>
-    <link rel="stylesheet" href="/styles.css?v=20260818-6" />
+    <link rel="stylesheet" href="/styles.css?v=20260819-1" />
   </head>
   <body>
     <section id="access-gate" class="access-gate" hidden>
@@ -75,7 +75,7 @@
       <section class="demo-strip" aria-label="比赛演示案例">
         <div>
           <p class="eyebrow">一键复现</p>
-          <strong>四个重点演示场景</strong>
+          <strong>三个重点演示场景</strong>
         </div>
         <div id="demo-buttons" class="demo-buttons"></div>
         <button id="reset" class="ghost danger">复位演示</button>
@@ -105,7 +105,7 @@
               <span class="nav-icon">▦</span><span>日程</span><small>日 · 周 · 月</small>
             </button>
             <button type="button" class="workspace-nav-button" data-view="timetable">
-              <span class="nav-icon">▤</span><span>我的课表</span><small>导入与校历</small>
+              <span class="nav-icon">▤</span><span>我的课表</span><small>同步与校历</small>
             </button>
             <button type="button" class="workspace-nav-button" data-view="preferences">
               <span class="nav-icon">♡</span><span>偏好</span><small>让安排越来越懂你</small>
@@ -208,15 +208,66 @@
             <div class="panel-heading compact">
               <div>
                 <p class="step">个人课表</p>
-                <h2>导入后自动避开上课时间</h2>
+                <h2>同步后自动避开上课时间</h2>
               </div>
             </div>
             <p class="panel-note">
-              每位用户都可以导入自己的教务系统课表 PDF，或使用
-              Excel、CSV、JSON。确认预览后，课程才会成为不可移动的
-              个人时间约束。
+              连接自己的杭电助手账号，选择学期后即可同步课程；课程
+              会成为规划器不可移动的个人时间约束。
             </p>
-            <div class="timetable-form">
+            <div class="term-fields">
+              <label>
+                第一教学周周一
+                <input id="term-start" type="date" required />
+              </label>
+              <label>
+                学期结束（可不填）
+                <input id="term-end" type="date" />
+              </label>
+            </div>
+            <section class="hduhelp-card" aria-labelledby="hduhelp-title">
+              <div class="hduhelp-card-heading">
+                <div>
+                  <p class="integration-label">官方数据源</p>
+                  <h3 id="hduhelp-title">连接杭电助手</h3>
+                </div>
+                <span id="hduhelp-badge" class="connection-badge">未连接</span>
+              </div>
+              <p class="panel-note">
+                在杭电助手创建个人访问令牌后粘贴到这里，即可读取你
+                自己的课表。令牌只会加密保存在服务器，不进入数据备份。
+              </p>
+              <div id="hduhelp-connect-form" class="hduhelp-connect-form">
+                <input
+                  id="hduhelp-token"
+                  type="password"
+                  placeholder="粘贴个人访问令牌"
+                  autocomplete="off"
+                  spellcheck="false"
+                  aria-label="杭电助手个人访问令牌"
+                />
+                <button id="hduhelp-connect" class="ghost" type="button">
+                  验证并连接
+                </button>
+              </div>
+              <div id="hduhelp-sync-form" class="hduhelp-sync-form" hidden>
+                <select id="hduhelp-term" aria-label="选择杭电助手学期"></select>
+                <button id="hduhelp-sync" class="ghost" type="button">
+                  同步所选学期课表
+                </button>
+                <button
+                  id="hduhelp-disconnect"
+                  class="text-button danger-link"
+                  type="button"
+                >
+                  断开连接
+                </button>
+              </div>
+              <p id="hduhelp-state" class="storage-note">
+                建议只授予身份读取和课表读取权限，并设置较短有效期。
+              </p>
+            </section>
+            <div class="timetable-form" hidden>
               <input
                 id="timetable-name"
                 type="text"
@@ -224,16 +275,6 @@
                 aria-label="课表名称"
                 maxlength="80"
               />
-              <div class="term-fields">
-                <label>
-                  第一教学周周一
-                  <input id="term-start" type="date" required />
-                </label>
-                <label>
-                  学期结束
-                  <input id="term-end" type="date" />
-                </label>
-              </div>
               <label class="file-picker">
                 <span>选择课表文件</span>
                 <input
@@ -248,7 +289,7 @@
               </button>
             </div>
             <div id="timetable-summary" class="timetable-summary muted">
-              当前还没有导入个人课表。
+              当前还没有同步个人课表。
             </div>
             <button id="timetable-clear" class="text-button danger-link" hidden>
               清空我的课表
@@ -391,7 +432,7 @@
             </div>
             <p id="profile-backup-state" class="storage-note">
               当前公开测试版的云端数据可能随服务更新而重置；建议在
-              导入课表或积累个性化设置后保存一份备份。
+              同步课表或积累个性化设置后保存一份备份。
             </p>
           </article>
         </aside>
@@ -497,7 +538,7 @@
                   <span>分钟提醒</span>
                 </label>
                 <label>
-                  二课活动前
+                  活动前
                   <input id="reminder-activity" type="number" min="5" max="240" />
                   <span>分钟提醒</span>
                 </label>
@@ -723,6 +764,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260818-14" defer></script>
+    <script src="/app.js?v=20260819-2" defer></script>
   </body>
 </html>

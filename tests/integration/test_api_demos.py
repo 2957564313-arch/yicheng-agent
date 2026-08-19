@@ -119,7 +119,7 @@ def test_second_course_demo_keeps_registration_deadline_and_activity_time(
             if item["agenda_item_id"] == second_course_item["id"]
         )
         assert activity_reminder["notify_at"] == "2026-07-24T18:30:00+08:00"
-        assert activity_reminder["title"] == "二课活动即将开始"
+        assert activity_reminder["title"] == "活动即将开始"
         registration_item = next(
             item
             for item in agenda_payload["items"]
@@ -133,7 +133,7 @@ def test_second_course_demo_keeps_registration_deadline_and_activity_time(
         assert registration_reminder["notify_at"] == (
             "2026-07-24T16:20:00+08:00"
         )
-        assert registration_reminder["title"] == "二课报名任务即将开始"
+        assert registration_reminder["title"] == "活动即将开始"
 
 
 def test_normal_demo_has_exact_timeline_and_evidence(tmp_path):

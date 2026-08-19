@@ -181,11 +181,6 @@ def make_understand_node(container: AppContainer):
         )
         if client_timetable_tasks:
             timetable_tasks = client_timetable_tasks
-        external_tasks = _external_event_tasks(
-            container=container,
-            user_id=state["user_id"],
-            target_date=result.requested_date,
-        )
         timetable_summary = (
             _timetable_summary(
                 result.requested_date,
@@ -222,30 +217,6 @@ def make_understand_node(container: AppContainer):
                     ),
                 }
             )
-        if result.intent.value != "query" and external_tasks:
-            planning_now = datetime.fromisoformat(state["now_iso"])
-            active_external_tasks = [
-                task
-                for task in external_tasks
-                if not (
-                    result.requested_date == planning_now.date()
-                    and task.fixed_end is not None
-                    and task.fixed_end <= planning_now
-                )
-            ]
-            known_ids = {task.id for task in result.tasks}
-            result = result.model_copy(
-                update={
-                    "tasks": [
-                        *result.tasks,
-                        *(
-                            task for task in active_external_tasks
-                            if task.id not in known_ids
-                        ),
-                    ]
-                }
-            )
-
         preferences = _apply_memory_preferences(
             result.preferences,
             memories,
@@ -321,7 +292,6 @@ def make_understand_node(container: AppContainer):
                     "task_count": len(result.tasks),
                     "memory_count": len(memories),
                     "timetable_task_count": len(timetable_tasks),
-                    "external_task_count": len(external_tasks),
                     "academic_day": calendar_context.course_action,
                     "clarification_count": len(result.clarifications),
                 },
@@ -329,39 +299,6 @@ def make_understand_node(container: AppContainer):
         }
 
     return understand
-
-
-def _external_event_tasks(
-    *,
-    container: AppContainer,
-    user_id: str,
-    target_date: date,
-) -> list[Task]:
-    return [
-        Task(
-            id=f"external_{event.id}",
-            title=event.title,
-            date=target_date,
-            duration_min=round(
-                (event.end_at - event.start_at).total_seconds() / 60
-            ),
-            location_raw=event.location_name,
-            fixed_start=event.start_at,
-            fixed_end=event.end_at,
-            flexibility=TaskFlexibility.LOCKED,
-            importance=5,
-            tags=["external_system", event.source_system],
-            notes=(
-                f"来自 {event.source_system}，由外部系统锁定"
-                + (f"；{event.notes}" if event.notes else "")
-            ),
-        )
-        for event in container.external_events.active_for_range(
-            user_id=user_id,
-            start_date=target_date,
-            end_date=target_date,
-        )
-    ]
 
 
 def _merge_client_memories(

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from secrets import compare_digest
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -11,15 +10,15 @@ from fastapi.staticfiles import StaticFiles
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from app.api import (
-    agenda,
     academic_calendar,
+    agenda,
     auth,
     campuses,
     chat,
     conversations,
     demos,
+    hduhelp,
     health,
-    integrations,
     memories,
     profiles,
     timetables,
@@ -82,45 +81,6 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
                 }
             )
         )
-        integration_api = path.startswith("/api/v1/integrations/")
-        if integration_api:
-            configured_key = active_settings.app_integration_api_key
-            supplied_key = request.headers.get(
-                "x-yicheng-integration-key",
-                "",
-            )
-            if not configured_key:
-                return JSONResponse(
-                    status_code=503,
-                    content={
-                        "request_id": f"req_{uuid4().hex}",
-                        "trace_id": f"trace_{uuid4().hex}",
-                        "error": {
-                            "code": "INTEGRATION_DISABLED",
-                            "message": "外部系统接入尚未启用",
-                            "details": [],
-                            "retryable": False,
-                        },
-                    },
-                )
-            if not supplied_key or not compare_digest(
-                supplied_key,
-                configured_key,
-            ):
-                return JSONResponse(
-                    status_code=401,
-                    content={
-                        "request_id": f"req_{uuid4().hex}",
-                        "trace_id": f"trace_{uuid4().hex}",
-                        "error": {
-                            "code": "INTEGRATION_AUTH_REQUIRED",
-                            "message": "外部系统接口鉴权失败",
-                            "details": [],
-                            "retryable": False,
-                        },
-                    },
-                )
-            return await call_next(request)
         if manager.enabled and path.startswith("/api/v1/") and not public_api:
             authorization = request.headers.get("authorization", "")
             token = (
@@ -219,7 +179,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
 
     application.include_router(health.router)
     application.include_router(auth.router)
-    application.include_router(integrations.router)
+    application.include_router(hduhelp.router)
     application.include_router(chat.router)
     application.include_router(conversations.router)
     application.include_router(demos.router)

@@ -343,6 +343,95 @@ textarea:focus {
   gap: 9px;
 }
 
+.hduhelp-card {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 18px;
+  border: 1px solid #d9e3f0;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #f7fbff, #fffdf9);
+}
+
+.hduhelp-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.hduhelp-card-heading h3 {
+  margin: 3px 0 0;
+  color: var(--ink);
+  font-size: 20px;
+}
+
+.integration-label {
+  margin: 0;
+  color: #b33b5a;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.connection-badge {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  border: 1px solid #d8dde7;
+  border-radius: 999px;
+  color: #6b7280;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.connection-badge.connected {
+  color: #166534;
+  border-color: #b7dec5;
+  background: #f1fbf4;
+}
+
+.hduhelp-connect-form,
+.hduhelp-sync-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.hduhelp-sync-form {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.hduhelp-card .storage-note {
+  margin: 0;
+}
+
+.hduhelp-card .storage-note.error {
+  color: #b42345;
+}
+
+.hduhelp-card .storage-note.ready {
+  color: #166534;
+}
+
+@media (max-width: 720px) {
+  .hduhelp-card {
+    padding: 15px;
+    border-radius: 17px;
+  }
+
+  .hduhelp-connect-form,
+  .hduhelp-sync-form {
+    grid-template-columns: 1fr;
+  }
+
+  .hduhelp-connect-form button,
+  .hduhelp-sync-form button {
+    width: 100%;
+  }
+}
+
 .term-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

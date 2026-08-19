@@ -6,7 +6,6 @@ from zoneinfo import ZoneInfo
 
 from app.providers.location_repository import LocationRepository
 from app.repositories.academic_calendar import AcademicCalendarRepository
-from app.repositories.external_events import ExternalEventRepository
 from app.repositories.memories import MemoryRepository
 from app.repositories.plans import PlanRepository
 from app.repositories.timetables import TimetableRepository
@@ -26,7 +25,6 @@ class AgendaService:
         self,
         *,
         plans: PlanRepository,
-        external_events: ExternalEventRepository,
         timetables: TimetableRepository,
         academic_calendar: AcademicCalendarRepository,
         memories: MemoryRepository,
@@ -35,7 +33,6 @@ class AgendaService:
         timezone_name: str,
     ) -> None:
         self.plans = plans
-        self.external_events = external_events
         self.timetables = timetables
         self.academic_calendar = academic_calendar
         self.memories = memories
@@ -68,13 +65,8 @@ class AgendaService:
                 self._course_identity(item) for item in course_items
             },
         )
-        external_items = self._external_items(
-            user_id=user_id,
-            start_date=start_date,
-            end_date=end_date,
-        )
         return sorted(
-            [*course_items, *plan_items, *external_items],
+            [*course_items, *plan_items],
             key=lambda item: (
                 item.start_at,
                 item.end_at,
@@ -82,37 +74,6 @@ class AgendaService:
                 item.title,
             ),
         )
-
-    def _external_items(
-        self,
-        *,
-        user_id: str,
-        start_date: date,
-        end_date: date,
-    ) -> list[AgendaItem]:
-        return [
-            AgendaItem(
-                id=f"agenda_external_{event.id}",
-                user_id=user_id,
-                title=event.title,
-                start_at=event.start_at,
-                end_at=event.end_at,
-                location_name=event.location_name,
-                source="external",
-                kind=event.kind,
-                locked=True,
-                task_id=event.external_event_id,
-                notes=(
-                    f"来自 {event.source_system}"
-                    + (f"；{event.notes}" if event.notes else "")
-                ),
-            )
-            for event in self.external_events.active_for_range(
-                user_id=user_id,
-                start_date=start_date,
-                end_date=end_date,
-            )
-        ]
 
     def _course_items(
         self,
@@ -487,15 +448,7 @@ class AgendaService:
         return {
             "course": "快到上课时间了",
             "meeting": "别忘了接下来的会议",
-            "activity": (
-                "二课报名任务即将开始"
-                if "报名" in item.title
-                else (
-                    "二课活动即将开始"
-                    if any(word in item.title for word in ("二课", "第二课堂"))
-                    else "活动即将开始"
-                )
-            ),
+            "activity": "活动即将开始",
             "study": "准备进入专注时段",
             "exercise": "给身体留出的时间要到了",
             "meal": "记得按时吃饭",
