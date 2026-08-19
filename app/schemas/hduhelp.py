@@ -65,4 +65,6 @@ class HduHelpQRPollResponse(BaseModel):
     status: str
     user_id: str | None = None
     display_name: str | None = None
+    access_token: str | None = None
+    expires_at: datetime | None = None
     message: str

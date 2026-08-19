@@ -103,8 +103,29 @@ class FakeHduHelp:
             }
         ]
 
+    def create_wechat_qr(self, *, client_id: str, redirect_uri: str):
+        assert client_id == "official-client-id"
+        assert redirect_uri == "https://yichengapp.top/"
+        return {
+            "authorizeURL": "https://api.hduhelp.com/mock-authorize",
+            "pollToken": "private-poll-token-123456",
+            "expiresAt": 1_800_000_000,
+        }
 
-def build_hduhelp_app(tmp_path: Path):
+    def poll_wechat_qr(self, poll_token: str):
+        assert poll_token == "private-poll-token-123456"
+        return {"status": "authorized", "code": "one-time-code"}
+
+    def exchange_login_code(self, code: str):
+        assert code == "one-time-code"
+        return {
+            "accessToken": TOKEN,
+            "refreshToken": "refresh-token",
+            "accessExpireAt": 1_900_000_000,
+        }
+
+
+def build_hduhelp_app(tmp_path: Path, *, access_enabled: bool = False):
     return create_app(
         Settings(
             app_database_path=tmp_path / "app.db",
@@ -112,6 +133,14 @@ def build_hduhelp_app(tmp_path: Path):
             app_data_dir=BASE_DIR / "data",
             app_demo_dir=BASE_DIR / "fixtures",
             app_credential_secret="test-credential-secret-long-enough",
+            app_access_enabled=access_enabled,
+            app_test_username="yicheng_test",
+            app_test_password="test-password",
+            app_auth_secret="test-secret-with-at-least-24-characters",
+            hduhelp_qr_client_id=(
+                "official-client-id" if access_enabled else ""
+            ),
+            hduhelp_qr_redirect_uri="https://yichengapp.top/",
             llm_enabled=False,
             live_route_enabled=False,
             live_weather_enabled=False,
@@ -235,3 +264,48 @@ def test_provider_failure_preserves_last_successful_source(tmp_path):
         assert app.state.container.external_agenda.counts("visitor-1")[
             "library_reservation"
         ] == 1
+
+
+def test_wechat_qr_creates_a_user_scoped_normal_session(tmp_path):
+    app = build_hduhelp_app(tmp_path, access_enabled=True)
+    fake = FakeHduHelp()
+    with TestClient(app) as client:
+        app.state.container.hduhelp = fake
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "yicheng_test", "password": "test-password"},
+        )
+        bootstrap_headers = {
+            "Authorization": f"Bearer {login.json()['access_token']}"
+        }
+        started = client.post(
+            "/api/v1/users/onboarding-client/connections/hduhelp/wechat/start",
+            headers=bootstrap_headers,
+        )
+        assert started.status_code == 200, started.text
+        assert started.json()["ready"] is True
+        assert started.json()["poll_token"] == "private-poll-token-123456"
+
+        completed = client.post(
+            "/api/v1/users/onboarding-client/connections/hduhelp/wechat/poll",
+            headers=bootstrap_headers,
+            json={"poll_token": "private-poll-token-123456"},
+        )
+        assert completed.status_code == 200, completed.text
+        payload = completed.json()
+        assert payload["status"] == "authorized"
+        assert payload["user_id"].startswith("hdu_")
+        normal_headers = {
+            "Authorization": f"Bearer {payload['access_token']}"
+        }
+        own = client.get(
+            f"/api/v1/users/{payload['user_id']}/connections/hduhelp",
+            headers=normal_headers,
+        )
+        assert own.status_code == 200, own.text
+        assert own.json()["connected"] is True
+        other = client.get(
+            "/api/v1/users/someone-else/connections/hduhelp",
+            headers=normal_headers,
+        )
+        assert other.status_code == 403

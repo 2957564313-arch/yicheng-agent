@@ -20,6 +20,10 @@ runtime/*.db
 runtime/*.db-*
 runtime/*.sqlite
 runtime/*.sqlite-*
+runtime/pytest-*/
+runtime/codex_known_hosts
+runtime/gh/
+runtime/publish*.git/
 dist/
 build/
 tmp/

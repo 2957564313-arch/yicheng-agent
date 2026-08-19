@@ -211,10 +211,16 @@ def poll_wechat_login(
         terms=available_terms(rows),
         now=_now(request),
     )
+    app_access_token, expires_at = request.app.state.access_manager.issue_session(
+        mode="normal",
+        user_id=stable_user_id,
+    )
     return HduHelpQRPollResponse(
         status="authorized",
         user_id=stable_user_id,
         display_name=str(identity.get("nickName", "")).strip() or None,
+        access_token=app_access_token,
+        expires_at=expires_at,
         message="登录成功，正在进入你的个人空间。",
     )
 
@@ -450,26 +456,33 @@ def sync_all(
     counts: dict[str, int] = {"course": len(entries)}
     counts["library_reservation"] = _safe_sync(
         source_kind="library_reservation",
-        fetch=lambda: container.hduhelp.library_reservations(token),
+        fetch=lambda: (
+            container.hduhelp.library_agenda(token)
+            if hasattr(container.hduhelp, "library_agenda")
+            else container.hduhelp.library_reservations(token)
+        ),
         convert=lambda row: _event(
-            external_id=(
-                f"{row.get('staffId', '')}:{row.get('startTime', '')}:"
+            external_id=str(
+                row.get("externalId")
+                or f"{row.get('staffId', '')}:{row.get('startTime', '')}:"
                 f"{row.get('seatNo', '')}"
             ),
             title="图书馆自习预约",
-            start=row.get("startTime"),
-            end=row.get("endTime"),
+            start=row.get("start") or row.get("startTime"),
+            end=row.get("end") or row.get("endTime"),
             timezone=timezone,
             location=" ".join(
                 filter(
                     None,
                     [
                         str(row.get("room", "")).strip(),
-                        str(row.get("seatNo", "")).strip(),
+                        str(row.get("seat") or row.get("seatNo", "")).strip(),
                     ],
                 )
             ),
-            status_value=str(row.get("finalState", "active")),
+            status_value=str(
+                row.get("status") or row.get("finalState", "active")
+            ),
         ),
         user_id=user_id,
         request=request,

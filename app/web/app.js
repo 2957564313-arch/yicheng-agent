@@ -57,14 +57,7 @@ const memoryList = $("#memory-list");
 const personalizationToggle = $("#personalization-toggle");
 const personalizationReset = $("#personalization-reset");
 const personalizationState = $("#personalization-state");
-const timetableName = $("#timetable-name");
-const termStart = $("#term-start");
-const termEnd = $("#term-end");
-const timetableFile = $("#timetable-file");
-const timetableImport = $("#timetable-import");
-const timetableConfirm = $("#timetable-confirm");
 const timetableSummary = $("#timetable-summary");
-const timetableClear = $("#timetable-clear");
 const hduhelpToken = $("#hduhelp-token");
 const hduhelpConnect = $("#hduhelp-connect");
 const hduhelpDisconnect = $("#hduhelp-disconnect");
@@ -156,6 +149,7 @@ const visualGrid = $(".visual-grid");
 const weeklyPanel = $(".weekly-panel");
 const agendaPanel = $(".agenda-panel");
 let activeWorkspaceView = "chat";
+let activeAccessMode = "bootstrap";
 let scheduleViewMode = "day";
 let scheduleCursorDate = null;
 let lastAgendaData = null;
@@ -182,7 +176,6 @@ let lastSuggestedActions = [];
 let lastDebugPayload = null;
 let serverClockBaseMs = null;
 let serverClockFetchedAtMs = null;
-let pendingTimetableImport = null;
 let currentCampusProfile = null;
 const memorySnapshotKey = "yicheng_memory_snapshot";
 const timetableSnapshotKey = "yicheng_timetable_snapshot";
@@ -1000,7 +993,7 @@ function renderCampus(campus, { isDefault = false } = {}) {
   campusSummary.classList.remove("muted");
   campusSummary.innerHTML = `
     <strong>${escapeHtml(campus.display_name)}</strong>
-    <span>已保存 ${locationCount} 个本校地点${
+    <span>${locationCount} 个本校地点${
       isDefault
         ? "，并已配置本校知识规则。"
         : "。地点可用于路线计算；开放时间、节次和制度仍需导入本校知识包。"
@@ -1085,13 +1078,29 @@ async function initializeAccess() {
     const response = await fetch("/api/v1/auth/status");
     const status = await response.json();
     if (!status.enabled) {
+      activeAccessMode = "local";
       accessGate.hidden = true;
       logoutButton.hidden = true;
       return true;
     }
     if (status.authenticated) {
+      activeAccessMode = status.session_mode || "bootstrap";
+      if (status.user_id) {
+        consoleUserId = status.user_id;
+        localStorage.setItem("yicheng_user_id", status.user_id);
+      }
       accessGate.hidden = true;
       logoutButton.hidden = false;
+      if (["test", "normal"].includes(activeAccessMode)) {
+        localStorage.setItem(sessionModeKey, activeAccessMode);
+        sessionModeGate.hidden = true;
+        return true;
+      }
+      if (localStorage.getItem(sessionModeKey) === "normal") {
+        sessionModeGate.hidden = true;
+        return true;
+      }
+      localStorage.removeItem(sessionModeKey);
       if (!localStorage.getItem(sessionModeKey)) {
         sessionModeGate.hidden = false;
         return false;
@@ -1143,14 +1152,59 @@ logoutButton.addEventListener("click", () => {
 
 normalSession.addEventListener("click", () => {
   localStorage.setItem(sessionModeKey, "normal");
+  localStorage.setItem(
+    "yicheng_user_id",
+    getOrCreateLocalIdentity("yicheng_hduhelp_onboarding_id", "onboarding"),
+  );
   localStorage.setItem("yicheng_initial_view", "hduhelp");
   globalThis.location.reload();
 });
 
-testSession.addEventListener("click", () => {
-  localStorage.setItem(sessionModeKey, "test");
-  globalThis.location.reload();
+testSession.addEventListener("click", async () => {
+  testSession.disabled = true;
+  testSession.textContent = "正在创建独立测试空间…";
+  try {
+    const response = await fetch("/api/v1/auth/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "test" }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw data;
+    localStorage.setItem(accessTokenKey, data.access_token);
+    localStorage.setItem(sessionModeKey, "test");
+    localStorage.setItem("yicheng_user_id", data.user_id);
+    globalThis.location.reload();
+  } catch (error) {
+    testSession.textContent = error?.error?.message || "测试空间创建失败，请重试";
+    testSession.disabled = false;
+  }
 });
+
+function configureSessionWorkspace() {
+  const mode = localStorage.getItem(sessionModeKey);
+  const onboarding = mode === "normal" && activeAccessMode !== "normal";
+  document.querySelectorAll('[data-view="hduhelp"]').forEach((button) => {
+    button.hidden = mode === "test";
+  });
+  document.querySelectorAll(".workspace-nav-button").forEach((button) => {
+    if (onboarding && button.dataset.view !== "hduhelp") button.hidden = true;
+  });
+  if (mode === "test") {
+    document.querySelector(".hduhelp-panel").hidden = true;
+    if (activeWorkspaceView === "hduhelp") setActiveWorkspaceView("chat");
+  }
+  if (onboarding) {
+    setActiveWorkspaceView("hduhelp");
+    renderHduHelpConnection({
+      connected: false,
+      available_terms: [],
+      oauth_ready: true,
+      synced_counts: {},
+    });
+  }
+  return { mode, onboarding };
+}
 
 const sourceLabels = {
   user: "用户提供",
@@ -3368,25 +3422,6 @@ function timetableWeekdayLabel(value) {
   return `周${"一二三四五六日"[Number(value) - 1] || value}`;
 }
 
-async function fileToImportPayload(file) {
-  const extension = file.name.split(".").pop().toLowerCase();
-  if (extension === "xlsx" || extension === "pdf") {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    let binary = "";
-    for (let index = 0; index < bytes.length; index += 0x8000) {
-      binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
-    }
-    return {
-      format: extension === "pdf" ? "pdf_base64" : "xlsx_base64",
-      content: btoa(binary),
-    };
-  }
-  if (extension === "csv" || extension === "json") {
-    return { format: extension, content: await file.text() };
-  }
-  throw new Error("请选择 .pdf、.xlsx、.csv 或 .json 课表文件。");
-}
-
 function hduhelpTermLabel(term) {
   const semester = { 1: "第一学期", 2: "第二学期", 3: "短学期" }[
     term.semester
@@ -3400,6 +3435,7 @@ function renderHduHelpConnection(data) {
   hduhelpBadge.classList.toggle("connected", connected);
   hduhelpConnectForm.hidden = connected;
   hduhelpSyncForm.hidden = !connected;
+  hduhelpWechat.closest(".hduhelp-card").hidden = connected;
   hduhelpTerm.innerHTML = (data?.available_terms || []).map((term) => `
     <option value="${escapeHtml(`${term.school_year}|${term.semester}`)}">
       ${escapeHtml(hduhelpTermLabel(term))}
@@ -3418,8 +3454,8 @@ function renderHduHelpConnection(data) {
     .join("");
   if (!connected) {
     hduhelpState.textContent = data?.oauth_ready
-      ? "可以微信登录，也可以在测试期间使用个人访问令牌。"
-      : "微信登录等待杭助应用 Client ID；当前可使用个人访问令牌或测试体验。";
+      ? "请扫码进入自己的校园空间；测试体验不会连接任何个人杭助数据。"
+      : "扫码登录等待杭助应用 Client ID；管理员仍可使用个人访问令牌联调。";
     return;
   }
   hduhelpState.textContent = data.last_synced_at
@@ -3516,6 +3552,9 @@ hduhelpWechat.addEventListener("click", async () => {
         hduhelpWechatState.textContent = poll.message;
         if (poll.status === "authorized" && poll.user_id) {
           clearInterval(hduhelpPollTimer);
+          if (poll.access_token) {
+            localStorage.setItem(accessTokenKey, poll.access_token);
+          }
           localStorage.setItem("yicheng_user_id", poll.user_id);
           localStorage.setItem(sessionModeKey, "normal");
           globalThis.location.reload();
@@ -3585,9 +3624,6 @@ hduhelpSync.addEventListener("click", async () => {
     const data = await response.json();
     if (!response.ok) throw data;
     writeLocalSnapshot(timetableSnapshotKey, data);
-    timetableName.value = data.timetable?.name || "我的课表";
-    termStart.value = data.timetable?.term_start || "";
-    termEnd.value = data.timetable?.term_end || "";
     renderTimetable(data);
     const warning = data.warnings?.length ? `；${data.warnings.join("；")}` : "";
     hduhelpState.textContent = `已同步 ${data.imported_count} 个课程时段和校园安排${warning}`;
@@ -3608,9 +3644,7 @@ hduhelpSync.addEventListener("click", async () => {
 
 function renderTimetable(data) {
   const entries = data.entries || [];
-  const isPreview = Boolean(entries.length && !data.timetable?.id);
   timetableSummary.classList.toggle("muted", entries.length === 0);
-  timetableClear.hidden = entries.length === 0 || isPreview;
   if (!entries.length) {
     timetableSummary.textContent = "当前还没有同步个人课表。";
     return;
@@ -3631,9 +3665,7 @@ function renderTimetable(data) {
   timetableSummary.innerHTML = `
     <div class="timetable-status">
       <strong>${escapeHtml(data.timetable?.name || "我的课表")}</strong>
-      <span>${entries.length}个课程时段 · ${
-        isPreview ? "等待确认" : "已启用"
-      }</span>
+      <span>${entries.length}个课程时段 · 杭助同步</span>
     </div>
     ${[...grouped.entries()].map(([weekday, values]) => `
       <div class="timetable-day">
@@ -3666,130 +3698,8 @@ async function loadTimetable() {
   if (data.entries?.length) {
     writeLocalSnapshot(timetableSnapshotKey, data);
   }
-  timetableName.value = timetableData.timetable?.name || "我的课表";
-  termStart.value = timetableData.timetable?.term_start || "";
-  termEnd.value = timetableData.timetable?.term_end || "";
   renderTimetable(timetableData);
 }
-
-timetableImport.addEventListener("click", async () => {
-  const file = timetableFile.files?.[0];
-  if (!file) {
-    timetableSummary.textContent = "请先选择一份课表文件。";
-    timetableSummary.classList.remove("muted");
-    return;
-  }
-  if (!termStart.value) {
-    timetableSummary.textContent = (
-      "请先选择“第一教学周周一”。这样我才能把课表里的教学周次"
-      + "准确换算成真实日期。"
-    );
-    timetableSummary.classList.remove("muted");
-    termStart.focus();
-    return;
-  }
-  timetableImport.disabled = true;
-  timetableImport.textContent = "正在识别课表…";
-  try {
-    const filePayload = await fileToImportPayload(file);
-    const importPayload = {
-      name: timetableName.value.trim() || "我的课表",
-      term_start: termStart.value || null,
-      term_end: termEnd.value || null,
-      ...filePayload,
-    };
-    const response = await fetch(
-      `/api/v1/users/${consoleUserId}/timetable/preview`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(importPayload),
-      },
-    );
-    const data = await response.json();
-    if (!response.ok) throw data;
-    pendingTimetableImport = importPayload;
-    if (!termEnd.value && data.term_end) termEnd.value = data.term_end;
-    renderTimetable({
-      timetable: {
-        name: importPayload.name,
-        term_start: data.term_start,
-        term_end: data.term_end,
-      },
-      entries: data.entries,
-    });
-    timetableConfirm.disabled = false;
-    timetableConfirm.hidden = false;
-    answer.textContent = (
-      `我先识别出了 ${data.imported_count} 个课程时段，尚未覆盖原课表。`
-      + "请检查课程名、星期、节次、周次和地点，确认无误后再启用。"
-    );
-    answer.classList.remove("muted");
-  } catch (error) {
-    timetableSummary.textContent = error instanceof Error
-      ? error.message
-      : error?.error?.message || "课表暂时没有导入成功。";
-    timetableSummary.classList.remove("muted");
-    renderDebug(error);
-  } finally {
-    timetableImport.disabled = false;
-    timetableImport.textContent = "识别并预览课表";
-  }
-});
-
-timetableFile.addEventListener("change", () => {
-  pendingTimetableImport = null;
-  timetableConfirm.hidden = true;
-});
-
-timetableConfirm.addEventListener("click", async () => {
-  if (!pendingTimetableImport) return;
-  timetableConfirm.disabled = true;
-  timetableConfirm.textContent = "正在启用课表…";
-  try {
-    const response = await fetch(
-      `/api/v1/users/${consoleUserId}/timetable/import`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(pendingTimetableImport),
-      },
-    );
-    const data = await response.json();
-    if (!response.ok) throw data;
-    writeLocalSnapshot(timetableSnapshotKey, data);
-    renderTimetable(data);
-    pendingTimetableImport = null;
-    timetableConfirm.hidden = true;
-    timetableFile.value = "";
-    answer.textContent = (
-      `课表已经启用，共保存 ${data.imported_count} 个课程时段。`
-      + "之后你只要告诉我日期和想做的事，我会自动避开上课时间。"
-    );
-    answer.classList.remove("muted");
-    await loadAgenda(agendaDate.value || shanghaiDateString());
-  } catch (error) {
-    timetableSummary.textContent = error?.error?.message
-      || "课表暂时没有启用成功。";
-    timetableSummary.classList.remove("muted");
-    renderDebug(error);
-  } finally {
-    timetableConfirm.disabled = false;
-    timetableConfirm.textContent = "确认启用这份课表";
-  }
-});
-
-timetableClear.addEventListener("click", async () => {
-  const response = await fetch(
-    `/api/v1/users/${consoleUserId}/timetable`,
-    { method: "DELETE" },
-  );
-  if (response.ok) {
-    localStorage.removeItem(timetableSnapshotKey);
-    renderTimetable({ timetable: null, entries: [] });
-    await loadAgenda(agendaDate.value || shanghaiDateString());
-  }
-});
 
 const calendarActionLabels = {
   no_class: "不上课",
@@ -3942,6 +3852,12 @@ async function initializeApp() {
   });
   const accessGranted = await initializeAccess();
   if (!accessGranted) return;
+  const session = configureSessionWorkspace();
+  if (session.onboarding) {
+    const initialView = localStorage.getItem("yicheng_initial_view");
+    if (initialView) localStorage.removeItem("yicheng_initial_view");
+    return;
+  }
   await loadConversationThreads().catch(() => {
     serverConversationThreads = [];
     renderConversationHistory();
@@ -3974,7 +3890,9 @@ async function initializeApp() {
     renderDebug(error);
   });
   loadMemories().catch((error) => renderDebug(error));
-  loadHduHelpConnection().catch((error) => renderDebug(error));
+  if (session.mode !== "test") {
+    loadHduHelpConnection().catch((error) => renderDebug(error));
+  }
   loadTimetable().catch((error) => renderDebug(error));
   loadCalendarOverrides().catch((error) => renderDebug(error));
   const initialView = localStorage.getItem("yicheng_initial_view");

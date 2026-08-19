@@ -144,6 +144,40 @@ class HduHelpClient:
         rows = data.get("bookings")
         return [item for item in rows if isinstance(item, dict)] if isinstance(rows, list) else []
 
+    def library_agenda(self, token: str) -> list[dict[str, Any]]:
+        """Return one normalized authoritative view of current seat reservations."""
+        try:
+            bookings = self.library_bookings(token)
+        except AppError:
+            bookings = []
+        if bookings:
+            return [
+                {
+                    "externalId": str(row.get("bookingId", "")),
+                    "start": row.get("beginAt"),
+                    "end": row.get("endAt"),
+                    "room": row.get("roomName"),
+                    "seat": row.get("seatLabel"),
+                    "status": row.get("statusLabel") or row.get("status"),
+                }
+                for row in bookings
+            ]
+        reservations = self.library_reservations(token)
+        return [
+            {
+                "externalId": (
+                    f"{row.get('staffId', '')}:{row.get('startTime', '')}:"
+                    f"{row.get('seatNo', '')}"
+                ),
+                "start": row.get("startTime"),
+                "end": row.get("endTime"),
+                "room": row.get("room"),
+                "seat": row.get("seatNo"),
+                "status": row.get("finalState"),
+            }
+            for row in reservations
+        ]
+
     def my_activities(self, token: str) -> list[dict[str, Any]]:
         data = self._request(
             "GET",

@@ -78,6 +78,35 @@ def test_tampered_access_token_is_rejected(tmp_path):
     assert response.json()["error"]["code"] == "AUTH_REQUIRED"
 
 
+def test_test_session_is_user_scoped_and_cannot_connect_hduhelp(tmp_path):
+    with TestClient(protected_app(tmp_path)) as client:
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "yicheng_test", "password": "test-password"},
+        )
+        bootstrap = login.json()["access_token"]
+        session = client.post(
+            "/api/v1/auth/session",
+            headers={"Authorization": f"Bearer {bootstrap}"},
+            json={"mode": "test"},
+        )
+        assert session.status_code == 200, session.text
+        payload = session.json()
+        headers = {"Authorization": f"Bearer {payload['access_token']}"}
+        user_id = payload["user_id"]
+
+        own = client.get(f"/api/v1/users/{user_id}/memories", headers=headers)
+        assert own.status_code == 200, own.text
+        other = client.get("/api/v1/users/someone-else/memories", headers=headers)
+        assert other.status_code == 403
+        hduhelp = client.get(
+            f"/api/v1/users/{user_id}/connections/hduhelp",
+            headers=headers,
+        )
+        assert hduhelp.status_code == 403
+        assert hduhelp.json()["error"]["code"] == "TEST_HDUHELP_DISABLED"
+
+
 def test_public_defaults_disable_api_docs_and_add_security_headers(tmp_path):
     with TestClient(protected_app(tmp_path)) as client:
         response = client.get("/")

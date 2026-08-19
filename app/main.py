@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
@@ -87,7 +88,8 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
                 if authorization.startswith("Bearer ")
                 else ""
             )
-            if not token or manager.verify(token) is None:
+            claims = manager.verify_claims(token) if token else None
+            if claims is None:
                 return JSONResponse(
                     status_code=401,
                     content={
@@ -101,6 +103,52 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
                         },
                     },
                 )
+            mode = str(claims.get("mode") or "bootstrap")
+            user_id = str(claims.get("uid") or "")
+            user_match = re.match(r"^/api/v1/users/([^/]+)", path)
+            is_qr_login = path.endswith(
+                (
+                    "/connections/hduhelp/wechat/start",
+                    "/connections/hduhelp/wechat/poll",
+                )
+            )
+            if mode == "test" and "/connections/hduhelp" in path:
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "error": {
+                            "code": "TEST_HDUHELP_DISABLED",
+                            "message": "测试体验不会连接任何个人杭助账号",
+                            "details": [],
+                            "retryable": False,
+                        }
+                    },
+                )
+            if user_match and mode == "bootstrap" and not is_qr_login:
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "error": {
+                            "code": "SESSION_MODE_REQUIRED",
+                            "message": "请先选择正常使用或测试体验",
+                            "details": [],
+                            "retryable": False,
+                        }
+                    },
+                )
+            if user_match and mode in {"test", "normal"} and user_match.group(1) != user_id:
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "error": {
+                            "code": "USER_SCOPE_MISMATCH",
+                            "message": "当前登录无权访问这个个人空间",
+                            "details": [],
+                            "retryable": False,
+                        }
+                    },
+                )
+            request.state.access_claims = claims
         return await call_next(request)
 
     @application.middleware("http")
