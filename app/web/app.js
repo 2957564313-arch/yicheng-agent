@@ -1714,7 +1714,13 @@ function renderTimeline(data) {
     ),
   );
   const locationNames = data.location_names || {};
-  const changes = data.plan_diff || [];
+  const hiddenMealTaskIds = new Set([
+    ...(data.plan?.items || []),
+    ...(data.previous_plan?.items || []),
+  ].filter((item) => item.item_type === "meal").map((item) => item.task_id));
+  const changes = (data.plan_diff || []).filter(
+    (change) => !hiddenMealTaskIds.has(change.task_id),
+  );
   const changesByTask = new Map(
     changes.map((change) => [change.task_id, change]),
   );
@@ -2829,7 +2835,9 @@ const resultActionQueries = {
 };
 
 function planFingerprint(data) {
-  return (data?.plan?.items || []).map((item) => [
+  return (data?.plan?.items || []).filter(
+    (item) => item.item_type !== "meal",
+  ).map((item) => [
     item.item_type,
     item.task_id || item.title,
     item.start_at,
