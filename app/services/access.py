@@ -52,14 +52,26 @@ class AccessManager:
         )
         return self._issue(username, expires_at, mode="bootstrap"), expires_at
 
-    def issue_session(self, *, mode: str, user_id: str) -> tuple[str, datetime]:
+    def issue_session(
+        self,
+        *,
+        mode: str,
+        user_id: str,
+        account_name: str | None = None,
+    ) -> tuple[str, datetime]:
         """Issue a user-scoped application session after mode selection/login."""
         if mode not in {"test", "normal"} or not user_id:
             raise ValueError("invalid access session")
         expires_at = datetime.now(UTC) + timedelta(hours=self.access_hours)
         subject = self.username if self.enabled else "local"
         return (
-            self._issue(subject, expires_at, mode=mode, user_id=user_id),
+            self._issue(
+                subject,
+                expires_at,
+                mode=mode,
+                user_id=user_id,
+                account_name=account_name,
+            ),
             expires_at,
         )
 
@@ -92,6 +104,7 @@ class AccessManager:
         *,
         mode: str,
         user_id: str | None = None,
+        account_name: str | None = None,
     ) -> str:
         claims: dict[str, object] = {
             "sub": username,
@@ -100,6 +113,8 @@ class AccessManager:
         }
         if user_id:
             claims["uid"] = user_id
+        if account_name:
+            claims["account"] = account_name
         payload = _encode(
             json.dumps(
                 claims,

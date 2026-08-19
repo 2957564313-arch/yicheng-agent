@@ -79,6 +79,32 @@ button, select, textarea, input { font: inherit; }
 
 .access-card small { color: var(--muted); line-height: 1.5; }
 
+.access-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(238, 242, 239, .72);
+}
+
+.access-tabs button {
+  min-width: 0;
+  padding: 9px 7px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.access-tabs button.active {
+  color: #fff;
+  background: var(--green);
+  box-shadow: 0 7px 18px rgba(23, 71, 58, .18);
+}
+
 header, main, footer {
   width: min(1440px, calc(100% - 40px));
   margin-inline: auto;
@@ -415,38 +441,6 @@ textarea:focus {
   margin-inline: auto;
 }
 
-.hduhelp-token-fallback {
-  margin: 12px 0;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-}
-
-.hduhelp-token-fallback summary {
-  cursor: pointer;
-  color: var(--ink);
-  font-weight: 750;
-}
-
-.hduhelp-qr {
-  display: grid;
-  justify-items: center;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 16px;
-  background: #fff;
-}
-
-.hduhelp-qr img {
-  width: min(240px, 72vw);
-  aspect-ratio: 1;
-}
-
-.hduhelp-open-wechat {
-  display: inline-flex;
-  text-decoration: none;
-}
-
 .hduhelp-data-summary {
   display: flex;
   flex-wrap: wrap;
@@ -462,14 +456,6 @@ textarea:focus {
   background: #f8fbff;
   font-size: 12px;
   font-weight: 700;
-}
-
-.session-mode-card {
-  gap: 12px;
-}
-
-.session-mode-card button {
-  width: 100%;
 }
 
 @media (max-width: 720px) {

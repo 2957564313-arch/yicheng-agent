@@ -84,14 +84,8 @@ def test_test_session_is_user_scoped_and_cannot_connect_hduhelp(tmp_path):
             "/api/v1/auth/login",
             json={"username": "yicheng_test", "password": "test-password"},
         )
-        bootstrap = login.json()["access_token"]
-        session = client.post(
-            "/api/v1/auth/session",
-            headers={"Authorization": f"Bearer {bootstrap}"},
-            json={"mode": "test"},
-        )
-        assert session.status_code == 200, session.text
-        payload = session.json()
+        assert login.status_code == 200, login.text
+        payload = login.json()
         headers = {"Authorization": f"Bearer {payload['access_token']}"}
         user_id = payload["user_id"]
 
@@ -105,6 +99,75 @@ def test_test_session_is_user_scoped_and_cannot_connect_hduhelp(tmp_path):
         )
         assert hduhelp.status_code == 403
         assert hduhelp.json()["error"]["code"] == "TEST_HDUHELP_DISABLED"
+
+
+def test_normal_account_is_stable_across_devices_and_user_scoped(tmp_path):
+    with TestClient(protected_app(tmp_path)) as client:
+        created = client.post(
+            "/api/v1/auth/register",
+            json={
+                "username": "student_2026",
+                "password": "safe-password-2026",
+                "display_name": "学生用户",
+            },
+        )
+        assert created.status_code == 200, created.text
+        first = created.json()
+        assert first["session_mode"] == "normal"
+        assert first["user_id"].startswith("usr_")
+
+        second_login = client.post(
+            "/api/v1/auth/account/login",
+            json={
+                "username": "STUDENT_2026",
+                "password": "safe-password-2026",
+            },
+        )
+        assert second_login.status_code == 200, second_login.text
+        second = second_login.json()
+        assert second["user_id"] == first["user_id"]
+
+        first_headers = {"Authorization": f"Bearer {first['access_token']}"}
+        created_memory = client.post(
+            f"/api/v1/users/{first['user_id']}/memories",
+            headers=first_headers,
+            json={
+                "category": "preference",
+                "key": "study_place",
+                "label": "自习地点",
+                "value": "图书馆12层",
+            },
+        )
+        assert created_memory.status_code == 201, created_memory.text
+
+        headers = {"Authorization": f"Bearer {second['access_token']}"}
+        own = client.get(
+            f"/api/v1/users/{second['user_id']}/memories",
+            headers=headers,
+        )
+        assert own.status_code == 200, own.text
+        assert own.json()["items"][0]["value"] == "图书馆12层"
+        other = client.get(
+            "/api/v1/users/usr_someone_else/memories",
+            headers=headers,
+        )
+        assert other.status_code == 403
+
+
+def test_account_registration_rejects_duplicates_and_wrong_password(tmp_path):
+    with TestClient(protected_app(tmp_path)) as client:
+        payload = {
+            "username": "student@example.com",
+            "password": "safe-password-2026",
+        }
+        assert client.post("/api/v1/auth/register", json=payload).status_code == 200
+        duplicate = client.post("/api/v1/auth/register", json=payload)
+        assert duplicate.status_code == 409
+        wrong = client.post(
+            "/api/v1/auth/account/login",
+            json={**payload, "password": "wrong-password"},
+        )
+        assert wrong.status_code == 401
 
 
 def test_public_defaults_disable_api_docs_and_add_security_headers(tmp_path):

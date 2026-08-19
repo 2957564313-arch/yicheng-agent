@@ -190,49 +190,6 @@ class HduHelpClient:
         rows = data.get("items")
         return [item for item in rows if isinstance(item, dict)] if isinstance(rows, list) else []
 
-    def create_wechat_qr(
-        self,
-        *,
-        client_id: str,
-        redirect_uri: str,
-    ) -> dict[str, Any]:
-        data = self._request(
-            "POST",
-            "/hduhelp-neo/identity/login/wechat/qr",
-            json_body={
-                "client_id": client_id,
-                "redirect_uri": redirect_uri,
-                "return_to": "/",
-                "flow": "login",
-            },
-        )
-        return data if isinstance(data, dict) else {}
-
-    def poll_wechat_qr(self, poll_token: str) -> dict[str, Any]:
-        data = self._request(
-            "POST",
-            "/hduhelp-neo/identity/login/wechat/qr/status",
-            json_body={"poll_token": poll_token},
-        )
-        return data if isinstance(data, dict) else {}
-
-    def exchange_login_code(self, code: str) -> dict[str, Any]:
-        data = self._request(
-            "POST",
-            "/hduhelp-neo/identity/login/exchange",
-            json_body={"code": code},
-        )
-        return data if isinstance(data, dict) else {}
-
-    def refresh_login_token(self, refresh_token: str) -> dict[str, Any]:
-        data = self._request(
-            "POST",
-            "/hduhelp-neo/identity/auth/token/refresh",
-            json_body={"refreshToken": refresh_token},
-        )
-        return data if isinstance(data, dict) else {}
-
-
 def available_terms(rows: list[dict[str, Any]]) -> list[HduHelpTerm]:
     counts: dict[tuple[str, int], int] = defaultdict(int)
     for row in rows:

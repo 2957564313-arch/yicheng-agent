@@ -31,7 +31,6 @@ class HduHelpConnectionStatus(BaseModel):
     available_terms: list[HduHelpTerm] = Field(default_factory=list)
     last_synced_at: datetime | None = None
     last_error: str | None = None
-    oauth_ready: bool = False
     synced_counts: dict[str, int] = Field(default_factory=dict)
 
 
@@ -46,25 +45,3 @@ class HduHelpSyncResponse(TimetableImportResponse):
     semester: int
     synced_counts: dict[str, int] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
-
-
-class HduHelpQRStartResponse(BaseModel):
-    ready: bool
-    authorize_url: str | None = None
-    qr_data_url: str | None = None
-    poll_token: str | None = None
-    expires_at: int | None = None
-    message: str
-
-
-class HduHelpQRPollRequest(BaseModel):
-    poll_token: str = Field(min_length=20, max_length=500)
-
-
-class HduHelpQRPollResponse(BaseModel):
-    status: str
-    user_id: str | None = None
-    display_name: str | None = None
-    access_token: str | None = None
-    expires_at: datetime | None = None
-    message: str

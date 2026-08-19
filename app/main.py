@@ -97,21 +97,15 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
                         "trace_id": f"trace_{uuid4().hex}",
                         "error": {
                             "code": "AUTH_REQUIRED",
-                            "message": "请先使用比赛测试账号登录",
+                            "message": "请先登录易程智策账号或使用测试入口",
                             "details": [],
                             "retryable": False,
                         },
                     },
                 )
-            mode = str(claims.get("mode") or "bootstrap")
+            mode = str(claims.get("mode") or "")
             user_id = str(claims.get("uid") or "")
             user_match = re.match(r"^/api/v1/users/([^/]+)", path)
-            is_qr_login = path.endswith(
-                (
-                    "/connections/hduhelp/wechat/start",
-                    "/connections/hduhelp/wechat/poll",
-                )
-            )
             if mode == "test" and "/connections/hduhelp" in path:
                 return JSONResponse(
                     status_code=403,
@@ -124,13 +118,13 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
                         }
                     },
                 )
-            if user_match and mode == "bootstrap" and not is_qr_login:
+            if user_match and mode not in {"test", "normal"}:
                 return JSONResponse(
                     status_code=403,
                     content={
                         "error": {
                             "code": "SESSION_MODE_REQUIRED",
-                            "message": "请先选择正常使用或测试体验",
+                            "message": "当前登录状态已失效，请重新登录",
                             "details": [],
                             "retryable": False,
                         }

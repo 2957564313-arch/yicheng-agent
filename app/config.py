@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     app_test_password: str = Field(default="", repr=False)
     app_auth_secret: str = Field(default="", repr=False)
     app_credential_secret: str = Field(default="", repr=False)
-    app_access_hours: int = Field(default=8, ge=1, le=72)
+    app_access_hours: int = Field(default=720, ge=1, le=720)
     # Keep API documentation private on the public site unless explicitly
     # enabled for local development or an authenticated maintenance window.
     app_docs_enabled: bool = False
@@ -77,8 +77,6 @@ class Settings(BaseSettings):
 
     hduhelp_api_base_url: str = "https://api.hduhelp.com"
     hduhelp_timeout_seconds: float = Field(default=20, ge=2, le=60)
-    hduhelp_qr_client_id: str = ""
-    hduhelp_qr_redirect_uri: str = ""
 
     @property
     def credential_secret(self) -> str:

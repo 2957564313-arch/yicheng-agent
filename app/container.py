@@ -20,6 +20,7 @@ from app.providers.rag import KnowledgeRepository
 from app.providers.route_static import StaticRouteProvider
 from app.providers.weather_static import StaticWeatherProvider
 from app.repositories.academic_calendar import AcademicCalendarRepository
+from app.repositories.accounts import AccountRepository
 from app.repositories.connections import ExternalConnectionRepository
 from app.repositories.conversations import ConversationRepository
 from app.repositories.database import Database
@@ -48,6 +49,7 @@ class AppContainer:
     settings: Settings
     campus_profile: dict
     database: Database
+    accounts: AccountRepository
     conversations: ConversationRepository
     external_connections: ExternalConnectionRepository
     external_agenda: ExternalAgendaRepository
@@ -115,6 +117,7 @@ def _load_class_periods(
 def build_container(settings: Settings) -> AppContainer:
     database = Database(settings.app_database_path)
     database.initialize()
+    accounts = AccountRepository(database)
     conversations = ConversationRepository(database)
     external_connections = ExternalConnectionRepository(database)
     external_agenda = ExternalAgendaRepository(database)
@@ -239,6 +242,7 @@ def build_container(settings: Settings) -> AppContainer:
         settings=settings,
         campus_profile=campus_profile,
         database=database,
+        accounts=accounts,
         conversations=conversations,
         external_connections=external_connections,
         external_agenda=external_agenda,

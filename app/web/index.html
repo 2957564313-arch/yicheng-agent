@@ -8,20 +8,26 @@
       content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
     <title>易程智策 · 我的校园日程</title>
-    <link rel="stylesheet" href="/styles.css?v=20260819-2" />
+    <link rel="stylesheet" href="/styles.css?v=20260819-3" />
   </head>
   <body>
     <section id="access-gate" class="access-gate" hidden>
       <form id="login-form" class="access-card">
         <div class="brand-mark" aria-hidden="true">易</div>
-        <p class="eyebrow">比赛测试入口</p>
-        <h1>登录后体验易程智策</h1>
-        <p>
-          为防止公开接口被恶意调用，规划、地图和天气能力仅向持有
-          测试账号的评审与体验者开放。
-        </p>
+        <p class="eyebrow">云端账号</p>
+        <h1 id="access-title">登录易程智策</h1>
+        <p id="access-description">手机和电脑登录同一账号，课表、偏好、对话和日程自动同步。</p>
+        <div class="access-tabs" role="tablist" aria-label="登录方式">
+          <button type="button" class="active" data-auth-view="login">账号登录</button>
+          <button type="button" data-auth-view="register">创建账号</button>
+          <button type="button" data-auth-view="test">测试入口</button>
+        </div>
+        <label id="login-display-name-field" hidden>
+          昵称（可选）
+          <input id="login-display-name" type="text" autocomplete="name" maxlength="40" />
+        </label>
         <label>
-          测试账号
+          <span id="login-username-label">账号</span>
           <input
             id="login-username"
             type="text"
@@ -30,7 +36,7 @@
           />
         </label>
         <label>
-          测试密码
+          密码
           <input
             id="login-password"
             type="password"
@@ -38,22 +44,13 @@
             required
           />
         </label>
-        <button class="primary" type="submit">继续</button>
-        <small id="login-message">
-          请输入参赛材料中提供的测试账号和密码。
-        </small>
+        <label id="login-password-confirm-field" hidden>
+          确认密码
+          <input id="login-password-confirm" type="password" autocomplete="new-password" />
+        </label>
+        <button id="login-submit" class="primary" type="submit">登录</button>
+        <small id="login-message">还没有账号可以直接创建；测试入口使用参赛材料中的账号。</small>
       </form>
-    </section>
-    <section id="session-mode-gate" class="access-gate" hidden>
-      <div class="access-card session-mode-card">
-        <div class="brand-mark" aria-hidden="true">易</div>
-        <p class="eyebrow">选择使用方式</p>
-        <h1>进入自己的空间</h1>
-        <p>正常使用会连接杭电助手并同步个人校园数据；测试体验不绑定校园账号。</p>
-        <button id="normal-session" class="primary" type="button">正常使用 · 微信登录</button>
-        <button id="test-session" class="ghost" type="button">测试体验 · 直接进入</button>
-        <small>两种方式都需要先通过比赛测试账号验证。</small>
-      </div>
     </section>
     <header class="masthead">
       <div class="brand">
@@ -224,36 +221,25 @@
               <span id="hduhelp-badge" class="connection-badge">未连接</span>
             </div>
             <p class="panel-note">
-              扫码后统一同步课程、考试、图书馆自习预约和已报名二课。
+              绑定个人访问令牌后同步课程、考试、图书馆自习预约和已报名二课。
               杭助记录优先；预约、活动或课程取消后，下次同步会从日程中移除。
             </p>
             <section class="hduhelp-card" aria-labelledby="hduhelp-title">
               <div class="hduhelp-card-heading">
                 <div>
-                  <p class="integration-label">正常使用</p>
-                  <h3 id="hduhelp-title">杭助微信扫码</h3>
+                  <p class="integration-label">个人数据连接</p>
+                  <h3 id="hduhelp-title">杭电助手个人令牌</h3>
                 </div>
               </div>
               <p class="panel-note">
-                使用杭电助手官方扫码配对进入自己的校园空间，统一认证密码不会交给本项目。
-              </p>
-              <button id="hduhelp-wechat" class="primary" type="button">
-                微信扫码登录
-              </button>
-              <div id="hduhelp-qr" class="hduhelp-qr" hidden></div>
-              <p id="hduhelp-wechat-state" class="storage-note"></p>
-            </section>
-            <details class="hduhelp-token-fallback">
-              <summary>已有个人访问令牌</summary>
-              <p class="panel-note">
-                比赛测试期间可用个人令牌连接；令牌加密保存在服务器，不会显示或导出。
+                每位用户绑定自己的个人访问令牌；令牌在服务器加密保存，不会显示或导出。
               </p>
               <div id="hduhelp-connect-form" class="hduhelp-connect-form">
                 <input id="hduhelp-token" type="password" placeholder="粘贴个人访问令牌"
                   autocomplete="off" spellcheck="false" aria-label="杭电助手个人访问令牌" />
-                <button id="hduhelp-connect" class="ghost" type="button">验证并连接</button>
+                <button id="hduhelp-connect" class="primary" type="button">验证并连接</button>
               </div>
-            </details>
+            </section>
             <div id="hduhelp-sync-form" class="hduhelp-sync-form" hidden>
               <select id="hduhelp-term" aria-label="选择杭电助手学期"></select>
               <button id="hduhelp-sync" class="primary" type="button">同步全部校园数据</button>
@@ -711,6 +697,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260819-3" defer></script>
+    <script src="/app.js?v=20260819-4" defer></script>
   </body>
 </html>

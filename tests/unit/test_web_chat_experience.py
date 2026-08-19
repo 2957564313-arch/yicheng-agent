@@ -93,6 +93,21 @@ def test_fresh_homepage_stays_clean_until_the_user_runs_a_plan() -> None:
     assert "homepageModeKey" not in javascript
 
 
+def test_self_hosted_accounts_replace_external_login_choices() -> None:
+    html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+
+    assert 'data-auth-view="login"' in html
+    assert 'data-auth-view="register"' in html
+    assert 'data-auth-view="test"' in html
+    assert "/api/v1/auth/account/login" in javascript
+    assert "/api/v1/auth/register" in javascript
+    assert "微信扫码" not in html
+    assert "统一认证" not in html
+    assert "hduhelp-wechat" not in html
+    assert "/api/v1/auth/session" not in javascript
+
+
 def test_result_request_can_be_edited_without_leaving_dashboard() -> None:
     html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
