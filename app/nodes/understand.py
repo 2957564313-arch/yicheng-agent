@@ -257,6 +257,7 @@ def make_understand_node(container: AppContainer):
         tasks_with_activity_locations = _apply_activity_location_memories(
             tasks_with_study_preferences,
             memories=memories,
+            query=state["query"],
         )
         result = result.model_copy(
             update={
@@ -856,7 +857,14 @@ def _apply_preferred_locations(
         if task.flexibility.value != "movable":
             adjusted.append(task)
             continue
-        if task.location_raw and task.location_raw in query:
+        if "memory_activity_location" in task.tags:
+            adjusted.append(task)
+            continue
+        if (
+            task.location_raw
+            and task.location_raw in query
+            and task.location_raw not in {"图书馆", "操场", "快递站"}
+        ):
             adjusted.append(task)
             continue
         kind = _task_kind(task.title, task.location_raw)
@@ -887,6 +895,7 @@ def _apply_activity_location_memories(
     tasks: list[Task],
     *,
     memories,
+    query: str = "",
 ) -> list[Task]:
     """Apply explicit activity-to-place mappings without overriding facts."""
     raw_value = next(
@@ -917,7 +926,7 @@ def _apply_activity_location_memories(
 
     adjusted: list[Task] = []
     for task in tasks:
-        if task.location_raw and task.location_raw.strip():
+        if task.flexibility.value != "movable":
             adjusted.append(task)
             continue
         normalized_title = _normalize_task_text(task.title)
@@ -933,6 +942,23 @@ def _apply_activity_location_memories(
             None,
         )
         if choice is None:
+            adjusted.append(task)
+            continue
+        # A detailed location named in the current request wins. Generic
+        # parser defaults such as “图书馆” or “操场” may be refined by the
+        # user's saved mapping (for example, 图书馆12层 or 东操场).
+        if (
+            task.location_raw
+            and task.location_raw.strip()
+            and (
+                not query
+                or (
+                    task.location_raw in query
+                    and task.location_raw
+                    not in {"图书馆", "操场", "快递站"}
+                )
+            )
+        ):
             adjusted.append(task)
             continue
         # A place explicitly written in the current request always wins; an

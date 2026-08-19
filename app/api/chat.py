@@ -771,12 +771,14 @@ async def execute_chat(
         thread_id=thread_id,
         now=now,
     )
-    user_message_id = container.plans.add_message(
-        thread_id=thread_id,
-        role="user",
-        content=payload.query,
-        created_at=now,
-    )
+    user_message_id = None
+    if not payload.preview_only:
+        user_message_id = container.plans.add_message(
+            thread_id=thread_id,
+            role="user",
+            content=payload.query,
+            created_at=now,
+        )
     reset_llm_usage = getattr(container.llm, "reset_usage", None)
     if callable(reset_llm_usage):
         reset_llm_usage()
@@ -886,7 +888,13 @@ async def execute_chat(
         result = await graph.ainvoke(
             initial_state,
             config={
-                "configurable": {"thread_id": thread_id},
+                "configurable": {
+                    "thread_id": (
+                        f"preview_{request_id}"
+                        if payload.preview_only
+                        else thread_id
+                    )
+                },
                 "recursion_limit": 12,
             },
         )
@@ -919,7 +927,9 @@ async def execute_chat(
                 + "需要的话可以点下面的建议；这次不用也可以忽略。"
             )
         current_plan_saved = bool(
-            plan and plan.status == PlanStatus.VALID
+            not payload.preview_only
+            and plan
+            and plan.status == PlanStatus.VALID
         )
         if current_plan_saved and plan:
             persisted_parent_id = (
@@ -934,12 +944,14 @@ async def execute_chat(
                 agenda_published=payload.publish_to_agenda,
                 source_message_id=user_message_id,
             )
-        assistant_message_id = container.plans.add_message(
-            thread_id=thread_id,
-            role="assistant",
-            content=result["final_answer"],
-            created_at=datetime.now(timezone),
-        )
+        assistant_message_id = None
+        if not payload.preview_only:
+            assistant_message_id = container.plans.add_message(
+                thread_id=thread_id,
+                role="assistant",
+                content=result["final_answer"],
+                created_at=datetime.now(timezone),
+            )
         warnings = [
             Issue.model_validate(raw)
             for raw in result.get("response_warnings", [])

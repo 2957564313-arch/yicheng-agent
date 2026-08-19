@@ -8,7 +8,7 @@
       content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
     <title>易程智策 · 我的校园日程</title>
-    <link rel="stylesheet" href="/styles.css?v=20260818-5" />
+    <link rel="stylesheet" href="/styles.css?v=20260818-6" />
   </head>
   <body>
     <section id="access-gate" class="access-gate" hidden>
@@ -63,7 +63,7 @@
         <button id="history-toggle" class="icon-button" type="button" aria-controls="history-sidebar" aria-expanded="false">
           历史
         </button>
-        <button id="tools-toggle" class="icon-button" type="button" aria-controls="tools-sidebar" aria-expanded="false" hidden>
+        <button id="tools-toggle" class="icon-button" type="button" aria-controls="conversation-outline" aria-expanded="false" hidden>
           定位
         </button>
       </div>
@@ -335,9 +335,9 @@
                 <option value="transport_mode">常用出行方式</option>
                 <option value="avoid_congestion">偏好错峰通勤</option>
                 <option value="schedule_pace">日程节奏</option>
-                <option value="activity_location">事情对应地点</option>
+                <option value="activity_location">事项地点偏好（可自定义）</option>
                 <option value="preferred_study_period">高效学习时段</option>
-                <option value="preferred_study_location">常用自习地点</option>
+                <option value="preferred_study_location">自习地点（快捷设置）</option>
                 <option value="usual_lunch_time">常用午餐时间</option>
                 <option value="usual_dinner_time">常用晚餐时间</option>
                 <option value="usual_bedtime">常用就寝时间</option>
@@ -636,6 +636,10 @@
                     </button>
                   </nav>
                   <p id="result-action-status" class="result-action-status" hidden></p>
+                  <div id="result-candidate-actions" class="result-candidate-actions" hidden>
+                    <button type="button" class="ghost" data-candidate-choice="keep">保留原方案</button>
+                    <button type="button" class="primary" data-candidate-choice="adopt">采用调整方案</button>
+                  </div>
                 </section>
                 <aside id="result-details" class="result-details" hidden>
                   <section class="result-detail-card">
@@ -719,6 +723,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260818-12" defer></script>
+    <script src="/app.js?v=20260818-13" defer></script>
   </body>
 </html>

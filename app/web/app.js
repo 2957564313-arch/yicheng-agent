@@ -30,6 +30,7 @@ const resultConstraintTotal = $("#result-constraint-total");
 const resultSources = $("#result-sources");
 const resultQuickActions = $("#result-quick-actions");
 const resultActionStatus = $("#result-action-status");
+const resultCandidateActions = $("#result-candidate-actions");
 const resultChangeSummary = $("#result-change-summary");
 const taskStatuses = $("#task-statuses");
 const answer = $("#answer");
@@ -149,6 +150,7 @@ let activeConversationQuery = "";
 let activeConversationAnswer = "";
 let lastResultQuery = "";
 let lastResultData = null;
+let pendingPlanCandidate = null;
 let activePlanningNowOverride = null;
 const consoleUserId = getOrCreateLocalIdentity(
   "yicheng_user_id",
@@ -459,7 +461,9 @@ function scheduleMonthEnd(rawDate) {
 }
 
 function scheduleItemsByDate() {
-  return (lastAgendaData?.items || []).reduce((result, item) => {
+  return (lastAgendaData?.items || []).filter(
+    (item) => item.kind !== "meal",
+  ).reduce((result, item) => {
     const date = agendaItemDate(item);
     (result[date] ||= []).push(item);
     return result;
@@ -470,19 +474,45 @@ let scheduleCalendarContexts = {};
 
 const conversationOutline = document.createElement("section");
 conversationOutline.className = "conversation-outline";
+conversationOutline.id = "conversation-outline";
 conversationOutline.hidden = true;
 conversationOutline.innerHTML = `
   <div class="conversation-outline-heading">
     <strong>快速定位</strong>
   </div>
   <nav id="conversation-outline-list" aria-label="本次对话快速定位"></nav>`;
-const conversationOutlineHost = document.querySelector(
-  ".tools-sidebar, .workspace-tools, .workspace-nav-panel, .right-sidebar",
-);
-(conversationOutlineHost || document.body).append(conversationOutline);
-if (conversationOutlineHost) conversationOutline.classList.add("is-embedded");
+document.body.append(conversationOutline);
 const conversationOutlineList = conversationOutline.querySelector("#conversation-outline-list");
 let conversationOutlineObserver;
+
+function setConversationOutlineOpen(open) {
+  conversationOutline.classList.toggle("is-open", open);
+  toolsToggle?.setAttribute("aria-expanded", String(open));
+}
+
+conversationOutline.addEventListener("click", (event) => {
+  if (
+    window.matchMedia("(max-width: 900px)").matches
+    && !conversationOutline.classList.contains("is-open")
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    setConversationOutlineOpen(true);
+  }
+});
+document.addEventListener("click", (event) => {
+  if (
+    conversationOutline.classList.contains("is-open")
+    && !conversationOutline.contains(event.target)
+    && event.target !== toolsToggle
+  ) setConversationOutlineOpen(false);
+});
+conversationOutline.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    setConversationOutlineOpen(false);
+    toolsToggle?.focus();
+  }
+});
 
 function conversationMessageLabel(message) {
   const body = message.querySelector(".message-body, .message-bubble") || message;
@@ -502,11 +532,10 @@ function setActiveConversationOutline(messageId) {
 function syncConversationOutline() {
   if (!conversationStream || !conversationOutlineList) return;
   const messages = [...conversationStream.querySelectorAll(".conversation-message.user-message")];
-  conversationOutline.hidden = messages.length === 0;
-  if (toolsToggle) toolsToggle.hidden = messages.length === 0;
-  if (messages.length === 0 && toolsSidebar?.classList.contains("mobile-open")) {
-    closeDrawers();
-  }
+  const hasMultipleTurns = messages.length > 1;
+  conversationOutline.hidden = !hasMultipleTurns;
+  if (toolsToggle) toolsToggle.hidden = !hasMultipleTurns;
+  if (!hasMultipleTurns) setConversationOutlineOpen(false);
   conversationOutlineList.innerHTML = messages.map((message, index) => {
     const id = message.id || `conversation-turn-${index + 1}`;
     message.id = id;
@@ -523,9 +552,12 @@ function syncConversationOutline() {
         window.setTimeout(() => target.classList.remove("is-located"), 1200);
       });
       setActiveConversationOutline(target.id);
-      if (window.matchMedia("(max-width: 900px)").matches) closeDrawers();
+      setConversationOutlineOpen(false);
     });
   });
+  if (messages.length) {
+    setActiveConversationOutline(messages[messages.length - 1].id);
+  }
   conversationOutlineObserver?.disconnect();
   conversationOutlineObserver = new IntersectionObserver((entries) => {
     const visible = entries
@@ -647,6 +679,7 @@ function closeDrawers() {
   document.body.classList.remove("drawer-open");
   historyToggle?.setAttribute("aria-expanded", "false");
   toolsToggle?.setAttribute("aria-expanded", "false");
+  setConversationOutlineOpen(false);
   if (drawerBackdrop) drawerBackdrop.hidden = true;
 }
 
@@ -670,7 +703,12 @@ function openDrawer(sidebar, toggle) {
 function initializeWorkspaceNavigation() {
   moveToolPanelsIntoWorkspace();
   historyToggle?.addEventListener("click", () => openDrawer(historySidebar, historyToggle));
-  toolsToggle?.addEventListener("click", () => openDrawer(toolsSidebar, toolsToggle));
+  toolsToggle?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setConversationOutlineOpen(
+      !conversationOutline.classList.contains("is-open"),
+    );
+  });
   historyClose?.addEventListener("click", closeDrawers);
   toolsClose?.addEventListener("click", closeDrawers);
   drawerBackdrop?.addEventListener("click", closeDrawers);
@@ -1433,8 +1471,8 @@ const memoryDefinitions = {
     category: "preference",
   },
   activity_location: {
-    label: "事情对应地点",
-    placeholder: "例如：乐团排练 → 学活A区；导师碰头 → 10教408",
+    label: "事项地点偏好",
+    placeholder: "例如：跑步 → 东操场；自习 → 图书馆12层",
     category: "preference",
   },
   preferred_study_period: {
@@ -1443,8 +1481,8 @@ const memoryDefinitions = {
     category: "habit",
   },
   preferred_study_location: {
-    label: "常用自习地点",
-    placeholder: "例如：图书馆六层",
+    label: "自习地点（快捷设置）",
+    placeholder: "例如：图书馆12层",
     category: "preference",
   },
   usual_lunch_time: {
@@ -1667,7 +1705,9 @@ function renderClock() {
 }
 
 function renderTimeline(data) {
-  const items = [...(data.plan?.items || [])].sort(
+  const items = [...(data.plan?.items || [])].filter(
+    (item) => item.item_type !== "meal",
+  ).sort(
     (left, right) => (
       new Date(left.start_at).getTime() - new Date(right.start_at).getTime()
       || new Date(left.end_at).getTime() - new Date(right.end_at).getTime()
@@ -1817,7 +1857,9 @@ function renderResultSummary(data) {
   const requested = statuses.length || metrics.requested_task_count || 0;
   const checks = data.constraint_checks || [];
   const passed = checks.filter((item) => item.passed).length;
-  const endTimes = (plan.items || []).map((item) => new Date(item.end_at).getTime());
+  const endTimes = (plan.items || []).filter(
+    (item) => item.item_type !== "meal",
+  ).map((item) => new Date(item.end_at).getTime());
   const finalEnd = endTimes.length
     ? timePart(new Date(Math.max(...endTimes)))
     : "—";
@@ -2149,11 +2191,30 @@ function renderSuggestedActions(actions = []) {
   });
 }
 
+function renderPlanPanels(data) {
+  renderTimeline(data);
+  renderResultSummary(data);
+  renderResultDashboard(data);
+  renderTaskStatuses(data.task_statuses, data.location_names);
+  renderExecution(data.execution_steps);
+  renderConstraints(data.constraint_checks);
+  renderDiff(data);
+  renderEvidence(data);
+  renderInsights(data.insights || []);
+}
+
 function renderResponse(data) {
   const shouldStayInDashboard = document.body.classList.contains(
     "has-plan-result",
   );
   lastResultData = data;
+  pendingPlanCandidate = null;
+  if (resultCandidateActions) {
+    resultCandidateActions.hidden = true;
+    resultCandidateActions.querySelectorAll("button").forEach((item) => {
+      item.disabled = false;
+    });
+  }
   if (resultActionStatus) resultActionStatus.hidden = true;
   if (data.current_plan_saved && data.plan?.status === "valid") {
     writeLocalSnapshot(planSnapshotKey, data.plan);
@@ -2183,15 +2244,7 @@ function renderResponse(data) {
     if (resultAddAgenda) resultAddAgenda.hidden = true;
   }
   saveState.classList.toggle("saved", planPublished);
-  renderTimeline(data);
-  renderResultSummary(data);
-  renderResultDashboard(data);
-  renderTaskStatuses(data.task_statuses, data.location_names);
-  renderExecution(data.execution_steps);
-  renderConstraints(data.constraint_checks);
-  renderDiff(data);
-  renderEvidence(data);
-  renderInsights(data.insights || []);
+  renderPlanPanels(data);
   renderSuggestedActions(data.suggested_actions);
   renderDebug(data);
   if (data.plan) {
@@ -2240,7 +2293,7 @@ function agendaItemDate(item) {
 
 function renderAgenda(data, selectedDate) {
   const items = (data.items || []).filter(
-    (item) => agendaItemDate(item) === selectedDate,
+    (item) => item.kind !== "meal" && agendaItemDate(item) === selectedDate,
   );
   const minutes = (item) => Math.max(
     0,
@@ -2646,14 +2699,19 @@ function setLoading(active) {
   submitButton.textContent = active ? "正在认真规划…" : "发送给易程智策";
 }
 
-async function runRequest(url, options = {}, transformData = null) {
+async function runRequest(
+  url,
+  options = {},
+  transformData = null,
+  { render = true } = {},
+) {
   setLoading(true);
   try {
     const response = await fetch(url, options);
     let data = await response.json();
     if (!response.ok) throw data;
     if (transformData) data = transformData(data);
-    renderResponse(data);
+    if (render) renderResponse(data);
     return data;
   } catch (error) {
     renderError(error);
@@ -2661,6 +2719,24 @@ async function runRequest(url, options = {}, transformData = null) {
   } finally {
     setLoading(false);
   }
+}
+
+async function requestChat(query, { previewOnly = false, render = true } = {}) {
+  const clientContext = clientContextSnapshot();
+  if (activePlanningNowOverride) clientContext.now = activePlanningNowOverride;
+  return runRequest("/api/v1/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_id: consoleUserId,
+      thread_id: consoleThreadId,
+      query,
+      mode: modeSelect.value,
+      publish_to_agenda: false,
+      preview_only: previewOnly,
+      client_context: clientContext,
+    }),
+  }, null, { render }).catch(() => null);
 }
 
 async function submitQuery(rawQuery, { keepResultMode = false } = {}) {
@@ -2679,22 +2755,7 @@ async function submitQuery(rawQuery, { keepResultMode = false } = {}) {
   }
   beginConversationTurn(query, { keepResultMode });
   queryInput.value = "";
-  const clientContext = clientContextSnapshot();
-  if (keepResultMode && activePlanningNowOverride) {
-    clientContext.now = activePlanningNowOverride;
-  }
-  const data = await runRequest("/api/v1/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      user_id: consoleUserId,
-      thread_id: consoleThreadId,
-      query,
-      mode: modeSelect.value,
-      publish_to_agenda: false,
-      client_context: clientContext,
-    }),
-  }).catch(() => null);
+  const data = await requestChat(query);
   if (data) {
     attachMessageIdsToCurrentTurn(data);
     loadConversationThreads().catch(() => {});
@@ -2790,7 +2851,7 @@ function planIdleMinutes(plan) {
 }
 
 function renderResultActionOutcome(action, before, after) {
-  if (!resultActionStatus || !after?.plan) return;
+  if (!resultActionStatus || !after?.plan) return false;
   const changed = planFingerprint(before) !== planFingerprint(after);
   const beforeMetrics = before?.plan?.metrics || {};
   const afterMetrics = after.plan.metrics || {};
@@ -2804,14 +2865,14 @@ function renderResultActionOutcome(action, before, after) {
   );
   const messages = changed
     ? {
-        alternative: "已生成不同的可行排法，任务与硬约束仍然保留。",
+        alternative: "已生成一个候选排法。请比较后选择保留原方案或采用调整方案。",
         travel: travelSaved
-          ? `已重新规划，通勤时间减少${formatDuration(travelSaved)}。`
-          : "已避开更拥堵的时段，并重新计算通勤衔接。",
+          ? `候选方案的通勤时间减少${formatDuration(travelSaved)}。请选择是否采用。`
+          : "已生成更侧重通勤衔接的候选方案，请选择是否采用。",
         waiting: waitingSaved
-          ? `已把任务排得更紧凑，等待时间减少${formatDuration(waitingSaved)}。`
-          : "已重新组合任务顺序，减少不必要的中间空档。",
-        order: "已更换任务先后顺序，并重新校验时间和通勤约束。",
+          ? `候选方案的等待时间减少${formatDuration(waitingSaved)}。请选择是否采用。`
+          : "已生成更紧凑的候选方案，请选择是否采用。",
+        order: "已生成不同任务顺序的候选方案，并重新校验硬约束。",
       }
     : {
         alternative: "当前约束下没有找到同样安全的不同排法，已保留原方案。",
@@ -2822,6 +2883,7 @@ function renderResultActionOutcome(action, before, after) {
   resultActionStatus.textContent = messages[action] || "规划已重新校验。";
   resultActionStatus.classList.toggle("is-unchanged", !changed);
   resultActionStatus.hidden = false;
+  return changed;
 }
 
 function currentBaseRequirement() {
@@ -2831,14 +2893,14 @@ function currentBaseRequirement() {
 
 resultQuickActions?.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-result-action]");
-  if (!button || submitButton.disabled) return;
+  if (!button || submitButton.disabled || pendingPlanCandidate) return;
   const adjustment = resultActionQueries[button.dataset.resultAction];
   if (!adjustment) return;
   const action = button.dataset.resultAction;
   const before = lastResultData;
   const currentRequirement = currentBaseRequirement();
   const query = `${currentRequirement}\n调整要求：${adjustment}`;
-  resultActionStatus.textContent = "正在按你的选择重新规划…";
+  resultActionStatus.textContent = "正在生成候选方案，原方案不会被覆盖…";
   resultActionStatus.classList.remove("is-unchanged");
   resultActionStatus.hidden = false;
   resultQuickActions.querySelectorAll("button").forEach((item) => {
@@ -2846,14 +2908,70 @@ resultQuickActions?.addEventListener("click", async (event) => {
     item.classList.toggle("active", item === button);
   });
   try {
-    const data = await submitQuery(query, { keepResultMode: true });
-    if (data) renderResultActionOutcome(action, before, data);
+    const data = await requestChat(query, {
+      previewOnly: true,
+      render: false,
+    });
+    if (!data) return;
+    const changed = renderResultActionOutcome(action, before, data);
+    if (!changed) {
+      renderPlanPanels(before);
+      return;
+    }
+    pendingPlanCandidate = { action, before, candidate: data, query };
+    renderPlanPanels(data);
+    resultCandidateActions.querySelectorAll("button").forEach((item) => {
+      item.disabled = false;
+    });
+    resultCandidateActions.hidden = false;
+    resultAddAgenda.disabled = true;
   } finally {
+    if (!pendingPlanCandidate) {
+      resultQuickActions.querySelectorAll("button").forEach((item) => {
+        item.disabled = false;
+        item.classList.remove("active");
+      });
+    }
+  }
+});
+
+resultCandidateActions?.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-candidate-choice]");
+  if (!button || !pendingPlanCandidate || submitButton.disabled) return;
+  const pending = pendingPlanCandidate;
+  resultCandidateActions.querySelectorAll("button").forEach((item) => {
+    item.disabled = true;
+  });
+  if (button.dataset.candidateChoice === "keep") {
+    renderPlanPanels(pending.before);
+    pendingPlanCandidate = null;
+    resultCandidateActions.hidden = true;
+    resultActionStatus.textContent = "已保留原方案，当前日程没有被修改。";
+    resultActionStatus.classList.add("is-unchanged");
+    resultActionStatus.hidden = false;
     resultQuickActions.querySelectorAll("button").forEach((item) => {
       item.disabled = false;
       item.classList.remove("active");
     });
+    resultAddAgenda.disabled = false;
+    return;
   }
+  resultActionStatus.textContent = "正在采用并保存调整方案…";
+  const data = await submitQuery(pending.query, { keepResultMode: true });
+  if (data) {
+    resultActionStatus.textContent = "已采用调整方案。";
+    resultActionStatus.classList.remove("is-unchanged");
+    resultActionStatus.hidden = false;
+  } else {
+    pendingPlanCandidate = null;
+    renderPlanPanels(pending.before);
+    resultCandidateActions.hidden = true;
+    resultAddAgenda.disabled = false;
+  }
+  resultQuickActions.querySelectorAll("button").forEach((item) => {
+    item.disabled = false;
+    item.classList.remove("active");
+  });
 });
 
 submitButton.addEventListener("click", async () => {
@@ -3274,7 +3392,7 @@ function parseMemoryValue(key, rawValue) {
     const mappings = entries.map((entry) => {
       const matched = entry.match(/^(.+?)\s*(?:→|->|：|:)\s*(.+)$/);
       if (!matched) {
-        throw new Error("请按“事情 → 地点”填写，例如：乐团排练 → 学活A区。");
+        throw new Error("请按“事项 → 地点”填写，例如：跑步 → 东操场。");
       }
       return { activity: matched[1].trim(), location: matched[2].trim() };
     });

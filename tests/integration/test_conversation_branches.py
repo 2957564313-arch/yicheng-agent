@@ -85,6 +85,40 @@ def test_editing_an_old_question_creates_a_branch_and_preserves_original(tmp_pat
         assert {item["id"] for item in threads} == {"branch_source", branch_id}
 
 
+def test_preview_only_returns_candidate_without_changing_thread_or_current_plan(
+    tmp_path,
+):
+    app = branch_app(tmp_path)
+    with TestClient(app) as client:
+        original = client.post(
+            "/api/v1/chat",
+            json=chat_payload("今天14点到15点在图书馆复习高数。"),
+        ).json()
+        before_messages = client.get(
+            "/api/v1/users/branch_user/threads/branch_source"
+        ).json()["messages"]
+
+        preview_payload = chat_payload(
+            "调整任务顺序，但固定安排绝对不变。"
+        )
+        preview_payload["preview_only"] = True
+        preview = client.post("/api/v1/chat", json=preview_payload)
+
+        assert preview.status_code == 200, preview.text
+        assert preview.json()["plan"] is not None
+        assert preview.json()["current_plan_saved"] is False
+        assert preview.json()["user_message_id"] is None
+        assert preview.json()["assistant_message_id"] is None
+        after_messages = client.get(
+            "/api/v1/users/branch_user/threads/branch_source"
+        ).json()["messages"]
+        assert after_messages == before_messages
+        assert (
+            app.state.container.plans.latest_for_thread("branch_source").id
+            == original["plan"]["id"]
+        )
+
+
 def test_branch_cannot_edit_an_assistant_message(tmp_path):
     with TestClient(branch_app(tmp_path)) as client:
         response = client.post(

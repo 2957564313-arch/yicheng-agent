@@ -132,6 +132,45 @@ def test_activity_location_memory_only_fills_matching_missing_place():
     assert adjusted[2].location_raw is None
 
 
+def test_activity_location_memory_refines_generic_parser_location():
+    tasks = [
+        Task(
+            id="study",
+            title="图书馆自习",
+            date=NOW.date(),
+            duration_min=120,
+            location_raw="图书馆",
+        ),
+        Task(
+            id="run",
+            title="跑步",
+            date=NOW.date(),
+            duration_min=30,
+            location_raw="操场",
+        ),
+    ]
+    memories = [
+        MemoryCreate(
+            category="preference",
+            key="activity_location",
+            label="事项地点偏好",
+            value=[
+                {"activity": "自习", "location": "图书馆12层"},
+                {"activity": "跑步", "location": "东操场"},
+            ],
+        )
+    ]
+
+    adjusted = _apply_activity_location_memories(
+        tasks,
+        memories=memories,
+        query="今天去图书馆自习2小时，然后跑步30分钟。",
+    )
+
+    assert adjusted[0].location_raw == "图书馆12层"
+    assert adjusted[1].location_raw == "东操场"
+
+
 def _parse(query: str) -> UnderstandResult:
     return RuleBasedRequirementParser("Asia/Shanghai").parse(
         query=query,

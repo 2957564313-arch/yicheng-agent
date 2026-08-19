@@ -65,7 +65,8 @@ def test_result_first_dashboard_keeps_key_plan_information_together() -> None:
     assert "body.has-plan-result .composer-column" in styles
     assert ".result-summary { grid-template-columns: repeat(6" in styles
     assert 'data-kind="buffer"]' in styles
-    assert "const items = [...(data.plan?.items || [])].sort(" in javascript
+    assert "const items = [...(data.plan?.items || [])].filter(" in javascript
+    assert 'item.item_type !== "meal"' in javascript
 
 
 def test_fresh_homepage_stays_clean_until_the_user_runs_a_plan() -> None:
@@ -200,12 +201,14 @@ def test_current_conversation_has_a_right_side_quick_outline() -> None:
     assert '.conversation-message.user-message' in javascript
     assert 'target.scrollIntoView({ behavior: "smooth"' in javascript
     assert "new MutationObserver(syncConversationOutline)" in javascript
-    assert ".conversation-outline.is-embedded" in styles
-    assert "body.has-plan-result .tools-sidebar:has(" in styles
+    assert ".conversation-outline.is-open" in styles
+    assert ".conversation-outline button::before" in styles
+    assert "position: fixed" in styles
+    assert "document.body.append(conversationOutline)" in javascript
     assert 'id="conversation-outline-count"' not in javascript
     assert '<span>${index + 1}</span>' not in javascript
     assert "conversationMessageLabel(message)" in javascript
-    assert "if (toolsToggle) toolsToggle.hidden = messages.length === 0;" in javascript
+    assert "if (toolsToggle) toolsToggle.hidden = !hasMultipleTurns;" in javascript
     assert "data-thread-rename" in javascript
     assert "data-thread-delete" in javascript
     assert "data-thread-menu-toggle" in javascript

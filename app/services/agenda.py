@@ -179,6 +179,10 @@ class AgendaService:
         )
         for plan in plans:
             for item in plan.items:
+                # Meal windows protect time inside the planner, but users do
+                # not need a synthetic lunch/dinner event in their agenda.
+                if item.item_type == "meal":
+                    continue
                 if (
                     item.task_id
                     and item.task_id.startswith(("timetable_", "external_"))
