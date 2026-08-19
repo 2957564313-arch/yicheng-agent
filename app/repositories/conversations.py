@@ -30,7 +30,7 @@ class ConversationRepository:
                        ) AS last_message
                 FROM threads t
                 LEFT JOIN messages m ON m.thread_id = t.id
-                WHERE t.user_id = ?
+                WHERE t.user_id = ? AND t.deleted_at IS NULL
                 GROUP BY t.id
                 HAVING COUNT(m.id) > 0
                 ORDER BY t.updated_at DESC
@@ -59,7 +59,7 @@ class ConversationRepository:
                        ) AS last_message
                 FROM threads t
                 LEFT JOIN messages m ON m.thread_id = t.id
-                WHERE t.id = ? AND t.user_id = ?
+                WHERE t.id = ? AND t.user_id = ? AND t.deleted_at IS NULL
                 GROUP BY t.id
                 """,
                 (thread_id, user_id),
@@ -88,6 +88,58 @@ class ConversationRepository:
             ],
         )
 
+    def rename(
+        self,
+        *,
+        user_id: str,
+        thread_id: str,
+        title: str,
+        now: datetime,
+    ) -> ConversationThread | None:
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE threads SET title = ?, updated_at = ?
+                WHERE id = ? AND user_id = ? AND deleted_at IS NULL
+                """,
+                (title, now.isoformat(), thread_id, user_id),
+            )
+        if cursor.rowcount == 0:
+            return None
+        detail = self.get_detail(user_id=user_id, thread_id=thread_id)
+        return detail.thread if detail else None
+
+    def delete(
+        self,
+        *,
+        user_id: str,
+        thread_id: str,
+        now: datetime,
+    ) -> bool:
+        with self.database.transaction() as connection:
+            row = connection.execute(
+                """
+                SELECT id FROM threads
+                WHERE id = ? AND user_id = ? AND deleted_at IS NULL
+                """,
+                (thread_id, user_id),
+            ).fetchone()
+            if row is None:
+                return False
+            connection.execute(
+                "DELETE FROM messages WHERE thread_id = ?",
+                (thread_id,),
+            )
+            connection.execute(
+                """
+                UPDATE threads
+                SET deleted_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (now.isoformat(), now.isoformat(), thread_id),
+            )
+        return True
+
     def fork(
         self,
         *,
@@ -105,6 +157,7 @@ class ConversationRepository:
                 FROM messages m
                 JOIN threads t ON t.id = m.thread_id
                 WHERE m.id = ? AND m.thread_id = ?
+                  AND t.deleted_at IS NULL
                 """,
                 (from_message_id, thread_id),
             ).fetchone()

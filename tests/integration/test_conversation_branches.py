@@ -144,3 +144,50 @@ def test_branch_uses_plan_state_before_edited_message(tmp_path):
         assert "改成16点到17点去健身。" in branch_contents
         assert "再加一个16点到16点30分取快递。" not in branch_contents
         assert "再加一个18点到18点30分跑步。" not in branch_contents
+
+
+def test_thread_can_be_renamed_and_deleted_without_removing_plan(tmp_path):
+    with TestClient(branch_app(tmp_path)) as client:
+        chat = client.post(
+            "/api/v1/chat",
+            json=chat_payload("今天14点到15点在图书馆复习高数。"),
+        )
+        assert chat.status_code == 200, chat.text
+        plan_id = chat.json()["plan"]["id"]
+
+        renamed = client.patch(
+            "/api/v1/users/branch_user/threads/branch_source",
+            json={"title": "高数复习安排"},
+        )
+        assert renamed.status_code == 200, renamed.text
+        assert renamed.json()["title"] == "高数复习安排"
+
+        forbidden = client.patch(
+            "/api/v1/users/another_user/threads/branch_source",
+            json={"title": "不应成功"},
+        )
+        assert forbidden.status_code == 404
+
+        deleted = client.delete(
+            "/api/v1/users/branch_user/threads/branch_source"
+        )
+        assert deleted.status_code == 204, deleted.text
+        assert client.get(
+            "/api/v1/users/branch_user/threads/branch_source"
+        ).status_code == 404
+        assert client.get("/api/v1/users/branch_user/threads").json() == []
+        assert client.app.state.container.plans.get(plan_id) is not None
+
+
+def test_thread_title_rejects_blank_name(tmp_path):
+    with TestClient(branch_app(tmp_path)) as client:
+        client.post(
+            "/api/v1/chat",
+            json=chat_payload("今天下午学习一小时。"),
+        )
+        response = client.patch(
+            "/api/v1/users/branch_user/threads/branch_source",
+            json={"title": "   "},
+        )
+
+    assert response.status_code == 422

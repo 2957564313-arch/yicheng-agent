@@ -59,8 +59,8 @@ def test_result_first_dashboard_keeps_key_plan_information_together() -> None:
     assert 'id="result-constraints"' in html
     assert 'id="result-sources"' in html
     assert "function renderResultDashboard(data)" in javascript
-    assert "[`${metrics.buffer_minutes || 0}分钟`" in javascript
-    assert "[`${metrics.travel_minutes || 0}分钟`" in javascript
+    assert "formatDuration(metrics.buffer_minutes || 0)" in javascript
+    assert "formatDuration(metrics.travel_minutes || 0)" in javascript
     assert (
         'document.body.classList.toggle("has-plan-result", active);'
         in javascript
@@ -169,6 +169,12 @@ def test_result_dashboard_has_icons_sources_and_four_quick_actions() -> None:
     assert "function planIdleMinutes(plan)" in javascript
     assert ".result-change-chip.waiting-change" in styles
     assert "const hasPreviousPlan = Boolean(data.previous_plan);" in javascript
+    assert "固定课程和锁定安排的时间绝对不变" in javascript
+    assert "function formatDuration(minutes)" in javascript
+    assert 'item.location_raw || (item.location_id' in javascript
+    assert '? "高峰拥挤"' in javascript
+    assert "这是你明确给出的固定安排" not in javascript
+    assert "高德返回" not in javascript
 
 
 def test_second_course_reminder_control_is_wired_to_settings() -> None:
@@ -178,3 +184,33 @@ def test_second_course_reminder_control_is_wired_to_settings() -> None:
     assert 'id="reminder-activity"' in html
     assert "settings.activity_lead_min ?? 30" in javascript
     assert "activity_lead_min: Number(reminderActivity.value)" in javascript
+
+
+def test_current_conversation_has_a_right_side_quick_outline() -> None:
+    javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+    styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
+
+    assert "本次对话" in javascript
+    assert "function syncConversationOutline()" in javascript
+    assert '.conversation-message.user-message' in javascript
+    assert 'target.scrollIntoView({ behavior: "smooth"' in javascript
+    assert "new MutationObserver(syncConversationOutline)" in javascript
+    assert ".conversation-outline.is-embedded" in styles
+    assert "body.has-plan-result .tools-sidebar:has(" in styles
+    assert "data-thread-rename" in javascript
+    assert "data-thread-delete" in javascript
+    assert "async function renameConversationThread" in javascript
+    assert "async function deleteConversationThread" in javascript
+
+
+def test_schedule_marks_verified_holidays_and_pending_makeup_days() -> None:
+    javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+    styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
+
+    assert 'calendar-context`' in javascript
+    assert 'holiday ? "休" : "补"' in javascript
+    assert 'context.course_action === "makeup"' in javascript
+    assert "已自动停用课表中的固定课程" in javascript
+    assert ".schedule-month-cell.is-holiday" in styles
+    assert ".schedule-month-cell.is-workday" in styles
+    assert "button.primary:disabled" in styles

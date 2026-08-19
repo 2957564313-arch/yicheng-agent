@@ -52,6 +52,11 @@ def test_imported_timetable_becomes_hard_planning_constraint(tmp_path):
         assert len(imported_courses) == 2
         assert imported_courses[0]["start_at"] == "2026-07-24T08:05:00+08:00"
         assert imported_courses[-1]["end_at"] == "2026-07-24T11:35:00+08:00"
+        assert {item["location_raw"] for item in imported_courses} == {
+            "第六教学楼",
+            "第七教学楼",
+        }
+        assert all(item["locked"] for item in imported_courses)
         assert tasks["study"]["start_at"] >= "2026-07-24T11:35:00+08:00"
         assert all(check["passed"] for check in payload["constraint_checks"])
         assert payload["status"] == "completed"

@@ -195,15 +195,16 @@ class AgendaService:
                     title=item.title,
                     start_at=item.start_at,
                     end_at=item.end_at,
-                    location_name=location.name if location else None,
+                    location_name=(
+                        item.location_raw
+                        or (location.name if location else None)
+                    ),
                     source="plan",
                     kind=self.classify(
                         title=item.title,
                         item_type=item.item_type,
                     ),
-                    locked=(
-                        item.reason == "固定或用户锁定任务"
-                    ),
+                    locked=item.locked,
                     plan_id=plan.id,
                     task_id=item.task_id,
                     notes=item.reason,

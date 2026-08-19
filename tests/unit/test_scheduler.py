@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -9,11 +9,11 @@ import pytest
 from app.providers.campus_rules import CampusRulesRepository
 from app.providers.location_repository import LocationRepository
 from app.providers.route_static import StaticRouteProvider
-from app.schemas.common import TaskFlexibility
+from app.schemas.common import DataSource, TaskFlexibility, TimeWindow
+from app.schemas.context import TravelEstimate
 from app.schemas.task import Task, UserPreferences
 from app.services.scheduler import PlanningContext, Scheduler
 from app.services.validator import PlanValidator
-
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
@@ -160,6 +160,127 @@ async def test_scheduler_marks_impossible_task_unscheduled(tz):
 
     assert result.unscheduled_task_ids == ["impossible"]
     assert {issue.code for issue in issues} == {"TASK_UNSCHEDULED"}
+
+
+@pytest.mark.asyncio
+async def test_scheduler_uses_soft_lunch_hint_for_movable_work(tz):
+    target_date = date(2026, 7, 24)
+    task = Task(
+        id="study_after_class",
+        title="复习高数",
+        date=target_date,
+        duration_min=60,
+        earliest_start=datetime(2026, 7, 24, 12, 25, tzinfo=tz),
+        latest_end=datetime(2026, 7, 24, 15, 0, tzinfo=tz),
+    )
+    context = await build_context(
+        target_date,
+        datetime(2026, 7, 23, 20, 0, tzinfo=tz),
+        [],
+    )
+    context.soft_meal_windows = [
+        TimeWindow(start=time(12, 25), end=time(13, 15))
+    ]
+
+    result = Scheduler().schedule(
+        user_id="meal_user",
+        thread_id="meal_thread",
+        tasks=[task],
+        preferences=UserPreferences(),
+        context=context,
+    )
+
+    scheduled = next(item for item in result.plan.items if item.task_id == task.id)
+    assert scheduled.start_at == datetime(2026, 7, 24, 13, 15, tzinfo=tz)
+
+
+@pytest.mark.asyncio
+async def test_explicit_meal_can_use_the_protected_meal_window(tz):
+    target_date = date(2026, 7, 24)
+    task = Task(
+        id="lunch",
+        title="吃午饭",
+        date=target_date,
+        duration_min=40,
+        earliest_start=datetime(2026, 7, 24, 12, 25, tzinfo=tz),
+        latest_end=datetime(2026, 7, 24, 13, 15, tzinfo=tz),
+        tags=["meal"],
+    )
+    context = await build_context(
+        target_date,
+        datetime(2026, 7, 23, 20, 0, tzinfo=tz),
+        [],
+    )
+    context.soft_meal_windows = [
+        TimeWindow(start=time(12, 25), end=time(13, 15))
+    ]
+
+    result = Scheduler().schedule(
+        user_id="meal_user",
+        thread_id="meal_thread",
+        tasks=[task],
+        preferences=UserPreferences(),
+        context=context,
+    )
+
+    scheduled = next(item for item in result.plan.items if item.task_id == task.id)
+    assert scheduled.start_at == datetime(2026, 7, 24, 12, 25, tzinfo=tz)
+
+
+@pytest.mark.asyncio
+async def test_very_close_locations_do_not_create_a_travel_block(tz):
+    target_date = date(2026, 7, 24)
+    tasks = [
+        Task(
+            id="room_a",
+            title="课程一",
+            date=target_date,
+            duration_min=60,
+            location_id="room_a",
+            location_raw="第6教研楼北204",
+            fixed_start=datetime(2026, 7, 24, 9, 0, tzinfo=tz),
+            fixed_end=datetime(2026, 7, 24, 10, 0, tzinfo=tz),
+            flexibility=TaskFlexibility.FIXED,
+        ),
+        Task(
+            id="room_b",
+            title="课程二",
+            date=target_date,
+            duration_min=60,
+            location_id="room_b",
+            location_raw="第6教研楼北304",
+            fixed_start=datetime(2026, 7, 24, 10, 0, tzinfo=tz),
+            fixed_end=datetime(2026, 7, 24, 11, 0, tzinfo=tz),
+            flexibility=TaskFlexibility.FIXED,
+        ),
+    ]
+    context = await build_context(
+        target_date,
+        datetime(2026, 7, 23, 20, 0, tzinfo=tz),
+        [],
+    )
+    context.travel[("room_a", "room_b")] = TravelEstimate(
+        origin_id="room_a",
+        destination_id="room_b",
+        distance_m=45,
+        duration_min=2,
+        source=DataSource.LIVE_API,
+        confidence=1,
+    )
+
+    result = Scheduler().schedule(
+        user_id="same_building_user",
+        thread_id="same_building_thread",
+        tasks=tasks,
+        preferences=UserPreferences(buffer_min=0),
+        context=context,
+    )
+
+    assert not [item for item in result.plan.items if item.item_type == "travel"]
+    assert [item.location_raw for item in result.plan.items] == [
+        "第6教研楼北204",
+        "第6教研楼北304",
+    ]
 
 
 @pytest.mark.asyncio

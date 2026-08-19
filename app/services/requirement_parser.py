@@ -1880,6 +1880,18 @@ class RuleBasedRequirementParser:
                 end_at = item.end_at + timedelta(hours=1)
                 flexibility = TaskFlexibility.FIXED
             elif (
+                item.locked
+                or item.task_id.startswith(("timetable_", "external_"))
+                or item.reason == "固定或用户锁定任务"
+            ):
+                # Quick alternatives may reorder movable work, but imported
+                # courses and user-locked appointments are immutable unless
+                # the query explicitly rescheduled them above.
+                start_at = item.start_at
+                end_at = item.end_at
+                flexibility = TaskFlexibility.LOCKED
+                locked_ids.append(item.task_id)
+            elif (
                 "跑步" in title or item.task_id == "run"
             ) and "不要动" in query:
                 start_at = item.start_at
@@ -1894,6 +1906,7 @@ class RuleBasedRequirementParser:
                         date=old_plan.date,
                         duration_min=duration,
                         location_id=item.location_id,
+                        location_raw=item.location_raw,
                         earliest_start=old_task_items[0].start_at,
                         latest_end=(
                             overall_deadline
@@ -1920,6 +1933,7 @@ class RuleBasedRequirementParser:
                     date=old_plan.date,
                     duration_min=duration,
                     location_id=item.location_id,
+                    location_raw=item.location_raw,
                     fixed_start=start_at,
                     fixed_end=end_at,
                     flexibility=flexibility,

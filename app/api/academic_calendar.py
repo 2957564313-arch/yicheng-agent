@@ -7,13 +7,44 @@ from fastapi import APIRouter, Request, Response, status
 
 from app.errors import AppError
 from app.schemas.calendar import (
+    AcademicDayContextListResponse,
     CalendarOverride,
     CalendarOverrideCreate,
     CalendarOverrideListResponse,
 )
 
-
 router = APIRouter(prefix="/api/v1/users", tags=["academic-calendar"])
+
+
+@router.get(
+    "/{user_id}/calendar-context",
+    response_model=AcademicDayContextListResponse,
+)
+def list_calendar_context(
+    user_id: str,
+    start_date: date,
+    end_date: date,
+    request: Request,
+) -> AcademicDayContextListResponse:
+    if end_date < start_date:
+        raise AppError(
+            "INVALID_CALENDAR_RANGE",
+            "结束日期不能早于开始日期",
+            status_code=422,
+        )
+    if (end_date - start_date).days > 92:
+        raise AppError(
+            "CALENDAR_RANGE_TOO_LARGE",
+            "一次最多读取 93 天的校历",
+            status_code=422,
+        )
+    return AcademicDayContextListResponse(
+        items=request.app.state.container.academic_calendar.resolve_range(
+            user_id=user_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    )
 
 
 @router.get(

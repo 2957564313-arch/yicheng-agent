@@ -35,6 +35,25 @@ def test_adjusted_workday_waits_for_school_notice(temp_database):
     assert context.effective_weekday is None
 
 
+def test_calendar_range_resolves_holiday_and_adjusted_workday(temp_database):
+    repository = AcademicCalendarRepository(
+        temp_database,
+        BASE_DIR / "data" / "academic_calendar.json",
+    )
+
+    contexts = repository.resolve_range(
+        user_id="range_user",
+        start_date=date(2026, 10, 1),
+        end_date=date(2026, 10, 10),
+    )
+
+    assert len(contexts) == 10
+    assert contexts[0].day_type == "holiday"
+    assert contexts[0].course_action == "no_class"
+    assert contexts[-1].day_type == "adjusted_workday"
+    assert contexts[-1].course_action == "awaiting_school_notice"
+
+
 def test_school_makeup_override_has_priority_over_national_calendar(
     temp_database,
 ):

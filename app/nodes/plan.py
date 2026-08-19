@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from itertools import permutations
 from zoneinfo import ZoneInfo
 
 from app.container import AppContainer
 from app.nodes.common import append_trace
-from app.schemas.common import TaskFlexibility
+from app.schemas.common import TaskFlexibility, TimeWindow
 from app.schemas.context import CongestionWindow, TravelEstimate, WeatherContext
 from app.schemas.plan import Plan
 from app.schemas.task import Task, UserPreferences
@@ -57,6 +57,43 @@ def _apply_quick_adjustment_strategy(
     for index, task in zip(movable_indexes, movable, strict=True):
         adjusted[index] = task
     return adjusted
+
+
+def _soft_default_meal_windows(
+    tasks: list[Task],
+    preferences: UserPreferences,
+) -> list[TimeWindow]:
+    """Reserve a normal meal gap after nearby fixed classes when possible.
+
+    These defaults are deliberately soft: they improve ordinary student plans
+    without making a tight but otherwise valid request infeasible.  Once the
+    user saves lunch or dinner times, ``preferences.meal_windows`` replaces
+    this hint with a hard personal constraint.
+    """
+
+    if preferences.meal_windows:
+        return []
+    fixed_intervals = [
+        (task.fixed_start, task.fixed_end)
+        for task in tasks
+        if task.flexibility in {TaskFlexibility.FIXED, TaskFlexibility.LOCKED}
+        and task.fixed_start
+        and task.fixed_end
+    ]
+    windows: list[TimeWindow] = []
+    if any(
+        time(11, 30) <= end.time() <= time(13, 15)
+        or start.time() < time(13, 15) <= end.time()
+        for start, end in fixed_intervals
+    ):
+        windows.append(TimeWindow(start=time(12, 25), end=time(13, 15)))
+    if any(
+        time(17, 15) <= end.time() <= time(19, 30)
+        or start.time() < time(18, 45) <= end.time()
+        for start, end in fixed_intervals
+    ):
+        windows.append(TimeWindow(start=time(18, 0), end=time(18, 45)))
+    return windows
 
 
 def _tasks_with_movable_order(
@@ -226,6 +263,7 @@ def make_plan_node(container: AppContainer):
                 if state.get("initial_departure_at")
                 else None
             ),
+            soft_meal_windows=_soft_default_meal_windows(tasks, preferences),
         )
 
         if (
@@ -336,7 +374,12 @@ def _apply_weather_adjustment(
         old_item = old_items.get(task.id)
         location = normalized_locations.get(task.location_id or "", {})
         is_outdoor = "outdoor" in task.tags or location.get("is_outdoor")
-        if old_item and is_outdoor and old_item.end_at > risk_start:
+        if (
+            old_item
+            and is_outdoor
+            and old_item.end_at > risk_start
+            and task.flexibility == TaskFlexibility.MOVABLE
+        ):
             affected.append(task.id)
     if not affected:
         return tasks
@@ -372,7 +415,7 @@ def _apply_weather_adjustment(
                     }
                 )
             )
-        else:
+        elif task.flexibility == TaskFlexibility.MOVABLE:
             adjusted.append(
                 task.model_copy(
                     update={
@@ -386,4 +429,6 @@ def _apply_weather_adjustment(
                     }
                 )
             )
+        else:
+            adjusted.append(task)
     return adjusted

@@ -146,6 +146,37 @@ class AcademicCalendarRepository:
         }
         for item in client_overrides or []:
             overrides[item.date] = item
+        return self._resolve_context(
+            target_date=target_date,
+            overrides=overrides,
+        )
+
+    def resolve_range(
+        self,
+        *,
+        user_id: str,
+        start_date: date,
+        end_date: date,
+    ) -> list[AcademicDayContext]:
+        overrides = {
+            item.date: item
+            for item in self.list_overrides(user_id)
+        }
+        day_count = (end_date - start_date).days
+        return [
+            self._resolve_context(
+                target_date=date.fromordinal(start_date.toordinal() + offset),
+                overrides=overrides,
+            )
+            for offset in range(day_count + 1)
+        ]
+
+    def _resolve_context(
+        self,
+        *,
+        target_date: date,
+        overrides: dict[date, CalendarOverride | CalendarOverrideCreate],
+    ) -> AcademicDayContext:
         override = overrides.get(target_date)
         national = self._days.get(target_date.isoformat())
         if override is not None:

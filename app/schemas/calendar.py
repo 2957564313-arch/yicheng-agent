@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.common import DataSource
 
-
 CalendarOverrideAction = Literal["no_class", "normal", "makeup"]
 
 
@@ -19,7 +18,7 @@ class CalendarOverrideCreate(BaseModel):
     source_ref: str | None = Field(default=None, max_length=300)
 
     @model_validator(mode="after")
-    def validate_replacement_weekday(self) -> "CalendarOverrideCreate":
+    def validate_replacement_weekday(self) -> CalendarOverrideCreate:
         if self.action == "makeup" and self.replacement_weekday is None:
             raise ValueError("补课日期需要指定按星期几的课表执行")
         if self.action != "makeup":
@@ -56,3 +55,7 @@ class AcademicDayContext(BaseModel):
     @property
     def has_course_schedule(self) -> bool:
         return self.effective_weekday is not None
+
+
+class AcademicDayContextListResponse(BaseModel):
+    items: list[AcademicDayContext] = Field(default_factory=list)

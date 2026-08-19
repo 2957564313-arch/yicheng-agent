@@ -24,3 +24,21 @@ def test_plan_diff_reports_duration_and_shift():
     assert diff["study"].duration_delta_min == 30
     assert diff["study"].shift_min == 0
     assert diff["parcel"].shift_min == 30
+
+
+def test_plan_diff_uses_hours_for_large_shifts():
+    baseline = Plan.model_validate_json(
+        (BASE_DIR / "fixtures" / "demo_01_saved_plan.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    changed = baseline.model_copy(deep=True)
+    study = next(item for item in changed.items if item.task_id == "study")
+    study.start_at += timedelta(minutes=535)
+    study.end_at += timedelta(minutes=535)
+
+    change = next(
+        item for item in compare_plans(baseline, changed)
+        if item.task_id == "study"
+    )
+    assert change.summary == "顺延8小时55分钟"

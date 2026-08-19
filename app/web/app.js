@@ -227,10 +227,16 @@ function renderConversationHistory() {
   if (serverConversationThreads.length) {
     historyEmpty.hidden = true;
     historyList.innerHTML = serverConversationThreads.map((item) => `
-      <a class="history-item ${item.parent_thread_id ? "history-branch" : ""} ${item.id === consoleThreadId ? "active" : ""}" href="/?thread_id=${encodeURIComponent(item.id)}" data-thread-id="${escapeHtml(item.id)}" aria-label="打开对话：${escapeHtml(item.title || "未命名对话")}">
-        <strong>${escapeHtml(item.title || "未命名对话")}</strong>
-        <small>${item.parent_thread_id ? "分支 · " : ""}${escapeHtml(item.last_message || `${item.message_count || 0} 条消息`)}</small>
-      </a>
+      <div class="history-entry ${item.parent_thread_id ? "history-branch" : ""}">
+        <a class="history-item ${item.id === consoleThreadId ? "active" : ""}" href="/?thread_id=${encodeURIComponent(item.id)}" data-thread-id="${escapeHtml(item.id)}" aria-label="打开对话：${escapeHtml(item.title || "未命名对话")}">
+          <strong>${escapeHtml(item.title || "未命名对话")}</strong>
+          <small>${item.parent_thread_id ? "分支 · " : ""}${escapeHtml(item.last_message || `${item.message_count || 0} 条消息`)}</small>
+        </a>
+        <div class="history-item-actions">
+          <button type="button" data-thread-rename="${escapeHtml(item.id)}" data-thread-title="${escapeHtml(item.title || "未命名对话")}" aria-label="重命名对话" title="重命名">改</button>
+          <button type="button" data-thread-delete="${escapeHtml(item.id)}" data-thread-title="${escapeHtml(item.title || "未命名对话")}" aria-label="删除对话" title="删除">删</button>
+        </div>
+      </div>
     `).join("");
     return;
   }
@@ -307,6 +313,33 @@ async function loadConversationThreads() {
   if (!response.ok) throw data;
   serverConversationThreads = data;
   renderConversationHistory();
+}
+
+async function renameConversationThread(threadId, currentTitle) {
+  const title = window.prompt("给这条对话起个名字", currentTitle || "未命名对话");
+  if (title === null || !title.trim() || title.trim() === currentTitle) return;
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/threads/${encodeURIComponent(threadId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: title.trim() }),
+    },
+  );
+  const data = await response.json();
+  if (!response.ok) throw data;
+  await loadConversationThreads();
+}
+
+async function deleteConversationThread(threadId, title) {
+  if (!window.confirm(`确定删除“${title || "未命名对话"}”吗？\n课表、偏好、记忆和已加入日程不会删除。`)) return;
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/threads/${encodeURIComponent(threadId)}`,
+    { method: "DELETE" },
+  );
+  if (!response.ok) throw await response.json();
+  if (threadId === consoleThreadId) newConversation?.click();
+  await loadConversationThreads();
 }
 
 async function openConversationThread(threadId) {
@@ -408,6 +441,8 @@ function setActiveWorkspaceView(view = "chat") {
   const isWeeklyPlanner = activeWorkspaceView === "weekly-planner";
   const isToolPage = ["timetable", "preferences", "backup"].includes(activeWorkspaceView);
 
+  conversationOutline?.classList.toggle("is-workspace-hidden", !isChat);
+
   setPanelHidden(composerColumn, !isChat);
   setPanelHidden(composerPanel, !isChat);
   setPanelHidden(quickAccess, !isChat);
@@ -469,6 +504,101 @@ function scheduleItemsByDate() {
   }, {});
 }
 
+let scheduleCalendarContexts = {};
+
+const conversationOutline = document.createElement("section");
+conversationOutline.className = "conversation-outline";
+conversationOutline.hidden = true;
+conversationOutline.innerHTML = `
+  <div class="conversation-outline-heading">
+    <div><span>本次对话</span><strong>快速定位</strong></div>
+    <small id="conversation-outline-count">0 轮</small>
+  </div>
+  <nav id="conversation-outline-list" aria-label="本次对话快速定位"></nav>`;
+const conversationOutlineHost = document.querySelector(
+  ".tools-sidebar, .workspace-tools, .workspace-nav-panel, .right-sidebar",
+);
+(conversationOutlineHost || document.body).append(conversationOutline);
+if (conversationOutlineHost) conversationOutline.classList.add("is-embedded");
+const conversationOutlineList = conversationOutline.querySelector("#conversation-outline-list");
+const conversationOutlineCount = conversationOutline.querySelector("#conversation-outline-count");
+let conversationOutlineObserver;
+
+function conversationMessageLabel(message, index) {
+  const body = message.querySelector(".message-body, .message-bubble") || message;
+  const text = body.textContent.replace(/\s+/g, " ").trim();
+  return text.length > 34 ? `${text.slice(0, 34)}…` : text || `第 ${index + 1} 轮提问`;
+}
+
+function setActiveConversationOutline(messageId) {
+  conversationOutlineList.querySelectorAll("button").forEach((button) => {
+    const active = button.dataset.messageTarget === messageId;
+    button.classList.toggle("active", active);
+    if (active) button.setAttribute("aria-current", "true");
+    else button.removeAttribute("aria-current");
+  });
+}
+
+function syncConversationOutline() {
+  if (!conversationStream || !conversationOutlineList) return;
+  const messages = [...conversationStream.querySelectorAll(".conversation-message.user-message")];
+  conversationOutline.hidden = messages.length === 0;
+  conversationOutlineCount.textContent = `${messages.length} 轮`;
+  conversationOutlineList.innerHTML = messages.map((message, index) => {
+    const id = message.id || `conversation-turn-${index + 1}`;
+    message.id = id;
+    return `<button type="button" data-message-target="${escapeHtml(id)}"><span>${index + 1}</span><strong>${escapeHtml(conversationMessageLabel(message, index))}</strong></button>`;
+  }).join("");
+  conversationOutlineList.querySelectorAll("button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const target = document.getElementById(button.dataset.messageTarget);
+      if (!target) return;
+      if (document.body.classList.contains("has-plan-result")) setResultMode(false);
+      window.requestAnimationFrame(() => {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        target.classList.add("is-located");
+        window.setTimeout(() => target.classList.remove("is-located"), 1200);
+      });
+      setActiveConversationOutline(target.id);
+      if (window.matchMedia("(max-width: 900px)").matches) closeDrawers();
+    });
+  });
+  conversationOutlineObserver?.disconnect();
+  conversationOutlineObserver = new IntersectionObserver((entries) => {
+    const visible = entries
+      .filter((entry) => entry.isIntersecting)
+      .sort((a, b) => Math.abs(a.boundingClientRect.top) - Math.abs(b.boundingClientRect.top));
+    if (visible[0]?.target?.id) setActiveConversationOutline(visible[0].target.id);
+  }, { rootMargin: "-28% 0px -55% 0px", threshold: 0 });
+  messages.forEach((message) => conversationOutlineObserver.observe(message));
+}
+
+if (conversationStream) {
+  new MutationObserver(syncConversationOutline).observe(conversationStream, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+  });
+  syncConversationOutline();
+}
+
+function scheduleCalendarBadge(date, includeName = false) {
+  const context = scheduleCalendarContexts[date];
+  if (!context || !["holiday", "adjusted_workday"].includes(context.day_type)) return "";
+  const holiday = context.day_type === "holiday";
+  if (!holiday && context.course_action === "makeup") return "";
+  const label = context.label || (holiday ? "法定节假日" : "待确认补课安排");
+  return `<span class="schedule-calendar-badge ${holiday ? "holiday" : "workday"}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${holiday ? "休" : "补"}${includeName ? `<small>${escapeHtml(holiday ? label : "待定")}</small>` : ""}</span>`;
+}
+
+function scheduleCalendarNotice(date) {
+  const context = scheduleCalendarContexts[date];
+  if (!context || !["holiday", "adjusted_workday"].includes(context.day_type)) return "";
+  const holiday = context.day_type === "holiday";
+  if (!holiday && context.course_action === "makeup") return "";
+  return `<div class="schedule-calendar-notice ${holiday ? "holiday" : "workday"}">${scheduleCalendarBadge(date)}<span><strong>${escapeHtml(context.label || (holiday ? "法定节假日" : "待确认补课安排"))}</strong>${holiday ? "法定节假日，已自动停用课表中的固定课程" : "学校尚未指定按周几课表执行，可在偏好与校历中手动设置"}</span></div>`;
+}
+
 function scheduleItemMarkup(item, compact = false) {
   return `
     <article class="schedule-event ${escapeHtml(item.kind || "task")}" title="${escapeHtml(item.title || "日程")}">
@@ -492,9 +622,9 @@ function renderScheduleViews() {
 
   if (scheduleViewMode === "day") {
     schedulePeriodLabel.textContent = selected === today ? "今天" : `${selected.slice(5).replace("-", "月")}日`;
-    scheduleDayView.innerHTML = dayItems.length
+    scheduleDayView.innerHTML = scheduleCalendarNotice(selected) + (dayItems.length
       ? `<div class="schedule-day-timeline">${dayItems.map((item) => scheduleItemMarkup(item)).join("")}</div>`
-      : `<div class="schedule-empty"><strong>今天还没有固定安排</strong><span>可以在对话中告诉我想完成什么，或把时间留给休息和临时变化。</span></div>`;
+      : `<div class="schedule-empty"><strong>今天还没有固定安排</strong><span>可以在对话中告诉我想完成什么，或把时间留给休息和临时变化。</span></div>`);
   }
   if (scheduleViewMode === "week") {
     const weekDates = Array.from({ length: 7 }, (_, index) => addWeeklyDays(startOfWeek, index));
@@ -504,7 +634,7 @@ function renderScheduleViews() {
       const dateValue = scheduleDateValue(date);
       const weekday = "一二三四五六日"[dateValue.getUTCDay() === 0 ? 6 : dateValue.getUTCDay() - 1];
       return `<section class="schedule-week-day ${date === today ? "is-today" : ""}">
-        <header><span>周${weekday}</span><strong>${date.slice(8)}<small>日</small></strong><em>${items.length ? `${items.length}项` : "空闲"}</em></header>
+        <header><span>周${weekday}</span><strong>${date.slice(8)}<small>日</small></strong><em>${items.length ? `${items.length}项` : "空闲"}</em>${scheduleCalendarBadge(date, true)}</header>
         <div>${items.length ? items.map((item) => scheduleItemMarkup(item, true)).join("") : `<p class="schedule-empty-mini">留作弹性时间</p>`}</div>
       </section>`;
     }).join("")}</div>`;
@@ -517,8 +647,10 @@ function renderScheduleViews() {
     for (let day = 1; day <= daysInMonth; day += 1) {
       const date = `${monthStart.slice(0, 8)}${String(day).padStart(2, "0")}`;
       const items = byDate[date] || [];
-      cells.push(`<button type="button" class="schedule-month-cell ${date === today ? "is-today" : ""} ${date === selected ? "is-selected" : ""}" data-schedule-date="${date}">
-        <span>${day}</span><small>${items.length ? `${items.length}项` : ""}</small><i>${items.slice(0, 3).map((item) => `<b class="${escapeHtml(item.kind || "task")}"></b>`).join("")}</i>
+      const calendarContext = scheduleCalendarContexts[date];
+      const pendingMakeup = calendarContext?.day_type === "adjusted_workday" && calendarContext?.course_action !== "makeup";
+      cells.push(`<button type="button" class="schedule-month-cell ${date === today ? "is-today" : ""} ${date === selected ? "is-selected" : ""} ${calendarContext?.day_type === "holiday" ? "is-holiday" : ""} ${pendingMakeup ? "is-workday" : ""}" data-schedule-date="${date}">
+        <span class="schedule-month-date"><span>${day}</span>${scheduleCalendarBadge(date)}</span><small>${items.length ? `${items.length}项` : calendarContext?.label ? escapeHtml(calendarContext.label) : ""}</small><i>${items.slice(0, 3).map((item) => `<b class="${escapeHtml(item.kind || "task")}"></b>`).join("")}</i>
       </button>`);
     }
     scheduleMonthView.innerHTML = `<div class="schedule-month-weekdays">${"一二三四五六日".split("").map((day) => `<span>周${day}</span>`).join("")}</div><div class="schedule-month-grid">${cells.join("")}</div>`;
@@ -601,6 +733,23 @@ function initializeWorkspaceNavigation() {
   });
 
   historyList?.addEventListener("click", (event) => {
+    const renameButton = event.target.closest("[data-thread-rename]");
+    const deleteButton = event.target.closest("[data-thread-delete]");
+    if (renameButton || deleteButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const action = renameButton
+        ? renameConversationThread(
+          renameButton.dataset.threadRename,
+          renameButton.dataset.threadTitle,
+        )
+        : deleteConversationThread(
+          deleteButton.dataset.threadDelete,
+          deleteButton.dataset.threadTitle,
+        );
+      action.catch((error) => renderError(error));
+      return;
+    }
     if (event.target.closest("[data-thread-id]")) return;
     const button = event.target.closest("[data-history-index]");
     if (!button) return;
@@ -1357,6 +1506,16 @@ const memoryDefinitions = {
     placeholder: "例如：图书馆六层",
     category: "preference",
   },
+  usual_lunch_time: {
+    label: "常用午餐时间",
+    placeholder: "例如：12:25",
+    category: "habit",
+  },
+  usual_dinner_time: {
+    label: "常用晚餐时间",
+    placeholder: "例如：18:00",
+    category: "habit",
+  },
   usual_bedtime: {
     label: "常用就寝时间",
     placeholder: "例如：23:30",
@@ -1538,6 +1697,16 @@ function timePart(value) {
   }).format(new Date(value));
 }
 
+function formatDuration(minutes) {
+  const total = Math.max(0, Math.round(Number(minutes) || 0));
+  const hours = Math.floor(total / 60);
+  const remainder = total % 60;
+  const parts = [];
+  if (hours) parts.push(`${hours}小时`);
+  if (remainder || !parts.length) parts.push(`${remainder}分钟`);
+  return parts.join("");
+}
+
 function renderClock() {
   if (serverClockBaseMs === null || serverClockFetchedAtMs === null) return;
   const current = new Date(
@@ -1593,8 +1762,8 @@ function renderTimeline(data) {
     if (travelDelta) {
       changeCards.push(`<span class="result-change-chip travel-change">
         <b>通勤时间</b>
-        <em>${travelDelta < 0 ? "减少" : "增加"}${Math.abs(travelDelta)}分钟</em>
-        <small>${previousTravel}分钟 → ${currentTravel}分钟</small>
+        <em>${travelDelta < 0 ? "减少" : "增加"}${formatDuration(Math.abs(travelDelta))}</em>
+        <small>${formatDuration(previousTravel)} → ${formatDuration(currentTravel)}</small>
       </span>`);
     }
     if (waitingDelta) {
@@ -1602,8 +1771,8 @@ function renderTimeline(data) {
       const currentWaiting = planIdleMinutes(data.plan);
       changeCards.push(`<span class="result-change-chip waiting-change">
         <b>等待空档</b>
-        <em>${waitingDelta < 0 ? "减少" : "增加"}${Math.abs(waitingDelta)}分钟</em>
-        <small>${previousWaiting}分钟 → ${currentWaiting}分钟</small>
+        <em>${waitingDelta < 0 ? "减少" : "增加"}${formatDuration(Math.abs(waitingDelta))}</em>
+        <small>${formatDuration(previousWaiting)} → ${formatDuration(currentWaiting)}</small>
       </span>`);
     }
     resultChangeSummary.innerHTML = changeCards.length
@@ -1628,20 +1797,14 @@ function renderTimeline(data) {
       const title = isTravel
         ? travelModeLabels[item.travel_mode] || "通勤"
         : item.title;
-      const location = item.location_id
+      const location = item.location_raw || (item.location_id
         ? locationNames[item.location_id] || "地点待确认"
-        : "";
-      const duration = Math.max(
-        0,
-        Math.round((new Date(item.end_at) - new Date(item.start_at)) / 60000),
-      );
+        : "地点未设置");
       const reason = isTravel
         ? item.congestion_delay_min > 0
-          ? `${item.source === "live_api" ? "高德返回" : "校园路线基准"} ${item.base_duration_min} 分钟，高峰额外预留 ${item.congestion_delay_min} 分钟`
-          : `已按所选出行方式预留 ${duration} 分钟`
-        : item.reason === "固定或用户锁定任务"
-          ? "这是你明确给出的固定安排"
-          : "已结合优先级、通勤和可用时间安排";
+          ? "高峰拥挤"
+          : ""
+        : "";
       const itemIcon = isTravel
         ? "travel"
         : title.includes("图书馆") || title.includes("学习") || title.includes("自习")
@@ -1653,7 +1816,7 @@ function renderTimeline(data) {
                : "calendar";
       const change = isTravel ? null : changesByTask.get(item.task_id);
       return `
-        <div class="timeline-item ${isTravel ? "travel" : ""} ${change ? `has-change ${escapeHtml(change.change_type)}` : ""}">
+        <div class="timeline-item ${isTravel ? "travel" : ""} ${isTravel && item.congestion_delay_min > 0 ? "congested" : ""} ${change ? `has-change ${escapeHtml(change.change_type)}` : ""}">
           <div class="time">${timePart(item.start_at)}—${timePart(item.end_at)}</div>
           <div class="rail"><span></span></div>
           <div class="content">
@@ -1662,7 +1825,7 @@ function renderTimeline(data) {
             ${change ? `<span class="timeline-change-badge">${escapeHtml(change.summary)}</span>` : ""}
             ${location ? `<small>${escapeHtml(location)}</small>` : ""}
             ${change?.before_start ? `<small class="timeline-before-time">原计划 ${timePart(change.before_start)}—${timePart(change.before_end)}</small>` : ""}
-            <p>${escapeHtml(reason)}</p>
+            ${reason ? `<p>${escapeHtml(reason)}</p>` : ""}
           </div>
         </div>`;
     }).join("")
@@ -1730,8 +1893,8 @@ function renderResultSummary(data) {
       "tasks",
     ],
     [finalEnd, "预计结束时间", "time", "end"],
-    [`${metrics.buffer_minutes || 0}分钟`, "弹性缓冲", "time", "buffer"],
-    [`${metrics.travel_minutes || 0}分钟`, "校园通勤", "time", "travel"],
+    [formatDuration(metrics.buffer_minutes || 0), "弹性缓冲", "time", "buffer"],
+    [formatDuration(metrics.travel_minutes || 0), "校园通勤", "time", "travel"],
     [
       `${passed}/${checks.length}`,
       "约束检查通过",
@@ -2257,6 +2420,21 @@ async function loadAgendaRange(startDate, endDate) {
   const data = await response.json();
   if (!response.ok) throw data;
   lastAgendaData = data;
+  try {
+    const calendarResponse = await fetch(
+      `/api/v1/users/${consoleUserId}/calendar-context`
+        + `?start_date=${encodeURIComponent(selectedDate)}`
+        + `&end_date=${encodeURIComponent(endDate)}`,
+    );
+    const calendarData = await calendarResponse.json();
+    if (!calendarResponse.ok) throw calendarData;
+    scheduleCalendarContexts = Object.fromEntries(
+      (calendarData.items || []).map((item) => [item.date, item]),
+    );
+  } catch (error) {
+    scheduleCalendarContexts = {};
+    renderDebug(error);
+  }
   renderAgenda(data, selectedDate);
   if (!scheduleCursorDate) scheduleCursorDate = selectedDate;
   if (activeWorkspaceView === "schedule") renderScheduleViews();
@@ -2641,10 +2819,10 @@ resultRequestInput?.addEventListener("keydown", (event) => {
 });
 
 const resultActionQueries = {
-  alternative: "在保留所有任务、时长、截止时间和硬约束的前提下，生成另一种可行方案。",
-  travel: "在不遗漏任务的前提下，优先优化通勤时间，并尽量避开拥堵时段。",
-  waiting: "保留任务时长和截止时间，尽量减少行程中的等待时间。",
-  order: "尝试调整任务顺序，并说明这样调整的原因。",
+  alternative: "固定课程和锁定安排的时间绝对不变；保留所有任务、时长、截止时间和硬约束，只调整可移动任务，生成另一种可行方案。",
+  travel: "固定课程和锁定安排的时间绝对不变；不遗漏任务，只调整可移动任务，优先优化通勤时间并尽量避开拥堵时段。",
+  waiting: "固定课程和锁定安排的时间绝对不变；保留任务时长和截止时间，只调整可移动任务，尽量减少行程中的等待时间。",
+  order: "固定课程和锁定安排的时间绝对不变；只调整可移动任务的顺序，并说明这样调整的原因。",
 };
 
 function planFingerprint(data) {
@@ -2686,10 +2864,10 @@ function renderResultActionOutcome(action, before, after) {
     ? {
         alternative: "已生成不同的可行排法，任务与硬约束仍然保留。",
         travel: travelSaved
-          ? `已重新规划，通勤时间减少 ${travelSaved} 分钟。`
+          ? `已重新规划，通勤时间减少${formatDuration(travelSaved)}。`
           : "已避开更拥堵的时段，并重新计算通勤衔接。",
         waiting: waitingSaved
-          ? `已把任务排得更紧凑，等待时间减少 ${waitingSaved} 分钟。`
+          ? `已把任务排得更紧凑，等待时间减少${formatDuration(waitingSaved)}。`
           : "已重新组合任务顺序，减少不必要的中间空档。",
         order: "已更换任务先后顺序，并重新校验时间和通勤约束。",
       }
@@ -3161,7 +3339,12 @@ function parseMemoryValue(key, rawValue) {
     }
     return minutes;
   }
-  if (["usual_bedtime", "usual_wake_time"].includes(key)) {
+  if ([
+    "usual_bedtime",
+    "usual_wake_time",
+    "usual_lunch_time",
+    "usual_dinner_time",
+  ].includes(key)) {
     const matched = value.match(/^([01]?\d|2[0-3])[:：]([0-5]\d)$/);
     if (!matched) {
       throw new Error("请按24小时制填写，例如：23:30或07:00。");
@@ -3201,7 +3384,12 @@ function displayMemoryValue(key, value) {
     }[value] || value;
   }
   if (key === "weekly_daily_focus_limit_min") return `${value}分钟`;
-  if (["usual_bedtime", "usual_wake_time"].includes(key)) return value;
+  if ([
+    "usual_bedtime",
+    "usual_wake_time",
+    "usual_lunch_time",
+    "usual_dinner_time",
+  ].includes(key)) return value;
   if (key === "sleep_goal_hours") return `${value}小时`;
   if (Array.isArray(value)) return value.join("、");
   return String(value);
@@ -3462,6 +3650,7 @@ timetableImport.addEventListener("click", async () => {
       },
       entries: data.entries,
     });
+    timetableConfirm.disabled = false;
     timetableConfirm.hidden = false;
     answer.textContent = (
       `我先识别出了 ${data.imported_count} 个课程时段，尚未覆盖原课表。`

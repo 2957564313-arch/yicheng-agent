@@ -4,14 +4,16 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.nodes.understand import (
+    _apply_memory_preferences,
     _apply_timetable_relative_constraints,
     _can_apply_rule_guard,
     _drop_journey_origin_marker_tasks,
     _merge_llm_with_rule_constraints,
     _release_destination_from_departure_anchor,
 )
+from app.schemas.memory import MemoryCreate
 from app.schemas.common import Intent, TaskFlexibility
-from app.schemas.task import Task
+from app.schemas.task import Task, UserPreferences
 from app.schemas.understand import UnderstandResult
 from app.services.requirement_parser import RuleBasedRequirementParser
 
@@ -23,6 +25,35 @@ NOW = datetime(
     0,
     tzinfo=ZoneInfo("Asia/Shanghai"),
 )
+
+
+def test_saved_meal_times_replace_default_meal_windows():
+    preferences = _apply_memory_preferences(
+        UserPreferences(),
+        [
+            MemoryCreate(
+                category="habit",
+                key="usual_lunch_time",
+                label="常用午餐时间",
+                value="12:40",
+            ),
+            MemoryCreate(
+                category="habit",
+                key="usual_dinner_time",
+                label="常用晚餐时间",
+                value="18:10",
+            ),
+        ],
+    )
+
+    actual = [
+        (window.start.isoformat(), window.end.isoformat())
+        for window in preferences.meal_windows
+    ]
+    assert actual == [
+        ("12:40:00", "13:30:00"),
+        ("18:10:00", "18:55:00"),
+    ]
 
 
 def _parse(query: str) -> UnderstandResult:

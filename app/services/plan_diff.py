@@ -4,6 +4,16 @@ from app.schemas.chat import PlanChange
 from app.schemas.plan import Plan, PlanItem
 
 
+def _duration_label(minutes: int) -> str:
+    hours, remainder = divmod(abs(minutes), 60)
+    parts = []
+    if hours:
+        parts.append(f"{hours}小时")
+    if remainder or not parts:
+        parts.append(f"{remainder}分钟")
+    return "".join(parts)
+
+
 def _task_items(plan: Plan) -> dict[str, PlanItem]:
     return {
         item.task_id: item
@@ -69,10 +79,10 @@ def compare_plans(previous: Plan | None, current: Plan | None) -> list[PlanChang
         parts = []
         if duration_delta:
             verb = "延长" if duration_delta > 0 else "缩短"
-            parts.append(f"{verb}{abs(duration_delta)}分钟")
+            parts.append(f"{verb}{_duration_label(duration_delta)}")
         if shift_min:
             verb = "顺延" if shift_min > 0 else "提前"
-            parts.append(f"{verb}{abs(shift_min)}分钟")
+            parts.append(f"{verb}{_duration_label(shift_min)}")
         changes.append(
             PlanChange(
                 task_id=task_id,

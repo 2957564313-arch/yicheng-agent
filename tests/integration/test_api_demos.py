@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
 import json
+from datetime import datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -457,6 +457,56 @@ def test_quick_objectives_reduce_travel_and_waiting(tmp_path):
         travel_before["metrics"]["travel_minutes"]
     )
     assert idle_minutes(waiting_after) < idle_minutes(waiting_before)
+
+
+def test_all_quick_adjustments_preserve_fixed_course_times(tmp_path):
+    instructions = (
+        "在保留所有任务、时长、截止时间和硬约束的前提下，生成另一种可行方案。",
+        "在不遗漏任务的前提下，优先优化通勤时间，并尽量避开拥堵时段。",
+        "保留任务时长和截止时间，尽量减少行程中的等待时间。",
+        "尝试调整任务顺序，并说明这样调整的原因。",
+    )
+    with TestClient(build_test_app(tmp_path)) as client:
+        for index, instruction in enumerate(instructions):
+            demo = client.post("/api/v1/demos/demo_01_normal/run")
+            assert demo.status_code == 200, demo.text
+            previous_plan = demo.json()["plan"]
+            user_id = f"fixed_quick_{index}"
+            previous_plan["user_id"] = user_id
+            previous_plan["thread_id"] = f"{user_id}_thread"
+            fixed = next(
+                item
+                for item in previous_plan["items"]
+                if item["item_type"] == "task"
+            )
+            fixed["locked"] = True
+            fixed["reason"] = "固定或用户锁定任务"
+
+            response = client.post(
+                "/api/v1/chat",
+                json={
+                    "user_id": user_id,
+                    "thread_id": f"{user_id}_thread",
+                    "query": (
+                        "今天下午要完成原计划。\n"
+                        f"调整要求：{instruction}"
+                    ),
+                    "mode": "offline",
+                    "client_context": {
+                        "now": "2026-07-24T13:00:00+08:00",
+                        "previous_plan": previous_plan,
+                    },
+                },
+            )
+            assert response.status_code == 200, response.text
+            current = next(
+                item
+                for item in response.json()["plan"]["items"]
+                if item.get("task_id") == fixed["task_id"]
+            )
+            assert current["start_at"] == fixed["start_at"]
+            assert current["end_at"] == fixed["end_at"]
+            assert current["locked"] is True
 
 
 def test_invalid_request_has_stable_error_shape(tmp_path):

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response, status
 
 from app.api.chat import execute_chat
 from app.errors import AppError
@@ -13,8 +13,8 @@ from app.schemas.conversation import (
     ConversationForkRequest,
     ConversationForkResponse,
     ConversationThread,
+    ConversationThreadUpdate,
 )
-
 
 router = APIRouter(prefix="/api/v1/users", tags=["conversations"])
 
@@ -51,6 +51,48 @@ def get_thread(
             status_code=404,
         )
     return detail
+
+
+@router.patch(
+    "/{user_id}/threads/{thread_id}",
+    response_model=ConversationThread,
+)
+def rename_thread(
+    user_id: str,
+    thread_id: str,
+    payload: ConversationThreadUpdate,
+    request: Request,
+) -> ConversationThread:
+    container = request.app.state.container
+    thread = container.conversations.rename(
+        user_id=user_id,
+        thread_id=thread_id,
+        title=payload.title.strip(),
+        now=datetime.now(ZoneInfo(container.settings.app_timezone)),
+    )
+    if thread is None:
+        raise AppError("THREAD_NOT_FOUND", "未找到这条对话。", status_code=404)
+    return thread
+
+
+@router.delete(
+    "/{user_id}/threads/{thread_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_thread(
+    user_id: str,
+    thread_id: str,
+    request: Request,
+) -> Response:
+    container = request.app.state.container
+    deleted = container.conversations.delete(
+        user_id=user_id,
+        thread_id=thread_id,
+        now=datetime.now(ZoneInfo(container.settings.app_timezone)),
+    )
+    if not deleted:
+        raise AppError("THREAD_NOT_FOUND", "未找到这条对话。", status_code=404)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

@@ -77,6 +77,8 @@ class UserPreferences(BaseModel):
     avoid_congestion: bool = False
     avoid_rain: bool = True
     avoid_tight_schedule: bool = True
+    # User-saved meal times are hard constraints.  Common meal times that the
+    # user has not confirmed are injected separately as soft planning hints.
     meal_windows: list[TimeWindow] = Field(default_factory=list)
     preferred_locations: list[str] = Field(default_factory=list)
     locked_task_ids: list[str] = Field(default_factory=list)

@@ -15,6 +15,8 @@ class PlanItem(BaseModel):
     start_at: datetime
     end_at: datetime
     location_id: str | None = Field(default=None, max_length=100)
+    location_raw: str | None = Field(default=None, max_length=120)
+    locked: bool = False
     source: DataSource = DataSource.STRUCTURED
     reason: str | None = Field(default=None, max_length=500)
     travel_mode: str | None = Field(

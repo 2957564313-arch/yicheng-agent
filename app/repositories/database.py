@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
-
 
 SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -93,6 +92,7 @@ CREATE TABLE IF NOT EXISTS threads (
     title TEXT,
     parent_thread_id TEXT REFERENCES threads(id) ON DELETE SET NULL,
     forked_from_message_id TEXT,
+    deleted_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -370,6 +370,10 @@ class Database:
             if "forked_from_message_id" not in thread_columns:
                 connection.execute(
                     "ALTER TABLE threads ADD COLUMN forked_from_message_id TEXT"
+                )
+            if "deleted_at" not in thread_columns:
+                connection.execute(
+                    "ALTER TABLE threads ADD COLUMN deleted_at TEXT"
                 )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_threads_parent "

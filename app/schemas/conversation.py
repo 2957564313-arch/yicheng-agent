@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.chat import ChatResponse, ClientContext
 
@@ -33,6 +33,18 @@ class ConversationDetail(BaseModel):
     messages: list[ConversationMessage] = Field(default_factory=list)
 
 
+class ConversationThreadUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=80)
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("对话名称不能为空")
+        return normalized
+
+
 class ConversationForkRequest(BaseModel):
     from_message_id: str = Field(min_length=1, max_length=80)
     query: str = Field(min_length=1, max_length=2000)
@@ -44,4 +56,3 @@ class ConversationForkRequest(BaseModel):
 class ConversationForkResponse(BaseModel):
     branch: ConversationThread
     response: ChatResponse
-

@@ -668,7 +668,10 @@ def _apply_memory_preferences(
         "avoid_tight_schedule",
         "preferred_locations",
         "preferred_study_location",
+        "usual_lunch_time",
+        "usual_dinner_time",
     }
+    meal_starts: dict[str, time] = {}
     for memory in memories:
         if memory.key not in supported:
             continue
@@ -701,7 +704,36 @@ def _apply_memory_preferences(
                 value.strip(),
                 *[item for item in existing if item and item != value.strip()],
             ]
+        if memory.key in {"usual_lunch_time", "usual_dinner_time"}:
+            try:
+                meal_starts[memory.key] = time.fromisoformat(
+                    str(value).strip().replace("：", ":")
+                )
+            except ValueError:
+                continue
+            continue
         update[target_key] = value
+    if meal_starts:
+        windows_by_kind = {
+            ("lunch" if window.start.hour < 15 else "dinner"): window
+            for window in preferences.meal_windows
+        }
+        meal_windows = []
+        for kind, memory_key, fallback, duration_min in (
+            ("lunch", "usual_lunch_time", time(12, 25), 50),
+            ("dinner", "usual_dinner_time", time(18, 0), 45),
+        ):
+            existing = windows_by_kind.get(kind)
+            start = meal_starts.get(
+                memory_key,
+                existing.start if existing else fallback,
+            )
+            end = (
+                datetime.combine(date.min, start)
+                + timedelta(minutes=duration_min)
+            ).time()
+            meal_windows.append({"start": start, "end": end})
+        update["meal_windows"] = meal_windows
     if (
         update.get("avoid_tight_schedule") is False
         and "buffer_min" not in update

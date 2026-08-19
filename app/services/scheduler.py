@@ -12,6 +12,7 @@ from app.schemas.common import (
     DataSource,
     PlanStatus,
     TaskFlexibility,
+    TimeWindow,
 )
 from app.schemas.context import CongestionWindow, TravelEstimate, WeatherContext
 from app.schemas.plan import Plan, PlanItem, PlanMetrics
@@ -43,6 +44,7 @@ class PlanningContext:
     old_plan: Plan | None = None
     initial_location_id: str | None = None
     initial_departure_at: datetime | None = None
+    soft_meal_windows: list[TimeWindow] = field(default_factory=list)
 
     def travel_minutes(
         self,
@@ -74,6 +76,13 @@ class PlanningContext:
             if estimate.base_duration_min is not None
             else estimate.duration_min
         )
+        # A separate timeline block adds noise for another room in the same
+        # building or for a destination only a few steps away.  The route is
+        # still grounded, but the scheduler treats this as local movement.
+        if base_duration <= 1 or (
+            estimate.distance_m is not None and estimate.distance_m <= 80
+        ):
+            return 0, 0
         if departure_at is None or not self.congestion_windows:
             return base_duration, 0
         base_end = departure_at + timedelta(minutes=base_duration)
@@ -567,6 +576,25 @@ class Scheduler:
             if self._violates_weather(task, cursor, end_at, context):
                 cursor += timedelta(minutes=5)
                 continue
+            if self._overlaps_meal_window(
+                task,
+                cursor,
+                end_at,
+                preferences,
+                context,
+            ):
+                cursor += timedelta(minutes=5)
+                continue
+
+            meal_penalty = int(
+                self._overlaps_windows(
+                    task,
+                    cursor,
+                    end_at,
+                    context.soft_meal_windows,
+                    context,
+                )
+            )
 
             previous, following = self._neighbors(cursor, end_at, scheduled)
             if previous is False or following is False:
@@ -658,9 +686,54 @@ class Scheduler:
                 cursor,
                 end_at,
                 before_travel + after_travel,
-                congestion_penalty + period_penalty,
+                congestion_penalty + period_penalty + meal_penalty,
             )
             cursor += timedelta(minutes=5)
+
+    @staticmethod
+    def _overlaps_meal_window(
+        task: Task,
+        start_at: datetime,
+        end_at: datetime,
+        preferences: UserPreferences,
+        context: PlanningContext,
+    ) -> bool:
+        return Scheduler._overlaps_windows(
+            task,
+            start_at,
+            end_at,
+            preferences.meal_windows,
+            context,
+        )
+
+    @staticmethod
+    def _overlaps_windows(
+        task: Task,
+        start_at: datetime,
+        end_at: datetime,
+        windows: list[TimeWindow],
+        context: PlanningContext,
+    ) -> bool:
+        text = f"{task.title} {' '.join(task.tags)}".lower()
+        if any(
+            marker in text
+            for marker in ("吃饭", "用餐", "午餐", "晚餐", "meal")
+        ):
+            return False
+        for window in windows:
+            window_start = datetime.combine(
+                context.target_date,
+                window.start,
+                context.timezone,
+            )
+            window_end = datetime.combine(
+                context.target_date,
+                window.end,
+                context.timezone,
+            )
+            if start_at < window_end and end_at > window_start:
+                return True
+        return False
 
     @staticmethod
     def _violates_weather(
@@ -809,6 +882,11 @@ class Scheduler:
             start_at=start_at,
             end_at=end_at,
             location_id=task.location_id,
+            location_raw=task.location_raw,
+            locked=task.flexibility in {
+                TaskFlexibility.FIXED,
+                TaskFlexibility.LOCKED,
+            },
             source=DataSource.USER,
             reason=reason,
         )
@@ -879,34 +957,37 @@ class Scheduler:
                             "bicycle": "骑自行车",
                             "electrobike": "骑电瓶车",
                         }.get(estimate.mode, "通勤")
-                        result.append(
-                            PlanItem(
-                                id=f"travel_{uuid4().hex}",
-                                item_type="travel",
-                                title=(
-                                    f"{mode_label}前往"
-                                    f"{first_after_departure.title}地点"
-                                ),
-                                start_at=context.initial_departure_at,
-                                end_at=context.initial_departure_at
-                                + timedelta(minutes=duration),
-                                location_id=first_after_departure.location_id,
-                                source=estimate.source,
-                                reason=(
-                                    f"{mode_label}基础时间 "
-                                    f"{base_duration} 分钟"
-                                    + (
-                                        "，校园通行高峰额外预留 "
-                                        f"{congestion_delay} 分钟"
-                                        if congestion_delay
-                                        else ""
-                                    )
-                                ),
-                                travel_mode=estimate.mode,
-                                base_duration_min=base_duration,
-                                congestion_delay_min=congestion_delay,
+                        if duration > 0:
+                            result.append(
+                                PlanItem(
+                                    id=f"travel_{uuid4().hex}",
+                                    item_type="travel",
+                                    title=(
+                                        f"{mode_label}前往"
+                                        f"{first_after_departure.title}地点"
+                                    ),
+                                    start_at=context.initial_departure_at,
+                                    end_at=context.initial_departure_at
+                                    + timedelta(minutes=duration),
+                                    location_id=(
+                                        first_after_departure.location_id
+                                    ),
+                                    source=estimate.source,
+                                    reason=(
+                                        f"{mode_label}基础时间 "
+                                        f"{base_duration} 分钟"
+                                        + (
+                                            "，校园通行高峰额外预留 "
+                                            f"{congestion_delay} 分钟"
+                                            if congestion_delay
+                                            else ""
+                                        )
+                                    ),
+                                    travel_mode=estimate.mode,
+                                    base_duration_min=base_duration,
+                                    congestion_delay_min=congestion_delay,
+                                )
                             )
-                        )
                 else:
                     missing_route_pairs.add(
                         (
@@ -948,6 +1029,8 @@ class Scheduler:
                 departure_at=provisional_start,
             )
             if adjusted_duration is None:
+                continue
+            if adjusted_duration <= 0:
                 continue
             travel_end = desired_end
             travel_start = travel_end - timedelta(
