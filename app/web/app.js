@@ -232,9 +232,10 @@ function renderConversationHistory() {
           <strong>${escapeHtml(item.title || "未命名对话")}</strong>
           <small>${item.parent_thread_id ? "分支 · " : ""}${escapeHtml(item.last_message || `${item.message_count || 0} 条消息`)}</small>
         </a>
-        <div class="history-item-actions">
-          <button type="button" data-thread-rename="${escapeHtml(item.id)}" data-thread-title="${escapeHtml(item.title || "未命名对话")}" aria-label="重命名对话" title="重命名">改</button>
-          <button type="button" data-thread-delete="${escapeHtml(item.id)}" data-thread-title="${escapeHtml(item.title || "未命名对话")}" aria-label="删除对话" title="删除">删</button>
+        <button class="history-menu-trigger" type="button" data-thread-menu-toggle aria-label="更多对话操作" aria-haspopup="menu" aria-expanded="false">•••</button>
+        <div class="history-item-menu" role="menu" hidden>
+          <button type="button" role="menuitem" data-thread-rename="${escapeHtml(item.id)}" data-thread-title="${escapeHtml(item.title || "未命名对话")}">重命名</button>
+          <button type="button" role="menuitem" data-thread-delete="${escapeHtml(item.id)}" data-thread-title="${escapeHtml(item.title || "未命名对话")}">删除</button>
         </div>
       </div>
     `).join("");
@@ -732,12 +733,37 @@ function initializeWorkspaceNavigation() {
     queryInput.focus();
   });
 
+  function closeHistoryMenus(exceptEntry = null) {
+    historyList?.querySelectorAll(".history-entry").forEach((entry) => {
+      if (entry === exceptEntry) return;
+      const trigger = entry.querySelector("[data-thread-menu-toggle]");
+      const menu = entry.querySelector(".history-item-menu");
+      if (trigger) trigger.setAttribute("aria-expanded", "false");
+      if (menu) menu.hidden = true;
+    });
+  }
+
   historyList?.addEventListener("click", (event) => {
+    const menuTrigger = event.target.closest("[data-thread-menu-toggle]");
+    if (menuTrigger) {
+      event.preventDefault();
+      event.stopPropagation();
+      const entry = menuTrigger.closest(".history-entry");
+      const menu = entry?.querySelector(".history-item-menu");
+      if (!entry || !menu) return;
+      const willOpen = menu.hidden;
+      closeHistoryMenus(entry);
+      menu.hidden = !willOpen;
+      menuTrigger.setAttribute("aria-expanded", String(willOpen));
+      if (willOpen) menu.querySelector("button")?.focus();
+      return;
+    }
     const renameButton = event.target.closest("[data-thread-rename]");
     const deleteButton = event.target.closest("[data-thread-delete]");
     if (renameButton || deleteButton) {
       event.preventDefault();
       event.stopPropagation();
+      closeHistoryMenus();
       const action = renameButton
         ? renameConversationThread(
           renameButton.dataset.threadRename,
@@ -778,6 +804,13 @@ function initializeWorkspaceNavigation() {
     freshness.innerHTML = '<span class="source-tag">本机历史摘要</span>';
     closeDrawers();
     assistantPanel?.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".history-entry")) closeHistoryMenus();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeHistoryMenus();
   });
 
   conversationStream?.addEventListener("click", (event) => {

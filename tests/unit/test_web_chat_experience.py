@@ -199,6 +199,11 @@ def test_current_conversation_has_a_right_side_quick_outline() -> None:
     assert "body.has-plan-result .tools-sidebar:has(" in styles
     assert "data-thread-rename" in javascript
     assert "data-thread-delete" in javascript
+    assert "data-thread-menu-toggle" in javascript
+    assert "function closeHistoryMenus" in javascript
+    assert 'event.key === "Escape"' in javascript
+    assert ".history-menu-trigger" in styles
+    assert ".history-item-menu[hidden]" in styles
     assert "async function renameConversationThread" in javascript
     assert "async function deleteConversationThread" in javascript
 
