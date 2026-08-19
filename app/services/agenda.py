@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from app.providers.location_repository import LocationRepository
 from app.repositories.academic_calendar import AcademicCalendarRepository
+from app.repositories.agenda_edits import AgendaEditRepository
 from app.repositories.external_agenda import ExternalAgendaRepository
 from app.repositories.memories import MemoryRepository
 from app.repositories.plans import PlanRepository
@@ -28,6 +29,7 @@ class AgendaService:
         plans: PlanRepository,
         timetables: TimetableRepository,
         external_agenda: ExternalAgendaRepository,
+        agenda_edits: AgendaEditRepository,
         academic_calendar: AcademicCalendarRepository,
         memories: MemoryRepository,
         locations: LocationRepository,
@@ -37,6 +39,7 @@ class AgendaService:
         self.plans = plans
         self.timetables = timetables
         self.external_agenda = external_agenda
+        self.agenda_edits = agenda_edits
         self.academic_calendar = academic_calendar
         self.memories = memories
         self.locations = locations
@@ -82,14 +85,50 @@ class AgendaService:
                 for authoritative in external_items
             )
         ]
+        suppressed_ids, edited_items = self.agenda_edits.list_state(
+            user_id=user_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        base_items = [
+            item
+            for item in [*course_items, *external_items, *plan_items]
+            if item.id not in suppressed_ids
+        ]
         return sorted(
-            [*course_items, *external_items, *plan_items],
+            [*base_items, *edited_items],
             key=lambda item: (
                 item.start_at,
                 item.end_at,
                 item.source,
                 item.title,
             ),
+        )
+
+    def find_item(
+        self,
+        *,
+        user_id: str,
+        item_id: str,
+        reference_at: datetime,
+    ) -> AgendaItem | None:
+        manual = self.agenda_edits.get(user_id=user_id, item_id=item_id)
+        if manual is not None:
+            return manual
+        target_date = reference_at.astimezone(
+            ZoneInfo(self.timezone_name)
+        ).date()
+        return next(
+            (
+                item
+                for item in self.list_items(
+                    user_id=user_id,
+                    start_date=target_date,
+                    end_date=target_date,
+                )
+                if item.id == item_id
+            ),
+            None,
         )
 
     def _course_items(

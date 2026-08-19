@@ -83,6 +83,142 @@ def test_generated_plan_requires_explicit_agenda_publication(tmp_path):
         )
 
 
+def test_manual_agenda_item_can_be_added_edited_and_deleted(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        created = client.post(
+            "/api/v1/users/manual_user/agenda/items",
+            json={
+                "title": "小组讨论",
+                "start_at": "2026-07-24T14:00:00+08:00",
+                "end_at": "2026-07-24T15:00:00+08:00",
+                "location_name": "第六教学楼",
+                "kind": "meeting",
+            },
+        )
+        assert created.status_code == 201, created.text
+        item_id = created.json()["item"]["id"]
+        assert created.json()["item"]["source"] == "manual"
+        assert created.json()["item"]["locked"] is False
+
+        updated = client.put(
+            f"/api/v1/users/manual_user/agenda/items/{item_id}",
+            json={
+                "title": "项目讨论",
+                "start_at": "2026-07-24T15:30:00+08:00",
+                "end_at": "2026-07-24T16:30:00+08:00",
+                "location_name": "第六教学楼北416",
+                "kind": "meeting",
+                "original_start_at": "2026-07-24T14:00:00+08:00",
+            },
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["item"]["title"] == "项目讨论"
+        assert updated.json()["item"]["start_at"] == "2026-07-24T15:30:00+08:00"
+
+        agenda = client.get(
+            "/api/v1/users/manual_user/agenda",
+            params={"start_date": "2026-07-24", "end_date": "2026-07-24"},
+        )
+        assert [item["title"] for item in agenda.json()["items"]] == ["项目讨论"]
+
+        deleted = client.delete(
+            f"/api/v1/users/manual_user/agenda/items/{item_id}",
+            params={"original_start_at": "2026-07-24T15:30:00+08:00"},
+        )
+        assert deleted.status_code == 200, deleted.text
+        agenda = client.get(
+            "/api/v1/users/manual_user/agenda",
+            params={"start_date": "2026-07-24", "end_date": "2026-07-24"},
+        )
+        assert agenda.json()["items"] == []
+
+
+def test_plan_item_override_is_non_destructive_and_can_be_removed(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        assert client.post("/api/v1/demos/demo_01_normal/run").status_code == 200
+        agenda = client.get(
+            "/api/v1/users/demo_user/agenda",
+            params={"start_date": "2026-07-24", "end_date": "2026-07-24"},
+        ).json()
+        original = next(item for item in agenda["items"] if item["title"] == "跑步")
+
+        updated = client.put(
+            f"/api/v1/users/demo_user/agenda/items/{original['id']}",
+            json={
+                "title": "东操场跑步",
+                "start_at": "2026-07-24T17:00:00+08:00",
+                "end_at": "2026-07-24T17:40:00+08:00",
+                "location_name": "东操场",
+                "kind": "exercise",
+                "original_start_at": original["start_at"],
+            },
+        )
+        assert updated.status_code == 200, updated.text
+        replacement = updated.json()["item"]
+        assert replacement["source"] == "manual"
+        assert replacement["notes"] == "手动调整自对话安排"
+
+        changed = client.get(
+            "/api/v1/users/demo_user/agenda",
+            params={"start_date": "2026-07-24", "end_date": "2026-07-24"},
+        ).json()["items"]
+        assert not any(item["id"] == original["id"] for item in changed)
+        assert any(item["title"] == "东操场跑步" for item in changed)
+
+        deleted = client.delete(
+            f"/api/v1/users/demo_user/agenda/items/{replacement['id']}",
+            params={"original_start_at": replacement["start_at"]},
+        )
+        assert deleted.status_code == 200, deleted.text
+        after = client.get(
+            "/api/v1/users/demo_user/agenda",
+            params={"start_date": "2026-07-24", "end_date": "2026-07-24"},
+        ).json()["items"]
+        assert not any(item["id"] == original["id"] for item in after)
+        assert not any(item["id"] == replacement["id"] for item in after)
+
+
+def test_course_items_are_locked_against_manual_edit_and_delete(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        imported = client.post(
+            "/api/v1/users/locked_course_user/timetable/import",
+            json={
+                "name": "我的课表",
+                "format": "csv",
+                "content": CSV_CONTENT,
+                "term_start": "2026-07-20",
+                "term_end": "2026-11-30",
+            },
+        )
+        assert imported.status_code == 201, imported.text
+        agenda = client.get(
+            "/api/v1/users/locked_course_user/agenda",
+            params={"start_date": "2026-07-24", "end_date": "2026-07-24"},
+        ).json()
+        course = next(item for item in agenda["items"] if item["source"] == "course")
+        payload = {
+            "title": course["title"],
+            "start_at": "2026-07-24T09:00:00+08:00",
+            "end_at": "2026-07-24T10:00:00+08:00",
+            "location_name": course["location_name"],
+            "kind": "course",
+            "original_start_at": course["start_at"],
+        }
+        updated = client.put(
+            f"/api/v1/users/locked_course_user/agenda/items/{course['id']}",
+            json=payload,
+        )
+        assert updated.status_code == 409, updated.text
+        assert updated.json()["error"]["code"] == "AGENDA_ITEM_LOCKED"
+
+        deleted = client.delete(
+            f"/api/v1/users/locked_course_user/agenda/items/{course['id']}",
+            params={"original_start_at": course["start_at"]},
+        )
+        assert deleted.status_code == 409, deleted.text
+        assert deleted.json()["error"]["code"] == "AGENDA_ITEM_LOCKED"
+
+
 def test_imported_early_course_gets_wakeup_and_class_reminders(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         imported = client.post(

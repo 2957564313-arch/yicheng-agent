@@ -136,6 +136,7 @@ def make_respond_node(container: AppContainer):
                 warnings,
                 intent=state.get("intent", "plan"),
                 query=state.get("query", ""),
+                tasks=tasks,
                 facts=facts,
                 weather=[
                     WeatherContext.model_validate(raw)
@@ -296,6 +297,7 @@ def _success_answer(
     *,
     intent: str,
     query: str,
+    tasks: list[Task] | None = None,
     facts: list[RetrievedFact],
     weather: list[WeatherContext],
     congestion_windows: list[tuple[datetime, datetime]],
@@ -392,6 +394,18 @@ def _success_answer(
         if ordered_items
         else f"{day_label}当前没有保留的安排。"
     )
+    estimated_tasks = [
+        task for task in (tasks or []) if "duration_estimated" in task.tags
+    ]
+    if estimated_tasks:
+        estimates = "、".join(
+            f"{task.title}暂按{task.duration_min}分钟"
+            for task in estimated_tasks
+        )
+        lines.append(
+            f"你没有说明时长的事项，我先用可调整默认值排入：{estimates}。"
+            "直接告诉我实际需要多久，就会只重排受影响的部分。"
+        )
     for item in ordered_items:
         label = item.title
         duration_min = int((item.end_at - item.start_at).total_seconds() // 60)
@@ -966,6 +980,8 @@ def _infeasible_answer(
 
     suggestions = _adjustment_suggestions(
         tasks=active_tasks,
+        unscheduled=unscheduled,
+        plan_date=plan.date,
         planning_start=planning_start,
         deadline=deadline,
         required_minutes=required_minutes,
@@ -994,7 +1010,10 @@ def _infeasible_answer(
             for index, action in enumerate(suggestions, start=1)
         )
         lines.append(
-            ("选一个更符合你今天状态的方案，我再把完整日程排好。")
+            (
+                "选一个更符合你今天状态的方案，我再把完整日程排好；"
+                "在你确认前，我不会擅自牺牲你明确要求的任务时长。"
+            )
             if len(suggestions) >= 2
             else (
                 "如果这个结束时间可以接受，点一下我就重新排好；"
@@ -1089,6 +1108,8 @@ def _ordered_route_minutes(
 def _adjustment_suggestions(
     *,
     tasks: list[Task],
+    unscheduled: list[Task],
+    plan_date,
     planning_start: datetime,
     deadline: datetime | None,
     required_minutes: int,
@@ -1145,7 +1166,60 @@ def _adjustment_suggestions(
             ),
         }
     )
-    return suggestions[:2]
+    movable_unscheduled = [
+        task
+        for task in unscheduled
+        if "course" not in task.tags and "hard_constraint" not in task.tags
+    ]
+    if movable_unscheduled:
+        next_date = plan_date + timedelta(days=1)
+        next_start = datetime.combine(next_date, time(8, 0), planning_start.tzinfo)
+        next_deadline = datetime.combine(
+            next_date,
+            time(22, 0),
+            planning_start.tzinfo,
+        )
+        moved_names = "、".join(task.title for task in movable_unscheduled)
+        suggestions.append(
+            {
+                "id": "option_3",
+                "label": "改到下一天",
+                "description": (
+                    f"把暂时排不下的{moved_names}移到"
+                    f"{next_date:%m月%d日}并直接生成时间；"
+                    "今天能排下的部分保持当前预览。"
+                ),
+                "query": _standalone_query(
+                    tasks=movable_unscheduled,
+                    planning_start=next_start,
+                    deadline=next_deadline,
+                    duration_overrides={},
+                ),
+            }
+        )
+        omitted = min(
+            movable_unscheduled,
+            key=lambda task: (task.importance, -task.duration_min),
+        )
+        remaining = [task for task in tasks if task.id != omitted.id]
+        if remaining:
+            suggestions.append(
+                {
+                    "id": "option_4",
+                    "label": f"这次不排{omitted.title}",
+                    "description": (
+                        f"本次先不安排{omitted.title}，其余任务按"
+                        f"{deadline:%H:%M}前结束重新生成；不会静默删除。"
+                    ),
+                    "query": _standalone_query(
+                        tasks=remaining,
+                        planning_start=planning_start,
+                        deadline=deadline,
+                        duration_overrides={},
+                    ),
+                }
+            )
+    return suggestions[:4]
 
 
 def _standalone_query(

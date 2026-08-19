@@ -7,6 +7,9 @@ from fastapi import APIRouter, Query, Request, Response
 
 from app.errors import AppError
 from app.schemas.agenda import (
+    AgendaItemCreate,
+    AgendaItemUpdate,
+    AgendaMutationResponse,
     AgendaResponse,
     ReminderDueResponse,
     ReminderSettings,
@@ -14,7 +17,6 @@ from app.schemas.agenda import (
 )
 from app.schemas.profile import PersonalDataRestoreRequest
 from app.services.personal_data import hydrate_personal_data
-
 
 router = APIRouter(prefix="/api/v1/users", tags=["agenda"])
 
@@ -105,6 +107,130 @@ def get_agenda(
         request=request,
         now=now,
     )
+
+
+@router.post(
+    "/{user_id}/agenda/items",
+    response_model=AgendaMutationResponse,
+    status_code=201,
+)
+def create_agenda_item(
+    user_id: str,
+    payload: AgendaItemCreate,
+    request: Request,
+) -> AgendaMutationResponse:
+    container = request.app.state.container
+    now = datetime.now(ZoneInfo(container.settings.app_timezone))
+    item = container.agenda_edits.create(
+        user_id=user_id,
+        payload=payload,
+        now=now,
+    )
+    return AgendaMutationResponse(status="created", item=item)
+
+
+@router.put(
+    "/{user_id}/agenda/items/{item_id}",
+    response_model=AgendaMutationResponse,
+)
+def update_agenda_item(
+    user_id: str,
+    item_id: str,
+    payload: AgendaItemUpdate,
+    request: Request,
+) -> AgendaMutationResponse:
+    container = request.app.state.container
+    now = datetime.now(ZoneInfo(container.settings.app_timezone))
+    existing_manual = container.agenda_edits.get(
+        user_id=user_id,
+        item_id=item_id,
+    )
+    if existing_manual is not None:
+        item = container.agenda_edits.update(
+            user_id=user_id,
+            item_id=item_id,
+            payload=payload,
+            now=now,
+        )
+    else:
+        reference_at = payload.original_start_at or payload.start_at
+        target = container.agenda.find_item(
+            user_id=user_id,
+            item_id=item_id,
+            reference_at=reference_at,
+        )
+        if target is None:
+            raise AppError(
+                "AGENDA_ITEM_NOT_FOUND",
+                "没有找到这项日程，请刷新后再试。",
+                status_code=404,
+            )
+        if target.source in {"course", "external"}:
+            raise AppError(
+                "AGENDA_ITEM_LOCKED",
+                "固定课表和杭电助手预约以校方数据为准，不能在这里修改。",
+                status_code=409,
+            )
+        item = container.agenda_edits.create(
+            user_id=user_id,
+            payload=payload,
+            now=now,
+            target_item_id=target.id,
+        )
+    if item is None:
+        raise AppError(
+            "AGENDA_ITEM_NOT_FOUND",
+            "没有找到这项日程，请刷新后再试。",
+            status_code=404,
+        )
+    return AgendaMutationResponse(status="updated", item=item)
+
+
+@router.delete(
+    "/{user_id}/agenda/items/{item_id}",
+    response_model=AgendaMutationResponse,
+)
+def delete_agenda_item(
+    user_id: str,
+    item_id: str,
+    request: Request,
+    original_start_at: datetime | None = Query(default=None),
+) -> AgendaMutationResponse:
+    container = request.app.state.container
+    now = datetime.now(ZoneInfo(container.settings.app_timezone))
+    manual = container.agenda_edits.get(user_id=user_id, item_id=item_id)
+    if manual is not None:
+        container.agenda_edits.delete_manual(
+            user_id=user_id,
+            item_id=item_id,
+            now=now,
+        )
+        return AgendaMutationResponse(status="deleted")
+    if original_start_at is None:
+        raise AppError(
+            "AGENDA_ITEM_REFERENCE_REQUIRED",
+            "删除前需要刷新这项日程。",
+            status_code=422,
+        )
+    target = container.agenda.find_item(
+        user_id=user_id,
+        item_id=item_id,
+        reference_at=original_start_at,
+    )
+    if target is None:
+        raise AppError(
+            "AGENDA_ITEM_NOT_FOUND",
+            "没有找到这项日程，请刷新后再试。",
+            status_code=404,
+        )
+    if target.source in {"course", "external"}:
+        raise AppError(
+            "AGENDA_ITEM_LOCKED",
+            "固定课表和杭电助手预约以校方数据为准，不能在这里删除。",
+            status_code=409,
+        )
+    container.agenda_edits.suppress(user_id=user_id, target=target, now=now)
+    return AgendaMutationResponse(status="deleted")
 
 
 @router.post(

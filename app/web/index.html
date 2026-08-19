@@ -8,7 +8,7 @@
       content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
     <title>易程智策 · 我的校园日程</title>
-    <link rel="stylesheet" href="/styles.css?v=20260819-4" />
+    <link rel="stylesheet" href="/styles.css?v=20260819-6" />
   </head>
   <body>
     <section id="access-gate" class="access-gate" hidden>
@@ -321,7 +321,34 @@
                 <option value="usual_bedtime">常用就寝时间</option>
                 <option value="usual_wake_time">常用起床时间</option>
                 <option value="sleep_goal_hours">希望睡眠时长</option>
+                <option value="custom_note">自定义偏好</option>
               </select>
+              <select
+                id="memory-value-select"
+                aria-label="选择偏好值"
+                hidden
+              ></select>
+              <div id="memory-location-pair" class="memory-location-pair" hidden>
+                <input
+                  id="memory-activity"
+                  type="text"
+                  placeholder="事项，例如：跑步"
+                  maxlength="80"
+                />
+                <input
+                  id="memory-location"
+                  type="text"
+                  placeholder="地点，例如：东操场"
+                  maxlength="120"
+                />
+              </div>
+              <input
+                id="memory-custom-label"
+                type="text"
+                placeholder="偏好名称，例如：排练前准备时间"
+                maxlength="80"
+                hidden
+              />
               <input
                 id="memory-value"
                 type="text"
@@ -380,6 +407,7 @@
                 <button type="button" class="schedule-tab" data-schedule-view="month" role="tab" aria-selected="false">月</button>
               </div>
               <div class="schedule-date-actions">
+                <button id="schedule-add" type="button" class="date-chip">＋ 增加事件</button>
                 <button id="schedule-prev" type="button" class="icon-button" aria-label="上一个时间段">‹</button>
                 <button id="schedule-today" type="button" class="date-chip">回到今天</button>
                 <button id="schedule-next" type="button" class="icon-button" aria-label="下一个时间段">›</button>
@@ -390,6 +418,32 @@
             <section id="schedule-week-view" class="schedule-view-content" aria-label="周视图" hidden></section>
             <section id="schedule-month-view" class="schedule-view-content" aria-label="月视图" hidden></section>
           </article>
+
+          <dialog id="schedule-editor" class="schedule-editor">
+            <form id="schedule-editor-form">
+              <div class="schedule-editor-heading">
+                <div><p class="step">手动日程</p><h2 id="schedule-editor-title">增加事件</h2></div>
+                <button id="schedule-editor-close" type="button" class="icon-button" aria-label="关闭">×</button>
+              </div>
+              <input id="schedule-editor-item-id" type="hidden" />
+              <input id="schedule-editor-original-start" type="hidden" />
+              <input id="schedule-editor-kind" type="hidden" value="task" />
+              <label>事件名称<input id="schedule-editor-name" required maxlength="160" placeholder="例如：小组讨论" /></label>
+              <div class="schedule-editor-grid">
+                <label>日期<input id="schedule-editor-date" type="date" required /></label>
+                <label>开始时间<input id="schedule-editor-start" type="time" required /></label>
+                <label>结束时间<input id="schedule-editor-end" type="time" required /></label>
+              </div>
+              <label>地点（选填）<input id="schedule-editor-location" maxlength="160" placeholder="例如：图书馆12层" /></label>
+              <p id="schedule-editor-state" class="panel-note"></p>
+              <div class="schedule-editor-actions">
+                <button id="schedule-editor-delete" type="button" class="danger" hidden>删除事件</button>
+                <span></span>
+                <button id="schedule-editor-cancel" type="button" class="ghost">取消</button>
+                <button id="schedule-editor-save" type="submit" class="primary">保存</button>
+              </div>
+            </form>
+          </dialog>
 
           <article class="panel agenda-panel">
             <div class="panel-heading">
@@ -664,6 +718,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260819-7" defer></script>
+    <script src="/app.js?v=20260819-9" defer></script>
   </body>
 </html>

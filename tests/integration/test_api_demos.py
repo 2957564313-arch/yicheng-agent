@@ -1092,10 +1092,15 @@ def test_infeasible_plan_keeps_every_requested_task_visible(tmp_path):
         assert [action["id"] for action in actions] == [
             "option_1",
             "option_2",
+            "option_3",
+            "option_4",
         ]
         assert "自习45分钟" in actions[0]["query"]
         assert "18:00前结束" in actions[0]["query"]
         assert "19:15前结束" in actions[1]["query"]
+        assert actions[2]["label"] == "改到下一天"
+        assert "2026-07-25" in actions[2]["query"]
+        assert actions[3]["label"].startswith("这次不排")
 
 
 def test_suggested_action_query_generates_complete_plan(tmp_path):
@@ -1172,7 +1177,11 @@ def test_late_plan_is_caring_and_never_shrinks_study_to_token_block(
         assert "不会擅自牺牲你明确要求的任务时长" in payload["answer"]
 
         actions = payload["suggested_actions"]
-        assert [action["id"] for action in actions] == ["option_2"]
+        assert [action["id"] for action in actions] == [
+            "option_2",
+            "option_3",
+            "option_4",
+        ]
         assert actions[0]["label"] == "保留完整安排"
         assert "图书馆自习120分钟" in actions[0]["query"]
         assert "自习20分钟" not in actions[0]["query"]

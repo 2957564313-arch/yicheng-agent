@@ -94,6 +94,25 @@ CREATE TABLE IF NOT EXISTS external_agenda_items (
 CREATE INDEX IF NOT EXISTS idx_external_agenda_user_time
 ON external_agenda_items(user_id, start_at, end_at);
 
+CREATE TABLE IF NOT EXISTS agenda_item_edits (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    target_item_id TEXT,
+    title TEXT NOT NULL,
+    start_at TEXT NOT NULL,
+    end_at TEXT NOT NULL,
+    location_name TEXT,
+    kind TEXT NOT NULL DEFAULT 'task',
+    deleted INTEGER NOT NULL DEFAULT 0 CHECK (deleted IN (0, 1)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(user_id, target_item_id),
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_agenda_item_edits_user_time
+ON agenda_item_edits(user_id, start_at, end_at);
+
 CREATE TABLE IF NOT EXISTS external_data_snapshots (
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     provider TEXT NOT NULL,

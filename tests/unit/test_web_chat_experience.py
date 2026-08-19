@@ -210,7 +210,8 @@ def test_current_conversation_has_a_right_side_quick_outline() -> None:
     assert 'id="conversation-outline-count"' not in javascript
     assert "<span>${index + 1}</span>" not in javascript
     assert "conversationMessageLabel(message)" in javascript
-    assert "if (toolsToggle) toolsToggle.hidden = !hasMultipleTurns;" in javascript
+    assert "if (toolsToggle) toolsToggle.hidden = !hasTurns;" in javascript
+    assert "const hasTurns = messages.length > 0;" in javascript
     assert "data-thread-rename" in javascript
     assert "data-thread-delete" in javascript
     assert "data-thread-menu-toggle" in javascript
@@ -238,10 +239,30 @@ def test_schedule_marks_verified_holidays_and_pending_makeup_days() -> None:
     assert 'id="timetable-term-view"' in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
-    assert 'app.js?v=20260819-7' in (WEB_ROOT / "index.html").read_text(
+
+
+def test_day_schedule_allows_manual_edits_but_locks_authoritative_items() -> None:
+    html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+    styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
+
+    assert 'id="schedule-add"' in html
+    assert 'id="schedule-editor"' in html
+    assert 'id="schedule-editor-name" required' in html
+    assert 'id="schedule-editor-start" type="time" required' in html
+    assert 'id="schedule-editor-end" type="time" required' in html
+    assert "固定课表和杭助预约不会被改动" in javascript
+    assert 'item.source === "course" || item.source === "external"' in javascript
+    assert 'data-schedule-edit="${escapeHtml(item.id)}"' in javascript
+    assert 'method: itemId ? "PUT" : "POST"' in javascript
+    assert '{ method: "DELETE" }' in javascript
+    assert 'scheduleAdd?.addEventListener("click"' in javascript
+    assert ".schedule-editor::backdrop" in styles
+    assert ".schedule-event-lock" in styles
+    assert 'app.js?v=20260819-9' in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
-    assert "styles.css?v=20260819-4" in (WEB_ROOT / "index.html").read_text(
+    assert "styles.css?v=20260819-6" in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
     assert 'term.current ? "（当前）"' not in javascript

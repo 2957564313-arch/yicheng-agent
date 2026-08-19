@@ -1051,15 +1051,27 @@ class RuleBasedRequirementParser:
             location = (
                 self._location_from_clause(clause) or spec.default_location
             )
+            duration = self._duration_near(
+                query,
+                keyword,
+                default=spec.default_duration_min,
+            )
+            duration_was_explicit = bool(
+                re.search(
+                    rf"(?:{re.escape(keyword)}[^，。；、]{{0,8}}?"
+                    rf"(?:\d+\s*分钟|(?:[0-9]+(?:\.[0-9]+)?|"
+                    rf"{'|'.join(map(re.escape, CHINESE_NUMBER_HOURS))})\s*个?小时)"
+                    rf"|(?:\d+\s*分钟|(?:[0-9]+(?:\.[0-9]+)?|"
+                    rf"{'|'.join(map(re.escape, CHINESE_NUMBER_HOURS))})\s*个?小时)"
+                    rf"[^，。；、]{{0,8}}?{re.escape(keyword)})",
+                    query,
+                )
+            )
             task = self._movable_task(
                 task_id=spec.id,
                 title=spec.title,
                 target_date=target_date,
-                duration=self._duration_near(
-                    query,
-                    keyword,
-                    default=spec.default_duration_min,
-                ),
+                duration=duration,
                 location_raw=location,
                 earliest=(
                     overall_start
@@ -1077,10 +1089,19 @@ class RuleBasedRequirementParser:
                         "tags": [
                             "common_task_fallback",
                             *spec.tags,
+                            *(
+                                []
+                                if duration_was_explicit
+                                else ["duration_estimated"]
+                            ),
                         ],
                         "notes": (
                             "在线模型不可用时由高频校园任务目录识别；"
-                            "时长未明示时使用可调整默认值"
+                            + (
+                                f"未说明时长，暂按{duration}分钟，可随时修改"
+                                if not duration_was_explicit
+                                else "时长来自本句中的明确说明"
+                            )
                         ),
                     }
                 )

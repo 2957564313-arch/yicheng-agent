@@ -5,7 +5,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-
 AgendaSource = Literal["course", "plan", "weekly", "manual", "external"]
 AgendaKind = Literal[
     "course",
@@ -35,12 +34,37 @@ class AgendaItem(BaseModel):
     notes: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
-    def validate_interval(self) -> "AgendaItem":
+    def validate_interval(self) -> AgendaItem:
         if self.start_at.tzinfo is None or self.end_at.tzinfo is None:
             raise ValueError("日程时间必须包含时区")
         if self.end_at <= self.start_at:
             raise ValueError("日程结束时间必须晚于开始时间")
         return self
+
+
+class AgendaItemCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    start_at: datetime
+    end_at: datetime
+    location_name: str | None = Field(default=None, max_length=160)
+    kind: AgendaKind = "task"
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> AgendaItemCreate:
+        if self.start_at.tzinfo is None or self.end_at.tzinfo is None:
+            raise ValueError("日程时间必须包含时区")
+        if self.end_at <= self.start_at:
+            raise ValueError("日程结束时间必须晚于开始时间")
+        return self
+
+
+class AgendaItemUpdate(AgendaItemCreate):
+    original_start_at: datetime | None = None
+
+
+class AgendaMutationResponse(BaseModel):
+    status: Literal["created", "updated", "deleted"]
+    item: AgendaItem | None = None
 
 
 class ReminderSettings(BaseModel):

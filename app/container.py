@@ -21,6 +21,7 @@ from app.providers.route_static import StaticRouteProvider
 from app.providers.weather_static import StaticWeatherProvider
 from app.repositories.academic_calendar import AcademicCalendarRepository
 from app.repositories.accounts import AccountRepository
+from app.repositories.agenda_edits import AgendaEditRepository
 from app.repositories.connections import ExternalConnectionRepository
 from app.repositories.conversations import ConversationRepository
 from app.repositories.database import Database
@@ -54,6 +55,7 @@ class AppContainer:
     conversations: ConversationRepository
     external_connections: ExternalConnectionRepository
     external_agenda: ExternalAgendaRepository
+    agenda_edits: AgendaEditRepository
     external_data: ExternalDataRepository
     credential_cipher: CredentialCipher
     hduhelp: HduHelpClient
@@ -120,6 +122,7 @@ def build_container(settings: Settings) -> AppContainer:
     conversations = ConversationRepository(database)
     external_connections = ExternalConnectionRepository(database)
     external_agenda = ExternalAgendaRepository(database)
+    agenda_edits = AgendaEditRepository(database)
     external_data = ExternalDataRepository(database)
     credential_cipher = CredentialCipher(settings.credential_secret)
     hduhelp = HduHelpClient(
@@ -196,6 +199,7 @@ def build_container(settings: Settings) -> AppContainer:
         plans=plans,
         timetables=timetables,
         external_agenda=external_agenda,
+        agenda_edits=agenda_edits,
         academic_calendar=academic_calendar,
         memories=memories,
         locations=locations,
@@ -243,6 +247,7 @@ def build_container(settings: Settings) -> AppContainer:
         conversations=conversations,
         external_connections=external_connections,
         external_agenda=external_agenda,
+        agenda_edits=agenda_edits,
         external_data=external_data,
         credential_cipher=credential_cipher,
         hduhelp=hduhelp,

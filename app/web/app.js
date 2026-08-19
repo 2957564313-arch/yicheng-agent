@@ -52,6 +52,11 @@ const debugContent = $("#debug-content");
 const clock = $("#clock");
 const memoryType = $("#memory-type");
 const memoryValue = $("#memory-value");
+const memoryValueSelect = $("#memory-value-select");
+const memoryLocationPair = $("#memory-location-pair");
+const memoryActivity = $("#memory-activity");
+const memoryLocation = $("#memory-location");
+const memoryCustomLabel = $("#memory-custom-label");
 const memorySave = $("#memory-save");
 const memoryList = $("#memory-list");
 const personalizationToggle = $("#personalization-toggle");
@@ -143,6 +148,22 @@ const scheduleMonthView = $("#schedule-month-view");
 const schedulePrev = $("#schedule-prev");
 const scheduleToday = $("#schedule-today");
 const scheduleNext = $("#schedule-next");
+const scheduleAdd = $("#schedule-add");
+const scheduleEditor = $("#schedule-editor");
+const scheduleEditorForm = $("#schedule-editor-form");
+const scheduleEditorTitle = $("#schedule-editor-title");
+const scheduleEditorItemId = $("#schedule-editor-item-id");
+const scheduleEditorOriginalStart = $("#schedule-editor-original-start");
+const scheduleEditorKind = $("#schedule-editor-kind");
+const scheduleEditorName = $("#schedule-editor-name");
+const scheduleEditorDate = $("#schedule-editor-date");
+const scheduleEditorStart = $("#schedule-editor-start");
+const scheduleEditorEnd = $("#schedule-editor-end");
+const scheduleEditorLocation = $("#schedule-editor-location");
+const scheduleEditorState = $("#schedule-editor-state");
+const scheduleEditorDelete = $("#schedule-editor-delete");
+const scheduleEditorClose = $("#schedule-editor-close");
+const scheduleEditorCancel = $("#schedule-editor-cancel");
 const scheduleTabs = document.querySelectorAll("[data-schedule-view]");
 const viewButtons = document.querySelectorAll("[data-view]");
 const visualGrid = $(".visual-grid");
@@ -539,10 +560,10 @@ function setActiveConversationOutline(messageId) {
 function syncConversationOutline() {
   if (!conversationStream || !conversationOutlineList) return;
   const messages = [...conversationStream.querySelectorAll(".conversation-message.user-message")];
-  const hasMultipleTurns = messages.length > 1;
-  conversationOutline.hidden = !hasMultipleTurns;
-  if (toolsToggle) toolsToggle.hidden = !hasMultipleTurns;
-  if (!hasMultipleTurns) setConversationOutlineOpen(false);
+  const hasTurns = messages.length > 0;
+  conversationOutline.hidden = !hasTurns;
+  if (toolsToggle) toolsToggle.hidden = !hasTurns;
+  if (!hasTurns) setConversationOutlineOpen(false);
   conversationOutlineList.innerHTML = messages.map((message, index) => {
     const id = message.id || `conversation-turn-${index + 1}`;
     message.id = id;
@@ -600,11 +621,101 @@ function scheduleCalendarNotice(date) {
 }
 
 function scheduleItemMarkup(item, compact = false) {
+  const immutable = item.source === "course" || item.source === "external";
+  const lockLabel = item.source === "course" ? "课表锁定" : "杭助锁定";
   return `
-    <article class="schedule-event ${escapeHtml(item.kind || "task")}" title="${escapeHtml(item.title || "日程")}">
+    <article class="schedule-event ${escapeHtml(item.kind || "task")}" title="${escapeHtml(item.title || "日程")}${item.location_name ? ` · ${escapeHtml(item.location_name)}` : ""}">
       <time>${escapeHtml(timePart(item.start_at))}—${escapeHtml(timePart(item.end_at))}</time>
       <div><strong>${escapeHtml(item.title || "未命名安排")}</strong>${compact ? "" : `<small>${escapeHtml(item.location_name || (item.kind === "travel" ? "通勤时间" : "个人安排"))}</small>`}</div>
+      ${compact ? "" : immutable
+        ? `<span class="schedule-event-lock" title="${lockLabel}，请到数据来源处修改">${lockLabel}</span>`
+        : `<button type="button" class="schedule-event-more" data-schedule-edit="${escapeHtml(item.id)}" aria-label="编辑${escapeHtml(item.title || "事件")}" title="调整时间或删除">•••</button>`}
     </article>`;
+}
+
+function openScheduleEditor(item = null) {
+  const selectedDate = scheduleCursorDate || shanghaiDateString();
+  scheduleEditorForm.reset();
+  scheduleEditorItemId.value = item?.id || "";
+  scheduleEditorOriginalStart.value = item?.start_at || "";
+  scheduleEditorKind.value = item?.kind || "task";
+  scheduleEditorName.value = item?.title || "";
+  scheduleEditorDate.value = item ? agendaItemDate(item) : selectedDate;
+  scheduleEditorStart.value = item ? timePart(item.start_at) : "09:00";
+  scheduleEditorEnd.value = item ? timePart(item.end_at) : "10:00";
+  scheduleEditorLocation.value = item?.location_name || "";
+  scheduleEditorTitle.textContent = item ? "调整事件" : "增加事件";
+  scheduleEditorDelete.hidden = !item;
+  scheduleEditorState.textContent = item
+    ? "这里只调整个人安排；固定课表和杭助预约不会被改动。"
+    : "事件名称和时间必填，地点可以不填。";
+  scheduleEditor.showModal();
+  scheduleEditorName.focus();
+}
+
+function scheduleDateTime(date, clock) {
+  return `${date}T${clock}:00+08:00`;
+}
+
+async function refreshVisibleSchedule() {
+  const start = scheduleViewMode === "month"
+    ? scheduleMonthStart(scheduleCursorDate)
+    : scheduleViewMode === "week"
+      ? scheduleWeekStart(scheduleCursorDate)
+      : scheduleCursorDate;
+  const end = scheduleViewMode === "month"
+    ? scheduleMonthEnd(scheduleCursorDate)
+    : scheduleViewMode === "week"
+      ? addWeeklyDays(start, 6)
+      : start;
+  await loadAgendaRange(start, end);
+}
+
+async function saveScheduleEditor() {
+  const startAt = scheduleDateTime(scheduleEditorDate.value, scheduleEditorStart.value);
+  const endAt = scheduleDateTime(scheduleEditorDate.value, scheduleEditorEnd.value);
+  if (new Date(endAt) <= new Date(startAt)) {
+    scheduleEditorState.textContent = "结束时间必须晚于开始时间。";
+    return;
+  }
+  const itemId = scheduleEditorItemId.value;
+  const payload = {
+    title: scheduleEditorName.value.trim(),
+    start_at: startAt,
+    end_at: endAt,
+    location_name: scheduleEditorLocation.value.trim() || null,
+    kind: scheduleEditorKind.value || "task",
+  };
+  if (itemId) payload.original_start_at = scheduleEditorOriginalStart.value;
+  const response = await fetch(
+    itemId
+      ? `/api/v1/users/${consoleUserId}/agenda/items/${encodeURIComponent(itemId)}`
+      : `/api/v1/users/${consoleUserId}/agenda/items`,
+    {
+      method: itemId ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  const data = await response.json();
+  if (!response.ok) throw data;
+  scheduleCursorDate = scheduleEditorDate.value;
+  scheduleEditor.close();
+  await refreshVisibleSchedule();
+}
+
+async function deleteScheduleEditorItem() {
+  const itemId = scheduleEditorItemId.value;
+  if (!itemId || !globalThis.confirm("确定删除这项个人安排吗？")) return;
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/agenda/items/${encodeURIComponent(itemId)}`
+      + `?original_start_at=${encodeURIComponent(scheduleEditorOriginalStart.value)}`,
+    { method: "DELETE" },
+  );
+  const data = await response.json();
+  if (!response.ok) throw data;
+  scheduleEditor.close();
+  await refreshVisibleSchedule();
 }
 
 function renderScheduleViews() {
@@ -625,6 +736,12 @@ function renderScheduleViews() {
     scheduleDayView.innerHTML = scheduleCalendarNotice(selected) + (dayItems.length
       ? `<div class="schedule-day-timeline">${dayItems.map((item) => scheduleItemMarkup(item)).join("")}</div>`
       : `<div class="schedule-empty"><strong>今天还没有固定安排</strong><span>可以在对话中告诉我想完成什么，或把时间留给休息和临时变化。</span></div>`);
+    scheduleDayView.querySelectorAll("[data-schedule-edit]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const item = dayItems.find((candidate) => candidate.id === button.dataset.scheduleEdit);
+        if (item) openScheduleEditor(item);
+      });
+    });
   }
   if (scheduleViewMode === "week") {
     const weekDates = Array.from({ length: 7 }, (_, index) => addWeeklyDays(startOfWeek, index));
@@ -913,6 +1030,38 @@ function initializeWorkspaceNavigation() {
     const start = scheduleViewMode === "month" ? scheduleMonthStart(scheduleCursorDate) : scheduleViewMode === "week" ? scheduleWeekStart(scheduleCursorDate) : scheduleCursorDate;
     const end = scheduleViewMode === "month" ? scheduleMonthEnd(scheduleCursorDate) : addWeeklyDays(start, 6);
     loadAgendaRange(start, end).catch((error) => renderDebug(error));
+  });
+  scheduleAdd?.addEventListener("click", () => openScheduleEditor());
+  scheduleEditorClose?.addEventListener("click", () => scheduleEditor.close());
+  scheduleEditorCancel?.addEventListener("click", () => scheduleEditor.close());
+  scheduleEditorForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = scheduleEditorForm.querySelector('[type="submit"]');
+    submit.disabled = true;
+    scheduleEditorState.textContent = "正在保存…";
+    try {
+      await saveScheduleEditor();
+    } catch (error) {
+      scheduleEditorState.textContent = error?.error?.message || "这项日程暂时没有保存成功。";
+      renderDebug(error);
+    } finally {
+      submit.disabled = false;
+    }
+  });
+  scheduleEditorDelete?.addEventListener("click", async () => {
+    scheduleEditorDelete.disabled = true;
+    scheduleEditorState.textContent = "正在删除…";
+    try {
+      await deleteScheduleEditorItem();
+    } catch (error) {
+      scheduleEditorState.textContent = error?.error?.message || "这项日程暂时没有删除成功。";
+      renderDebug(error);
+    } finally {
+      scheduleEditorDelete.disabled = false;
+    }
+  });
+  scheduleEditor?.addEventListener("click", (event) => {
+    if (event.target === scheduleEditor) scheduleEditor.close();
   });
 
   setActiveWorkspaceView("chat");
@@ -1273,32 +1422,37 @@ const memoryDefinitions = {
   },
   walking_speed: {
     label: "步行节奏",
-    placeholder: "慢、正常或快",
+    control: "select",
+    options: [["slow", "慢"], ["normal", "正常"], ["fast", "快"]],
     category: "preference",
   },
   transport_mode: {
     label: "常用出行方式",
-    placeholder: "步行、自行车或电瓶车",
+    control: "select",
+    options: [["walk", "步行"], ["bicycle", "自行车"], ["electrobike", "电瓶车"]],
     category: "preference",
   },
   avoid_congestion: {
     label: "偏好错峰通勤",
-    placeholder: "是或否",
+    control: "select",
+    options: [["true", "是"], ["false", "否"]],
     category: "preference",
   },
   schedule_pace: {
     label: "日程节奏",
-    placeholder: "宽松、适中或紧凑",
+    control: "select",
+    options: [["relaxed", "宽松"], ["balanced", "正常"], ["compact", "紧凑"]],
     category: "preference",
   },
   activity_location: {
     label: "事项地点偏好",
-    placeholder: "例如：跑步 → 东操场；自习 → 图书馆12层",
+    control: "location_pair",
     category: "preference",
   },
   preferred_study_period: {
     label: "高效学习时段",
-    placeholder: "上午、下午或晚上",
+    control: "select",
+    options: [["morning", "上午"], ["afternoon", "下午"], ["evening", "晚上"]],
     category: "habit",
   },
   preferred_study_location: {
@@ -1329,6 +1483,12 @@ const memoryDefinitions = {
   sleep_goal_hours: {
     label: "希望睡眠时长",
     placeholder: "例如：7.5小时",
+    category: "preference",
+  },
+  custom_note: {
+    label: "自定义偏好",
+    placeholder: "填写这项偏好的具体内容",
+    control: "custom",
     category: "preference",
   },
 };
@@ -3182,7 +3342,10 @@ function parseMemoryValue(key, rawValue) {
     return minutes;
   }
   if (key === "walking_speed") {
-    const normalized = { 慢: "slow", 正常: "normal", 快: "fast" }[value];
+    const normalized = {
+      slow: "slow", normal: "normal", fast: "fast",
+      慢: "slow", 正常: "normal", 快: "fast",
+    }[value];
     if (!normalized) throw new Error("步行节奏请填写：慢、正常或快。");
     return normalized;
   }
@@ -3193,6 +3356,9 @@ function parseMemoryValue(key, rawValue) {
       骑行: "bicycle",
       电瓶车: "electrobike",
       电动车: "electrobike",
+      walk: "walk",
+      bicycle: "bicycle",
+      electrobike: "electrobike",
     }[value];
     if (!normalized) {
       throw new Error("常用出行方式请填写：步行、自行车或电瓶车。");
@@ -3212,6 +3378,9 @@ function parseMemoryValue(key, rawValue) {
       正常: "balanced",
       紧凑: "compact",
       紧: "compact",
+      relaxed: "relaxed",
+      balanced: "balanced",
+      compact: "compact",
     }[value];
     if (!normalized) throw new Error("日程节奏请填写：宽松、适中或紧凑。");
     return normalized;
@@ -3237,6 +3406,9 @@ function parseMemoryValue(key, rawValue) {
       下午: "afternoon",
       晚上: "evening",
       晚间: "evening",
+      morning: "morning",
+      afternoon: "afternoon",
+      evening: "evening",
     }[value];
     if (!normalized) throw new Error("高效学习时段请填写：上午、下午或晚上。");
     return normalized;
@@ -3335,7 +3507,36 @@ function mergeActivityLocations(existing, additions) {
 
 function updateMemoryPlaceholder() {
   const definition = memoryDefinitions[memoryType.value];
+  const control = definition?.control || "text";
+  memoryValue.hidden = !["text", "custom"].includes(control);
+  memoryValueSelect.hidden = control !== "select";
+  memoryLocationPair.hidden = control !== "location_pair";
+  memoryCustomLabel.hidden = control !== "custom";
   memoryValue.placeholder = definition?.placeholder || "填写偏好";
+  if (control === "select") {
+    memoryValueSelect.innerHTML = (definition.options || []).map(
+      ([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`,
+    ).join("");
+  }
+}
+
+function currentMemoryValue() {
+  const definition = memoryDefinitions[memoryType.value];
+  if (definition?.control === "select") return memoryValueSelect.value;
+  if (definition?.control === "location_pair") {
+    const activity = memoryActivity.value.trim();
+    const location = memoryLocation.value.trim();
+    if (!activity || !location) throw new Error("请把事项和地点都填写完整。");
+    return [{ activity, location }];
+  }
+  return memoryValue.value;
+}
+
+function resetMemoryFields() {
+  memoryValue.value = "";
+  memoryActivity.value = "";
+  memoryLocation.value = "";
+  memoryCustomLabel.value = "";
 }
 
 async function loadMemories() {
@@ -3377,10 +3578,22 @@ async function loadMemories() {
       const item = items.find((value) => value.id === button.dataset.memoryEdit);
       if (!item) return;
       memoryType.value = item.key in memoryDefinitions ? item.key : "custom_note";
-      memoryValue.value = displayMemoryValue(item.key, item.value);
       editingMemoryKey = item.key;
       updateMemoryPlaceholder();
-      memoryValue.focus();
+      const definition = memoryDefinitions[memoryType.value];
+      if (definition?.control === "select") {
+        memoryValueSelect.value = String(item.value);
+        memoryValueSelect.focus();
+      } else if (definition?.control === "location_pair") {
+        const [mapping] = normalizeActivityLocations(item.value);
+        memoryActivity.value = mapping?.activity || "";
+        memoryLocation.value = mapping?.location || "";
+        memoryActivity.focus();
+      } else {
+        memoryValue.value = displayMemoryValue(item.key, item.value);
+        if (memoryType.value === "custom_note") memoryCustomLabel.value = item.label;
+        memoryValue.focus();
+      }
     });
   });
   memoryList.querySelectorAll("[data-memory-toggle]").forEach((button) => {
@@ -3420,24 +3633,33 @@ async function loadMemories() {
 
 memoryType.addEventListener("change", () => {
   editingMemoryKey = null;
-  memoryValue.value = "";
+  resetMemoryFields();
   updateMemoryPlaceholder();
 });
 memorySave.addEventListener("click", async () => {
   const definition = memoryDefinitions[memoryType.value];
   try {
-    let parsedValue = parseMemoryValue(memoryType.value, memoryValue.value);
-    if (memoryType.value === "activity_location" && editingMemoryKey !== "activity_location") {
+    const customLabel = memoryCustomLabel.value.trim();
+    if (memoryType.value === "custom_note" && !customLabel) {
+      throw new Error("请先填写自定义偏好的名称。");
+    }
+    let parsedValue = definition.control === "location_pair"
+      ? currentMemoryValue()
+      : parseMemoryValue(memoryType.value, currentMemoryValue());
+    if (memoryType.value === "activity_location") {
       const existing = loadedMemories.find((item) => item.key === "activity_location");
       parsedValue = mergeActivityLocations(existing?.value, parsedValue);
     }
+    const memoryKey = memoryType.value === "custom_note"
+      ? (editingMemoryKey || `custom_${Date.now().toString(36)}`)
+      : memoryType.value;
     const response = await fetch(`/api/v1/users/${consoleUserId}/memories`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         category: definition.category,
-        key: memoryType.value,
-        label: definition.label,
+        key: memoryKey,
+        label: memoryType.value === "custom_note" ? customLabel : definition.label,
         value: parsedValue,
         enabled: true,
       }),
@@ -3452,7 +3674,7 @@ memorySave.addEventListener("click", async () => {
         ...current.filter((item) => item.key !== data.key),
       ],
     );
-    memoryValue.value = "";
+    resetMemoryFields();
     editingMemoryKey = null;
     await loadMemories();
     await loadAgenda(agendaDate.value || shanghaiDateString());
