@@ -154,6 +154,8 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
     @application.middleware("http")
     async def add_security_headers(request: Request, call_next):
         response = await call_next(request)
+        if request.url.path in {"/", "/index.html", "/app.js", "/styles.css"}:
+            response.headers["Cache-Control"] = "no-cache"
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")

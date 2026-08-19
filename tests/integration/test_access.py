@@ -111,6 +111,7 @@ def test_public_defaults_disable_api_docs_and_add_security_headers(tmp_path):
     with TestClient(protected_app(tmp_path)) as client:
         response = client.get("/")
         assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-cache"
         assert response.headers["x-content-type-options"] == "nosniff"
         assert response.headers["x-frame-options"] == "DENY"
         assert response.headers["referrer-policy"] == "same-origin"
@@ -123,3 +124,7 @@ def test_public_defaults_disable_api_docs_and_add_security_headers(tmp_path):
         assert client.get("/docs").status_code == 404
         assert client.get("/redoc").status_code == 404
         assert client.get("/openapi.json").status_code == 404
+
+        script = client.get("/app.js?v=cache-bust")
+        assert script.status_code == 200
+        assert script.headers["cache-control"] == "no-cache"
