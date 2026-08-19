@@ -233,6 +233,10 @@ def test_schedule_marks_verified_holidays_and_pending_makeup_days() -> None:
     assert 'id="timetable-term-view"' in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
+    assert 'app.js?v=20260819-6' in (WEB_ROOT / "index.html").read_text(
+        encoding="utf-8"
+    )
+    assert 'timetableTermView?.addEventListener("change"' in javascript
     assert "function renderTimetableTerms" in javascript
     assert "item.start_at))}—${escapeHtml(timePart(item.end_at))" in javascript
     assert ".schedule-month-cell.is-holiday" in styles

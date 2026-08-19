@@ -3701,7 +3701,7 @@ function renderTimetableTerms(terms, preferredKey = "") {
   });
 }
 
-timetableTermView.addEventListener("change", () => {
+timetableTermView?.addEventListener("change", () => {
   const selected = syncedTimetableTerms.find(
     (term) => timetableTermKey(term) === timetableTermView.value,
   );
