@@ -1,4 +1,5 @@
 const accessTokenKey = "yicheng_access_token";
+const sessionModeKey = "yicheng_session_mode";
 const originalFetch = globalThis.fetch.bind(globalThis);
 globalThis.fetch = (resource, options = {}) => {
   const token = localStorage.getItem(accessTokenKey);
@@ -53,10 +54,6 @@ const memoryType = $("#memory-type");
 const memoryValue = $("#memory-value");
 const memorySave = $("#memory-save");
 const memoryList = $("#memory-list");
-const profileExport = $("#profile-export");
-const profileImportFile = $("#profile-import-file");
-const profileRestore = $("#profile-restore");
-const profileBackupState = $("#profile-backup-state");
 const personalizationToggle = $("#personalization-toggle");
 const personalizationReset = $("#personalization-reset");
 const personalizationState = $("#personalization-state");
@@ -77,6 +74,10 @@ const hduhelpBadge = $("#hduhelp-badge");
 const hduhelpState = $("#hduhelp-state");
 const hduhelpConnectForm = $("#hduhelp-connect-form");
 const hduhelpSyncForm = $("#hduhelp-sync-form");
+const hduhelpWechat = $("#hduhelp-wechat");
+const hduhelpQr = $("#hduhelp-qr");
+const hduhelpWechatState = $("#hduhelp-wechat-state");
+const hduhelpDataSummary = $("#hduhelp-data-summary");
 const calendarDate = $("#calendar-date");
 const calendarAction = $("#calendar-action");
 const calendarWeekday = $("#calendar-weekday");
@@ -116,6 +117,9 @@ const reminderSave = $("#reminder-save");
 const reminderState = $("#reminder-state");
 const agendaExport = $("#agenda-export");
 const accessGate = $("#access-gate");
+const sessionModeGate = $("#session-mode-gate");
+const normalSession = $("#normal-session");
+const testSession = $("#test-session");
 const loginForm = $("#login-form");
 const loginUsername = $("#login-username");
 const loginPassword = $("#login-password");
@@ -161,7 +165,7 @@ let lastResultQuery = "";
 let lastResultData = null;
 let pendingPlanCandidate = null;
 let activePlanningNowOverride = null;
-const consoleUserId = getOrCreateLocalIdentity(
+let consoleUserId = getOrCreateLocalIdentity(
   "yicheng_user_id",
   "visitor",
 );
@@ -179,7 +183,6 @@ let lastDebugPayload = null;
 let serverClockBaseMs = null;
 let serverClockFetchedAtMs = null;
 let pendingTimetableImport = null;
-let pendingProfileBackup = null;
 let currentCampusProfile = null;
 const memorySnapshotKey = "yicheng_memory_snapshot";
 const timetableSnapshotKey = "yicheng_timetable_snapshot";
@@ -383,7 +386,7 @@ function completeConversationTurn(answerText) {
 
 function moveToolPanelsIntoWorkspace() {
   if (!contentColumn) return;
-  [".timetable-panel", ".memory-panel", ".backup-panel", ".execution-panel"]
+  [".hduhelp-panel", ".timetable-panel", ".memory-panel", ".execution-panel"]
     .map((selector) => document.querySelector(selector))
     .filter(Boolean)
     .forEach((panel) => {
@@ -397,7 +400,7 @@ function setPanelHidden(panel, hidden) {
 
 function setActiveWorkspaceView(view = "chat") {
   const supported = new Set([
-    "chat", "schedule", "timetable", "preferences", "backup", "weekly-planner",
+    "chat", "schedule", "hduhelp", "timetable", "preferences", "weekly-planner",
   ]);
   activeWorkspaceView = supported.has(view) ? view : "chat";
   workspace?.setAttribute("data-active-view", activeWorkspaceView);
@@ -412,7 +415,7 @@ function setActiveWorkspaceView(view = "chat") {
   const hasPlanResult = document.body.classList.contains("has-plan-result");
   const isSchedule = activeWorkspaceView === "schedule";
   const isWeeklyPlanner = activeWorkspaceView === "weekly-planner";
-  const isToolPage = ["timetable", "preferences", "backup"].includes(activeWorkspaceView);
+  const isToolPage = ["hduhelp", "timetable", "preferences"].includes(activeWorkspaceView);
 
   conversationOutline?.classList.toggle("is-workspace-hidden", !isChat);
 
@@ -426,9 +429,9 @@ function setActiveWorkspaceView(view = "chat") {
   setPanelHidden(schedulePanel, !isSchedule);
   setPanelHidden(agendaPanel, true);
   setPanelHidden(weeklyPanel, !isWeeklyPlanner);
+  setPanelHidden(document.querySelector(".hduhelp-panel"), activeWorkspaceView !== "hduhelp");
   setPanelHidden(document.querySelector(".timetable-panel"), activeWorkspaceView !== "timetable");
   setPanelHidden(document.querySelector(".memory-panel"), activeWorkspaceView !== "preferences");
-  setPanelHidden(document.querySelector(".backup-panel"), activeWorkspaceView !== "backup");
   setPanelHidden(document.querySelector(".execution-panel"), true);
   if (isSchedule) renderScheduleViews();
   if (isToolPage) closeDrawers();
@@ -922,316 +925,6 @@ function initializeWorkspaceNavigation() {
   setActiveWorkspaceView("chat");
 }
 
-function memoryBackupItems(items) {
-  return (items || []).slice(0, 100).map((item) => ({
-    category: item.category,
-    key: item.key,
-    label: item.label,
-    value: item.value,
-    enabled: item.enabled !== false,
-  }));
-}
-
-function timetableBackupValue(value) {
-  if (!value?.entries?.length) return null;
-  return {
-    name: value.timetable?.name || "我的课表",
-    term_start: value.timetable?.term_start || null,
-    term_end: value.timetable?.term_end || null,
-    enabled: value.timetable?.enabled !== false,
-    entries: value.entries.slice(0, 500).map((item) => ({
-      course_name: item.course_name,
-      weekday: item.weekday,
-      start_period: item.start_period,
-      end_period: item.end_period,
-      location: item.location || null,
-      weeks: item.weeks || [],
-    })),
-  };
-}
-
-function calendarBackupItems(items) {
-  return (items || []).slice(0, 366).map((item) => ({
-    date: item.date,
-    action: item.action,
-    replacement_weekday: item.replacement_weekday || null,
-    label: item.label || "学校校历调整",
-    source_ref: item.source_ref || null,
-  }));
-}
-
-async function buildPersonalDataBackup() {
-  const localMemories = readLocalSnapshot(memorySnapshotKey, []);
-  const localTimetable = readLocalSnapshot(timetableSnapshotKey, null);
-  const localCalendar = readLocalSnapshot(calendarSnapshotKey, []);
-  const localPlan = readLocalSnapshot(planSnapshotKey, null);
-  const query = new URLSearchParams({ thread_id: consoleThreadId });
-  let server = null;
-  try {
-    const response = await fetch(
-      `/api/v1/users/${consoleUserId}/profile?${query}`,
-    );
-    if (response.ok) server = await response.json();
-  } catch {
-    // A local backup must still be available during a temporary server outage.
-  }
-  return {
-    product: "yicheng-agent",
-    schema_version: "1.0",
-    exported_at: new Date().toISOString(),
-    user_id: consoleUserId,
-    thread_id: consoleThreadId,
-    memories: localMemories.length
-      ? memoryBackupItems(localMemories)
-      : server?.memories || [],
-    timetable: timetableBackupValue(localTimetable)
-      || server?.timetable
-      || null,
-    calendar_overrides: localCalendar.length
-      ? calendarBackupItems(localCalendar)
-      : server?.calendar_overrides || [],
-    reminder_settings: currentReminderSettings
-      || readLocalSnapshot(reminderSettingsSnapshotKey, null)
-      || server?.reminder_settings
-      || null,
-    current_plan: localPlan || server?.current_plan || null,
-    current_plan_published: Boolean(
-      (localPlan && localStorage.getItem(planPublishedKey) === localPlan.id)
-      || (!localPlan && server?.current_plan_published),
-    ),
-    client_state: {
-      memory_snapshot: localMemories,
-      timetable_snapshot: localTimetable,
-      calendar_snapshot: localCalendar,
-      plan_snapshot: localPlan,
-      campus_snapshot: readLocalSnapshot(campusSnapshotKey, null),
-      behavior_history: readLocalSnapshot(behaviorHistoryKey, []),
-      suggestion_feedback: readLocalSnapshot(suggestionFeedbackKey, {}),
-      personalization_enabled:
-        localStorage.getItem(personalizationEnabledKey) === "true",
-      shown_reminders: readLocalSnapshot(shownReminderKey, {}),
-      reminder_settings_snapshot: readLocalSnapshot(
-        reminderSettingsSnapshotKey,
-        null,
-      ),
-    },
-  };
-}
-
-function validatePersonalDataBackup(value) {
-  if (!value || typeof value !== "object") {
-    throw new Error("这不是有效的易程智策数据包。");
-  }
-  if (value.product !== "yicheng-agent" || value.schema_version !== "1.0") {
-    throw new Error("备份文件版本不受支持，请选择由易程智策导出的文件。");
-  }
-  const identityPattern = /^[A-Za-z0-9_-]+$/;
-  if (
-    typeof value.user_id !== "string"
-    || !identityPattern.test(value.user_id)
-    || value.user_id.length > 64
-    || typeof value.thread_id !== "string"
-    || !identityPattern.test(value.thread_id)
-    || value.thread_id.length > 128
-  ) {
-    throw new Error("备份文件中的用户标识不合法。");
-  }
-  if (!Array.isArray(value.memories) || value.memories.length > 100) {
-    throw new Error("备份文件中的长期记忆数量不合法。");
-  }
-  if (
-    value.timetable
-    && (
-      !Array.isArray(value.timetable.entries)
-      || value.timetable.entries.length > 500
-    )
-  ) {
-    throw new Error("备份文件中的课表数量不合法。");
-  }
-  if (
-    !Array.isArray(value.calendar_overrides)
-    || value.calendar_overrides.length > 366
-  ) {
-    throw new Error("备份文件中的校历调整数量不合法。");
-  }
-  return value;
-}
-
-function personalDataSummary(value) {
-  const courseCount = value.timetable?.entries?.length || 0;
-  const calendarCount = value.calendar_overrides?.length || 0;
-  const planLabel = value.current_plan ? "、1份当前计划" : "";
-  return (
-    `已识别 ${value.memories.length} 条长期记忆、${courseCount} 个课程时段、`
-    + `${calendarCount} 条校历调整${planLabel}。请确认后再恢复。`
-  );
-}
-
-profileExport.addEventListener("click", async () => {
-  profileExport.disabled = true;
-  profileExport.textContent = "正在整理个人数据…";
-  profileBackupState.className = "storage-note";
-  try {
-    const backup = await buildPersonalDataBackup();
-    const blob = new Blob(
-      [JSON.stringify(backup, null, 2)],
-      { type: "application/json;charset=utf-8" },
-    );
-    const link = document.createElement("a");
-    const date = shanghaiDateString();
-    link.href = URL.createObjectURL(blob);
-    link.download = `易程智策个人数据_${date}.json`;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(link.href);
-    profileBackupState.textContent = (
-      "备份已经生成。文件不含密码、登录凭证或 API 密钥，请妥善保存。"
-    );
-    profileBackupState.classList.add("ready");
-  } catch (error) {
-    profileBackupState.textContent = (
-      error instanceof Error ? error.message : "个人数据暂时无法导出。"
-    );
-    profileBackupState.classList.add("error");
-    renderDebug(error);
-  } finally {
-    profileExport.disabled = false;
-    profileExport.textContent = "导出我的数据备份";
-  }
-});
-
-profileImportFile.addEventListener("change", async () => {
-  pendingProfileBackup = null;
-  profileRestore.hidden = true;
-  profileBackupState.className = "storage-note";
-  const file = profileImportFile.files?.[0];
-  if (!file) return;
-  if (file.size > 2_000_000) {
-    profileBackupState.textContent = "备份文件不能超过 2 MB。";
-    profileBackupState.classList.add("error");
-    return;
-  }
-  try {
-    const backup = validatePersonalDataBackup(
-      JSON.parse(await file.text()),
-    );
-    pendingProfileBackup = backup;
-    profileBackupState.textContent = personalDataSummary(backup);
-    profileBackupState.classList.add("ready");
-    profileRestore.hidden = false;
-  } catch (error) {
-    profileBackupState.textContent = (
-      error instanceof Error ? error.message : "备份文件无法读取。"
-    );
-    profileBackupState.classList.add("error");
-  }
-});
-
-profileRestore.addEventListener("click", async () => {
-  if (!pendingProfileBackup) return;
-  profileRestore.disabled = true;
-  profileRestore.textContent = "正在恢复个人数据…";
-  profileBackupState.className = "storage-note";
-  try {
-    const backup = pendingProfileBackup;
-    const response = await fetch(
-      `/api/v1/users/${backup.user_id}/profile/restore`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(backup),
-      },
-    );
-    const result = await response.json();
-    if (!response.ok) throw result;
-
-    localStorage.setItem("yicheng_user_id", backup.user_id);
-    localStorage.setItem("yicheng_thread_id", backup.thread_id);
-    const client = backup.client_state || {};
-    writeLocalSnapshot(
-      memorySnapshotKey,
-      client.memory_snapshot?.length
-        ? client.memory_snapshot
-        : backup.memories,
-    );
-    writeLocalSnapshot(
-      timetableSnapshotKey,
-      client.timetable_snapshot
-        || (
-          backup.timetable
-            ? {
-                timetable: {
-                  name: backup.timetable.name,
-                  term_start: backup.timetable.term_start,
-                  term_end: backup.timetable.term_end,
-                  enabled: backup.timetable.enabled,
-                },
-                entries: backup.timetable.entries,
-              }
-            : null
-        ),
-    );
-    writeLocalSnapshot(
-      calendarSnapshotKey,
-      client.calendar_snapshot?.length
-        ? client.calendar_snapshot
-        : backup.calendar_overrides,
-    );
-    writeLocalSnapshot(
-      planSnapshotKey,
-      client.plan_snapshot || backup.current_plan || null,
-    );
-    const restoredPlan = client.plan_snapshot || backup.current_plan || null;
-    if (backup.current_plan_published && restoredPlan?.id) {
-      localStorage.setItem(planPublishedKey, restoredPlan.id);
-    } else {
-      localStorage.removeItem(planPublishedKey);
-    }
-    writeLocalSnapshot(
-      campusSnapshotKey,
-      client.campus_snapshot || null,
-    );
-    writeLocalSnapshot(
-      behaviorHistoryKey,
-      client.behavior_history || [],
-    );
-    writeLocalSnapshot(
-      suggestionFeedbackKey,
-      client.suggestion_feedback || {},
-    );
-    localStorage.setItem(
-      personalizationEnabledKey,
-      String(client.personalization_enabled === true),
-    );
-    writeLocalSnapshot(
-      shownReminderKey,
-      client.shown_reminders || {},
-    );
-    writeLocalSnapshot(
-      reminderSettingsSnapshotKey,
-      client.reminder_settings_snapshot
-        || backup.reminder_settings
-        || null,
-    );
-    profileBackupState.textContent = (
-      `恢复完成：${result.memories_restored} 条记忆、`
-      + `${result.timetable_entries_restored} 个课程时段。`
-      + "页面即将刷新并重新汇总日程。"
-    );
-    profileBackupState.classList.add("ready");
-    setTimeout(() => globalThis.location.reload(), 900);
-  } catch (error) {
-    profileBackupState.textContent = error?.error?.message
-      || "个人数据暂时没有恢复成功，原有数据未被清除。";
-    profileBackupState.classList.add("error");
-    renderDebug(error);
-  } finally {
-    profileRestore.disabled = false;
-    profileRestore.textContent = "确认恢复到这台设备";
-  }
-});
-
 function clientContextSnapshot() {
   const memories = readLocalSnapshot(memorySnapshotKey, []);
   const timetableData = readLocalSnapshot(timetableSnapshotKey, null);
@@ -1399,6 +1092,11 @@ async function initializeAccess() {
     if (status.authenticated) {
       accessGate.hidden = true;
       logoutButton.hidden = false;
+      if (!localStorage.getItem(sessionModeKey)) {
+        sessionModeGate.hidden = false;
+        return false;
+      }
+      sessionModeGate.hidden = true;
       return true;
     }
     localStorage.removeItem(accessTokenKey);
@@ -1439,6 +1137,18 @@ loginForm.addEventListener("submit", async (event) => {
 
 logoutButton.addEventListener("click", () => {
   localStorage.removeItem(accessTokenKey);
+  localStorage.removeItem(sessionModeKey);
+  globalThis.location.reload();
+});
+
+normalSession.addEventListener("click", () => {
+  localStorage.setItem(sessionModeKey, "normal");
+  localStorage.setItem("yicheng_initial_view", "hduhelp");
+  globalThis.location.reload();
+});
+
+testSession.addEventListener("click", () => {
+  localStorage.setItem(sessionModeKey, "test");
   globalThis.location.reload();
 });
 
@@ -3696,15 +3406,25 @@ function renderHduHelpConnection(data) {
     </option>
   `).join("");
   hduhelpState.classList.remove("error", "ready");
+  const labels = {
+    course: "课程",
+    library_reservation: "自习预约",
+    second_classroom: "二课",
+    exam: "考试",
+  };
+  hduhelpDataSummary.innerHTML = Object.entries(data?.synced_counts || {})
+    .filter(([, count]) => Number(count) > 0)
+    .map(([key, count]) => `<span>${escapeHtml(labels[key] || key)} ${Number(count)}</span>`)
+    .join("");
   if (!connected) {
-    hduhelpState.textContent = (
-      "建议只授予身份读取和课表读取权限，并设置较短有效期。"
-    );
+    hduhelpState.textContent = data?.oauth_ready
+      ? "可以微信登录，也可以在测试期间使用个人访问令牌。"
+      : "微信登录等待杭助应用 Client ID；当前可使用个人访问令牌或测试体验。";
     return;
   }
   hduhelpState.textContent = data.last_synced_at
-    ? `已连接${data.display_name ? `：${data.display_name}` : ""}，课表同步过。`
-    : `已连接${data.display_name ? `：${data.display_name}` : ""}，请选择学期同步。`;
+    ? `已连接${data.display_name ? `：${data.display_name}` : ""}，校园数据已同步。`
+    : `已连接${data.display_name ? `：${data.display_name}` : ""}，请选择学期后同步全部数据。`;
   hduhelpState.classList.add("ready");
 }
 
@@ -3715,6 +3435,15 @@ async function loadHduHelpConnection() {
   const data = await response.json();
   if (!response.ok) throw data;
   renderHduHelpConnection(data);
+  const syncedAt = Date.parse(data.last_synced_at || "");
+  const needsRefresh = data.connected && hduhelpTerm.value && (
+    !Number.isFinite(syncedAt) || Date.now() - syncedAt > 15 * 60 * 1000
+  );
+  const autoSyncKey = `yicheng_hduhelp_autosync_${consoleUserId}`;
+  if (needsRefresh && sessionStorage.getItem(autoSyncKey) !== "running") {
+    sessionStorage.setItem(autoSyncKey, "running");
+    setTimeout(() => hduhelpSync.click(), 0);
+  }
 }
 
 hduhelpConnect.addEventListener("click", async () => {
@@ -3753,6 +3482,61 @@ hduhelpConnect.addEventListener("click", async () => {
   }
 });
 
+let hduhelpPollTimer = null;
+hduhelpWechat.addEventListener("click", async () => {
+  hduhelpWechat.disabled = true;
+  hduhelpWechatState.textContent = "正在创建杭电助手微信登录…";
+  try {
+    const response = await fetch(
+      `/api/v1/users/${consoleUserId}/connections/hduhelp/wechat/start`,
+      { method: "POST" },
+    );
+    const data = await response.json();
+    if (!response.ok) throw data;
+    hduhelpWechatState.textContent = data.message;
+    if (!data.ready || !data.authorize_url || !data.poll_token) return;
+    hduhelpQr.hidden = false;
+    hduhelpQr.innerHTML = `
+      ${data.qr_data_url ? `<img src="${escapeHtml(data.qr_data_url)}" alt="杭电助手微信登录二维码" />` : ""}
+      <a class="ghost hduhelp-open-wechat" href="${escapeHtml(data.authorize_url)}" target="_blank" rel="noreferrer">在微信中打开授权页面</a>
+    `;
+    clearInterval(hduhelpPollTimer);
+    hduhelpPollTimer = setInterval(async () => {
+      try {
+        const pollResponse = await fetch(
+          `/api/v1/users/${consoleUserId}/connections/hduhelp/wechat/poll`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ poll_token: data.poll_token }),
+          },
+        );
+        const poll = await pollResponse.json();
+        if (!pollResponse.ok) throw poll;
+        hduhelpWechatState.textContent = poll.message;
+        if (poll.status === "authorized" && poll.user_id) {
+          clearInterval(hduhelpPollTimer);
+          localStorage.setItem("yicheng_user_id", poll.user_id);
+          localStorage.setItem(sessionModeKey, "normal");
+          globalThis.location.reload();
+        }
+        if (["failed", "expired"].includes(poll.status)) {
+          clearInterval(hduhelpPollTimer);
+        }
+      } catch (error) {
+        clearInterval(hduhelpPollTimer);
+        hduhelpWechatState.textContent = error?.error?.message || "二维码状态读取失败，请重新生成。";
+        renderDebug(error);
+      }
+    }, 1800);
+  } catch (error) {
+    hduhelpWechatState.textContent = error?.error?.message || "微信登录暂时不可用。";
+    renderDebug(error);
+  } finally {
+    hduhelpWechat.disabled = false;
+  }
+});
+
 hduhelpDisconnect.addEventListener("click", async () => {
   hduhelpDisconnect.disabled = true;
   try {
@@ -3775,12 +3559,6 @@ hduhelpDisconnect.addEventListener("click", async () => {
 });
 
 hduhelpSync.addEventListener("click", async () => {
-  if (!termStart.value) {
-    hduhelpState.textContent = "请先填写第一教学周周一。";
-    hduhelpState.classList.add("error");
-    termStart.focus();
-    return;
-  }
   const [schoolYear, semester] = hduhelpTerm.value.split("|");
   if (!schoolYear || !semester) {
     hduhelpState.textContent = "请先选择要同步的学期。";
@@ -3793,15 +3571,13 @@ hduhelpSync.addEventListener("click", async () => {
   hduhelpState.classList.remove("error", "ready");
   try {
     const response = await fetch(
-      `/api/v1/users/${consoleUserId}/connections/hduhelp/sync-timetable`,
+      `/api/v1/users/${consoleUserId}/connections/hduhelp/sync`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           school_year: schoolYear,
           semester: Number(semester),
-          term_start: termStart.value,
-          term_end: termEnd.value || null,
           name: `${schoolYear} 杭电课表`,
         }),
       },
@@ -3810,10 +3586,14 @@ hduhelpSync.addEventListener("click", async () => {
     if (!response.ok) throw data;
     writeLocalSnapshot(timetableSnapshotKey, data);
     timetableName.value = data.timetable?.name || "我的课表";
-    termEnd.value = data.timetable?.term_end || termEnd.value;
+    termStart.value = data.timetable?.term_start || "";
+    termEnd.value = data.timetable?.term_end || "";
     renderTimetable(data);
-    hduhelpState.textContent = `已同步 ${data.imported_count} 个课程时段。`;
+    const warning = data.warnings?.length ? `；${data.warnings.join("；")}` : "";
+    hduhelpState.textContent = `已同步 ${data.imported_count} 个课程时段和校园安排${warning}`;
     hduhelpState.classList.add("ready");
+    sessionStorage.removeItem(`yicheng_hduhelp_autosync_${consoleUserId}`);
+    await loadHduHelpConnection();
     await loadAgenda(agendaDate.value || shanghaiDateString());
   } catch (error) {
     hduhelpState.textContent = error?.error?.message
@@ -3822,7 +3602,7 @@ hduhelpSync.addEventListener("click", async () => {
     renderDebug(error);
   } finally {
     hduhelpSync.disabled = false;
-    hduhelpSync.textContent = "同步所选学期课表";
+    hduhelpSync.textContent = "同步全部校园数据";
   }
 });
 
@@ -4197,6 +3977,11 @@ async function initializeApp() {
   loadHduHelpConnection().catch((error) => renderDebug(error));
   loadTimetable().catch((error) => renderDebug(error));
   loadCalendarOverrides().catch((error) => renderDebug(error));
+  const initialView = localStorage.getItem("yicheng_initial_view");
+  if (initialView) {
+    localStorage.removeItem("yicheng_initial_view");
+    setActiveWorkspaceView(initialView);
+  }
 }
 
 initializeApp();

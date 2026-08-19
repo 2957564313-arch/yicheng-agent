@@ -23,14 +23,31 @@ class HduHelpClient:
         self.transport = transport
 
     def _get(self, path: str, token: str) -> Any:
+        return self._request("GET", path, token=token)
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        token: str | None = None,
+        json_body: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
         try:
             with httpx.Client(
                 base_url=self.base_url,
                 timeout=self.timeout_seconds,
                 transport=self.transport,
-                headers={"Authorization": f"Bearer {token}"},
+                headers=headers,
             ) as client:
-                response = client.get(path)
+                response = client.request(
+                    method,
+                    path,
+                    json=json_body,
+                    params=params,
+                )
         except httpx.TimeoutException as exc:
             raise AppError(
                 "HDUHELP_TIMEOUT",
@@ -66,11 +83,20 @@ class HduHelpClient:
                 "杭电助手返回了无法识别的数据。",
                 status_code=502,
             ) from exc
-        if not isinstance(payload, dict) or "data" not in payload:
+        if not isinstance(payload, dict):
             raise AppError(
                 "HDUHELP_INVALID_RESPONSE",
                 "杭电助手返回的数据结构不完整。",
                 status_code=502,
+            )
+        provider_code = payload.get("code", 0)
+        if provider_code not in {0, 200, None} or "data" not in payload:
+            message = str(payload.get("msg") or "杭电助手暂时没有返回可用数据。")
+            raise AppError(
+                "HDUHELP_PROVIDER_ERROR",
+                message[:240],
+                status_code=502,
+                retryable=True,
             )
         return payload["data"]
 
@@ -93,6 +119,84 @@ class HduHelpClient:
                 status_code=502,
             )
         return [item for item in data if isinstance(item, dict)]
+
+    def school_time(self, token: str) -> dict[str, Any]:
+        data = self._get("/hduhelp-neo/academic/schooltime/time", token)
+        return data if isinstance(data, dict) else {}
+
+    def exams(self, token: str, school_year: str, semester: int) -> list[dict[str, Any]]:
+        data = self._request(
+            "GET",
+            "/hduhelp-neo/academic/exam",
+            token=token,
+            params={"schoolYear": school_year, "semester": semester},
+        )
+        return [item for item in data if isinstance(item, dict)] if isinstance(data, list) else []
+
+    def library_reservations(self, token: str) -> list[dict[str, Any]]:
+        data = self._get("/hduhelp-neo/academic/library/seat/reservations", token)
+        return [item for item in data if isinstance(item, dict)] if isinstance(data, list) else []
+
+    def library_bookings(self, token: str) -> list[dict[str, Any]]:
+        data = self._get("/hduhelp-neo/library-booking/bookings", token)
+        if not isinstance(data, dict):
+            return []
+        rows = data.get("bookings")
+        return [item for item in rows if isinstance(item, dict)] if isinstance(rows, list) else []
+
+    def my_activities(self, token: str) -> list[dict[str, Any]]:
+        data = self._request(
+            "GET",
+            "/hduhelp-neo/campuslife/activities/mine",
+            token=token,
+            params={"status": 0, "page": 1, "pageSize": 100},
+        )
+        if not isinstance(data, dict):
+            return []
+        rows = data.get("items")
+        return [item for item in rows if isinstance(item, dict)] if isinstance(rows, list) else []
+
+    def create_wechat_qr(
+        self,
+        *,
+        client_id: str,
+        redirect_uri: str,
+    ) -> dict[str, Any]:
+        data = self._request(
+            "POST",
+            "/hduhelp-neo/identity/login/wechat/qr",
+            json_body={
+                "client_id": client_id,
+                "redirect_uri": redirect_uri,
+                "return_to": "/",
+                "flow": "login",
+            },
+        )
+        return data if isinstance(data, dict) else {}
+
+    def poll_wechat_qr(self, poll_token: str) -> dict[str, Any]:
+        data = self._request(
+            "POST",
+            "/hduhelp-neo/identity/login/wechat/qr/status",
+            json_body={"poll_token": poll_token},
+        )
+        return data if isinstance(data, dict) else {}
+
+    def exchange_login_code(self, code: str) -> dict[str, Any]:
+        data = self._request(
+            "POST",
+            "/hduhelp-neo/identity/login/exchange",
+            json_body={"code": code},
+        )
+        return data if isinstance(data, dict) else {}
+
+    def refresh_login_token(self, refresh_token: str) -> dict[str, Any]:
+        data = self._request(
+            "POST",
+            "/hduhelp-neo/identity/auth/token/refresh",
+            json_body={"refreshToken": refresh_token},
+        )
+        return data if isinstance(data, dict) else {}
 
 
 def available_terms(rows: list[dict[str, Any]]) -> list[HduHelpTerm]:

@@ -23,6 +23,7 @@ from app.repositories.academic_calendar import AcademicCalendarRepository
 from app.repositories.connections import ExternalConnectionRepository
 from app.repositories.conversations import ConversationRepository
 from app.repositories.database import Database
+from app.repositories.external_agenda import ExternalAgendaRepository
 from app.repositories.memories import MemoryRepository
 from app.repositories.plans import PlanRepository
 from app.repositories.reminders import ReminderSettingsRepository
@@ -49,6 +50,7 @@ class AppContainer:
     database: Database
     conversations: ConversationRepository
     external_connections: ExternalConnectionRepository
+    external_agenda: ExternalAgendaRepository
     credential_cipher: CredentialCipher
     hduhelp: HduHelpClient
     plans: PlanRepository
@@ -115,6 +117,7 @@ def build_container(settings: Settings) -> AppContainer:
     database.initialize()
     conversations = ConversationRepository(database)
     external_connections = ExternalConnectionRepository(database)
+    external_agenda = ExternalAgendaRepository(database)
     credential_cipher = CredentialCipher(settings.credential_secret)
     hduhelp = HduHelpClient(
         base_url=settings.hduhelp_api_base_url,
@@ -192,6 +195,7 @@ def build_container(settings: Settings) -> AppContainer:
     agenda = AgendaService(
         plans=plans,
         timetables=timetables,
+        external_agenda=external_agenda,
         academic_calendar=academic_calendar,
         memories=memories,
         locations=locations,
@@ -237,6 +241,7 @@ def build_container(settings: Settings) -> AppContainer:
         database=database,
         conversations=conversations,
         external_connections=external_connections,
+        external_agenda=external_agenda,
         credential_cipher=credential_cipher,
         hduhelp=hduhelp,
         plans=plans,

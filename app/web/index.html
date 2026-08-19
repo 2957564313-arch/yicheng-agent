@@ -38,11 +38,22 @@
             required
           />
         </label>
-        <button class="primary" type="submit">进入测试</button>
+        <button class="primary" type="submit">继续</button>
         <small id="login-message">
           请输入参赛材料中提供的测试账号和密码。
         </small>
       </form>
+    </section>
+    <section id="session-mode-gate" class="access-gate" hidden>
+      <div class="access-card session-mode-card">
+        <div class="brand-mark" aria-hidden="true">易</div>
+        <p class="eyebrow">选择使用方式</p>
+        <h1>进入自己的空间</h1>
+        <p>正常使用会连接杭电助手并同步个人校园数据；测试体验不绑定校园账号。</p>
+        <button id="normal-session" class="primary" type="button">正常使用 · 微信登录</button>
+        <button id="test-session" class="ghost" type="button">测试体验 · 直接进入</button>
+        <small>两种方式都需要先通过比赛测试账号验证。</small>
+      </div>
     </section>
     <header class="masthead">
       <div class="brand">
@@ -104,14 +115,14 @@
             <button type="button" class="workspace-nav-button" data-view="schedule">
               <span class="nav-icon">▦</span><span>日程</span><small>日 · 周 · 月</small>
             </button>
+            <button type="button" class="workspace-nav-button" data-view="hduhelp">
+              <span class="nav-icon">联</span><span>杭电助手</span><small>账号与校园数据</small>
+            </button>
             <button type="button" class="workspace-nav-button" data-view="timetable">
-              <span class="nav-icon">▤</span><span>我的课表</span><small>同步与校历</small>
+              <span class="nav-icon">▤</span><span>我的课表</span><small>课程与校历</small>
             </button>
             <button type="button" class="workspace-nav-button" data-view="preferences">
               <span class="nav-icon">♡</span><span>偏好</span><small>让安排越来越懂你</small>
-            </button>
-            <button type="button" class="workspace-nav-button" data-view="backup">
-              <span class="nav-icon">⇩</span><span>备份</span><small>换设备也不丢数据</small>
             </button>
           </nav>
           <div id="history-list" class="history-list"></div>
@@ -204,6 +215,56 @@
             </div>
           </article>
 
+          <article class="panel hduhelp-panel tool-collapsible">
+            <div class="panel-heading compact">
+              <div>
+                <p class="step">校园账号</p>
+                <h2>杭电助手</h2>
+              </div>
+              <span id="hduhelp-badge" class="connection-badge">未连接</span>
+            </div>
+            <p class="panel-note">
+              连接后统一同步个人课表、考试、图书馆自习预约和已报名二课。
+              校园系统记录优先；预约或活动取消后，下次同步会从日程中移除。
+            </p>
+            <section class="hduhelp-card" aria-labelledby="hduhelp-title">
+              <div class="hduhelp-card-heading">
+                <div>
+                  <p class="integration-label">正常使用</p>
+                  <h3 id="hduhelp-title">微信扫码登录</h3>
+                </div>
+              </div>
+              <p class="panel-note">
+                通过杭电助手官方微信授权进入自己的空间，不会把密码交给本项目。
+              </p>
+              <button id="hduhelp-wechat" class="primary" type="button">
+                微信扫码登录
+              </button>
+              <div id="hduhelp-qr" class="hduhelp-qr" hidden></div>
+              <p id="hduhelp-wechat-state" class="storage-note"></p>
+            </section>
+            <details class="hduhelp-token-fallback">
+              <summary>已有个人访问令牌</summary>
+              <p class="panel-note">
+                比赛测试期间可用个人令牌连接；令牌加密保存在服务器，不会显示或导出。
+              </p>
+              <div id="hduhelp-connect-form" class="hduhelp-connect-form">
+                <input id="hduhelp-token" type="password" placeholder="粘贴个人访问令牌"
+                  autocomplete="off" spellcheck="false" aria-label="杭电助手个人访问令牌" />
+                <button id="hduhelp-connect" class="ghost" type="button">验证并连接</button>
+              </div>
+            </details>
+            <div id="hduhelp-sync-form" class="hduhelp-sync-form" hidden>
+              <select id="hduhelp-term" aria-label="选择杭电助手学期"></select>
+              <button id="hduhelp-sync" class="primary" type="button">同步全部校园数据</button>
+              <button id="hduhelp-disconnect" class="text-button danger-link" type="button">退出杭助账号</button>
+            </div>
+            <div id="hduhelp-data-summary" class="hduhelp-data-summary"></div>
+            <p id="hduhelp-state" class="storage-note">
+              测试体验可以不连接；正常使用时建议连接自己的杭电助手账号。
+            </p>
+          </article>
+
           <article class="panel timetable-panel tool-collapsible">
             <div class="panel-heading compact">
               <div>
@@ -212,62 +273,11 @@
               </div>
             </div>
             <p class="panel-note">
-              连接自己的杭电助手账号，选择学期后即可同步课程；课程
-              会成为规划器不可移动的个人时间约束。
+              这里只展示已同步课程和学校临时调课。账号连接与数据刷新请前往“杭电助手”。
             </p>
-            <div class="term-fields">
-              <label>
-                第一教学周周一
-                <input id="term-start" type="date" required />
-              </label>
-              <label>
-                学期结束（可不填）
-                <input id="term-end" type="date" />
-              </label>
-            </div>
-            <section class="hduhelp-card" aria-labelledby="hduhelp-title">
-              <div class="hduhelp-card-heading">
-                <div>
-                  <p class="integration-label">官方数据源</p>
-                  <h3 id="hduhelp-title">连接杭电助手</h3>
-                </div>
-                <span id="hduhelp-badge" class="connection-badge">未连接</span>
-              </div>
-              <p class="panel-note">
-                在杭电助手创建个人访问令牌后粘贴到这里，即可读取你
-                自己的课表。令牌只会加密保存在服务器，不进入数据备份。
-              </p>
-              <div id="hduhelp-connect-form" class="hduhelp-connect-form">
-                <input
-                  id="hduhelp-token"
-                  type="password"
-                  placeholder="粘贴个人访问令牌"
-                  autocomplete="off"
-                  spellcheck="false"
-                  aria-label="杭电助手个人访问令牌"
-                />
-                <button id="hduhelp-connect" class="ghost" type="button">
-                  验证并连接
-                </button>
-              </div>
-              <div id="hduhelp-sync-form" class="hduhelp-sync-form" hidden>
-                <select id="hduhelp-term" aria-label="选择杭电助手学期"></select>
-                <button id="hduhelp-sync" class="ghost" type="button">
-                  同步所选学期课表
-                </button>
-                <button
-                  id="hduhelp-disconnect"
-                  class="text-button danger-link"
-                  type="button"
-                >
-                  断开连接
-                </button>
-              </div>
-              <p id="hduhelp-state" class="storage-note">
-                建议只授予身份读取和课表读取权限，并设置较短有效期。
-              </p>
-            </section>
             <div class="timetable-form" hidden>
+              <input id="term-start" type="hidden" />
+              <input id="term-end" type="hidden" />
               <input
                 id="timetable-name"
                 type="text"
@@ -398,43 +408,6 @@
             </div>
           </article>
 
-          <article class="panel backup-panel tool-collapsible">
-            <div class="panel-heading compact">
-              <div>
-                <p class="step">个人数据</p>
-                <h2>把课表和习惯带到新设备</h2>
-              </div>
-            </div>
-            <p class="panel-note">
-              数据包包含个人课表、长期记忆、校历调整、提醒设置、
-              当前计划和习惯记录，不包含测试密码、登录凭证或任何
-              API 密钥。
-            </p>
-            <p class="panel-note backup-warning">
-              恢复时会合并长期记忆与校历调整，并用备份中的课表覆盖
-              当前课表。操作前建议先导出这台设备上的现有数据。
-            </p>
-            <div class="backup-actions">
-              <button id="profile-export" class="ghost">
-                导出我的数据备份
-              </button>
-              <label class="file-picker backup-picker">
-                <span>选择易程智策备份文件</span>
-                <input
-                  id="profile-import-file"
-                  type="file"
-                  accept=".json,application/json"
-                />
-              </label>
-              <button id="profile-restore" class="primary" hidden>
-                确认恢复到这台设备
-              </button>
-            </div>
-            <p id="profile-backup-state" class="storage-note">
-              当前公开测试版的云端数据可能随服务更新而重置；建议在
-              同步课表或积累个性化设置后保存一份备份。
-            </p>
-          </article>
         </aside>
 
         <section class="column response-column content-column">

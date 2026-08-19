@@ -109,6 +109,22 @@ class ExternalConnectionRepository:
                 (now.isoformat(), now.isoformat(), user_id),
             )
 
+    def update_credential(
+        self,
+        user_id: str,
+        credential_ciphertext: str,
+        now: datetime,
+    ) -> None:
+        with self.database.transaction() as connection:
+            connection.execute(
+                """
+                UPDATE external_account_connections
+                SET credential_ciphertext = ?, updated_at = ?
+                WHERE user_id = ? AND provider = 'hduhelp'
+                """,
+                (credential_ciphertext, now.isoformat(), user_id),
+            )
+
     def mark_error(self, user_id: str, message: str, now: datetime) -> None:
         with self.database.transaction() as connection:
             connection.execute(

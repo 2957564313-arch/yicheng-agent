@@ -59,6 +59,25 @@ CREATE TABLE IF NOT EXISTS external_account_connections (
 CREATE INDEX IF NOT EXISTS idx_external_connections_provider
 ON external_account_connections(provider, external_user_id);
 
+CREATE TABLE IF NOT EXISTS external_agenda_items (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,
+    source_kind TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    start_at TEXT NOT NULL,
+    end_at TEXT NOT NULL,
+    location_name TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    synced_at TEXT NOT NULL,
+    UNIQUE(user_id, provider, source_kind, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_external_agenda_user_time
+ON external_agenda_items(user_id, start_at, end_at);
+
 CREATE TABLE IF NOT EXISTS timetables (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,

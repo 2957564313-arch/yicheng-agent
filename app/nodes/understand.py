@@ -225,6 +225,12 @@ def make_understand_node(container: AppContainer):
             result.tasks,
             memories=memories,
         )
+        timetable_tasks.extend(
+            container.external_agenda.tasks_for_date(
+                state["user_id"],
+                result.requested_date,
+            )
+        )
         tasks_with_activity_locations = _apply_activity_location_memories(
             tasks_with_study_preferences,
             memories=memories,

@@ -77,6 +77,8 @@ class Settings(BaseSettings):
 
     hduhelp_api_base_url: str = "https://api.hduhelp.com"
     hduhelp_timeout_seconds: float = Field(default=20, ge=2, le=60)
+    hduhelp_qr_client_id: str = ""
+    hduhelp_qr_redirect_uri: str = ""
 
     @property
     def credential_secret(self) -> str:

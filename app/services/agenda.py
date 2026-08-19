@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from app.providers.location_repository import LocationRepository
 from app.repositories.academic_calendar import AcademicCalendarRepository
+from app.repositories.external_agenda import ExternalAgendaRepository
 from app.repositories.memories import MemoryRepository
 from app.repositories.plans import PlanRepository
 from app.repositories.timetables import TimetableRepository
@@ -26,6 +27,7 @@ class AgendaService:
         *,
         plans: PlanRepository,
         timetables: TimetableRepository,
+        external_agenda: ExternalAgendaRepository,
         academic_calendar: AcademicCalendarRepository,
         memories: MemoryRepository,
         locations: LocationRepository,
@@ -34,6 +36,7 @@ class AgendaService:
     ) -> None:
         self.plans = plans
         self.timetables = timetables
+        self.external_agenda = external_agenda
         self.academic_calendar = academic_calendar
         self.memories = memories
         self.locations = locations
@@ -57,6 +60,11 @@ class AgendaService:
             start_date=start_date,
             end_date=end_date,
         )
+        external_items = self.external_agenda.list_range(
+            user_id=user_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
         plan_items = self._plan_items(
             user_id=user_id,
             start_date=start_date,
@@ -65,8 +73,17 @@ class AgendaService:
                 self._course_identity(item) for item in course_items
             },
         )
+        plan_items = [
+            item
+            for item in plan_items
+            if not any(
+                item.start_at < authoritative.end_at
+                and item.end_at > authoritative.start_at
+                for authoritative in external_items
+            )
+        ]
         return sorted(
-            [*course_items, *plan_items],
+            [*course_items, *external_items, *plan_items],
             key=lambda item: (
                 item.start_at,
                 item.end_at,
@@ -373,8 +390,10 @@ class AgendaService:
                 default=None,
             )
             body_parts = [
-                f"你平时希望在 {bedtime:%H:%M} 左右休息，"
-                "可以开始收尾、洗漱，给大脑一点慢下来的时间。"
+                (
+                    f"你平时希望在 {bedtime:%H:%M} 左右休息，"
+                    "可以开始收尾、洗漱，给大脑一点慢下来的时间。"
+                )
             ]
             if last_evening_item:
                 body_parts.append(

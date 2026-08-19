@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 
-from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator
 
 from app.schemas.timetable import TimetableImportResponse
 
@@ -32,24 +32,37 @@ class HduHelpConnectionStatus(BaseModel):
     last_synced_at: datetime | None = None
     last_error: str | None = None
     oauth_ready: bool = False
+    synced_counts: dict[str, int] = Field(default_factory=dict)
 
 
 class HduHelpSyncRequest(BaseModel):
-    school_year: str = Field(min_length=4, max_length=20)
+    school_year: str = Field(pattern=r"^\d{4}-\d{4}$")
     semester: int = Field(ge=1, le=3)
-    term_start: date
-    term_end: date | None = None
     name: str = Field(default="杭电助手课表", min_length=1, max_length=80)
-
-    @model_validator(mode="after")
-    def validate_term_dates(self) -> HduHelpSyncRequest:
-        if self.term_start.weekday() != 0:
-            raise ValueError("第一教学周日期必须选择星期一")
-        if self.term_end is not None and self.term_end < self.term_start:
-            raise ValueError("学期结束日期不能早于第一教学周")
-        return self
 
 
 class HduHelpSyncResponse(TimetableImportResponse):
     school_year: str
     semester: int
+    synced_counts: dict[str, int] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class HduHelpQRStartResponse(BaseModel):
+    ready: bool
+    authorize_url: str | None = None
+    qr_data_url: str | None = None
+    poll_token: str | None = None
+    expires_at: int | None = None
+    message: str
+
+
+class HduHelpQRPollRequest(BaseModel):
+    poll_token: str = Field(min_length=20, max_length=500)
+
+
+class HduHelpQRPollResponse(BaseModel):
+    status: str
+    user_id: str | None = None
+    display_name: str | None = None
+    message: str
