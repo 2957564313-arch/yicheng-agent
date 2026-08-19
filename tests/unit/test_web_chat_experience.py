@@ -26,15 +26,10 @@ def test_server_history_and_keyboard_send_are_available() -> None:
     assert 'localStorage.removeItem("yicheng_conversation_history")' in javascript
     assert "data-history-index" not in javascript
     assert 'queryInput.addEventListener("keydown"' in javascript
-    assert (
-        'event.key !== "Enter" || event.shiftKey || event.isComposing'
-        in javascript
-    )
+    assert 'event.key !== "Enter" || event.shiftKey || event.isComposing' in javascript
 
 
-def test_mobile_overflow_guards_and_compact_result_summary_are_present() -> (
-    None
-):
+def test_mobile_overflow_guards_and_compact_result_summary_are_present() -> None:
     html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
     styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
@@ -58,10 +53,7 @@ def test_result_first_dashboard_keeps_key_plan_information_together() -> None:
     assert "function renderResultDashboard(data)" in javascript
     assert "formatDuration(metrics.buffer_minutes || 0)" in javascript
     assert "formatDuration(metrics.travel_minutes || 0)" in javascript
-    assert (
-        'document.body.classList.toggle("has-plan-result", active);'
-        in javascript
-    )
+    assert 'document.body.classList.toggle("has-plan-result", active);' in javascript
     assert "body.has-plan-result .composer-column" in styles
     assert ".result-summary { grid-template-columns: repeat(6" in styles
     assert 'data-kind="buffer"]' in styles
@@ -81,14 +73,14 @@ def test_fresh_homepage_stays_clean_until_the_user_runs_a_plan() -> None:
     assert "对话与分支已保存" not in html
     assert "工作区导航" not in html
     assert "需要时展开一项，重点始终留在中间对话区。" not in html
-    assert 'id="tools-toggle"' in html and '定位' in html
+    assert 'id="tools-toggle"' in html and "定位" in html
     assert 'data-schedule-mode="day"' not in html
     assert 'data-schedule-mode="week"' not in html
     assert 'id="save-state" class="status subtle" hidden' in html
     assert "async function loadDemos()" in javascript
     assert "if (autoRun && demos.length)" not in javascript
     assert "await loadDemos().catch" in javascript
-    assert 'setPanelHidden(visualGrid, !isChat || !hasPlanResult);' in javascript
+    assert "setPanelHidden(visualGrid, !isChat || !hasPlanResult);" in javascript
     assert "if (!keepResultMode) setResultMode(false);" in javascript
     assert "homepageModeKey" not in javascript
 
@@ -119,9 +111,7 @@ def test_result_request_can_be_edited_without_leaving_dashboard() -> None:
 
     assert 'id="result-request-input"' in html
     assert "function setInlineRequestEditing(active)" in javascript
-    assert (
-        'resultRequest.classList.toggle("is-editing", active);' in javascript
-    )
+    assert 'resultRequest.classList.toggle("is-editing", active);' in javascript
     assert "submitQuery(query, { keepResultMode: true })" in javascript
     assert "if (!keepResultMode) setResultMode(false);" in javascript
     assert ".result-request.is-editing" in styles
@@ -144,18 +134,14 @@ def test_demo_scenarios_move_into_result_sidebar() -> None:
     assert "thread_id: consoleThreadId" in javascript
 
 
-def test_switching_demo_keeps_dashboard_visible_without_forced_scroll() -> (
-    None
-):
+def test_switching_demo_keeps_dashboard_visible_without_forced_scroll() -> None:
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
 
     assert (
         'const keepResultMode = document.body.classList.contains("has-plan-result");'
         in javascript
     )
-    assert (
-        "beginConversationTurn(demo.query, { keepResultMode });" in javascript
-    )
+    assert "beginConversationTurn(demo.query, { keepResultMode });" in javascript
     assert (
         'const wasActive = document.body.classList.contains("has-plan-result");'
         in javascript
@@ -178,10 +164,7 @@ def test_result_dashboard_has_icons_sources_and_four_quick_actions() -> None:
     assert ".timeline-kind-icon" in styles
     assert ".result-source-icon" in styles
     assert 'id="result-action-status"' in html
-    assert (
-        "function renderResultActionOutcome(action, before, after)"
-        in javascript
-    )
+    assert "function renderResultActionOutcome(action, before, after)" in javascript
     assert ".result-action-status.is-unchanged" in styles
     assert ".result-quick-actions button:first-child" not in styles
     assert "function currentBaseRequirement()" in javascript
@@ -196,7 +179,7 @@ def test_result_dashboard_has_icons_sources_and_four_quick_actions() -> None:
     assert "const hasPreviousPlan = Boolean(data.previous_plan);" in javascript
     assert "固定课程和锁定安排的时间绝对不变" in javascript
     assert "function formatDuration(minutes)" in javascript
-    assert 'item.location_raw || (item.location_id' in javascript
+    assert "item.location_raw || (item.location_id" in javascript
     assert '? "高峰拥挤"' in javascript
     assert "这是你明确给出的固定安排" not in javascript
     assert "高德返回" not in javascript
@@ -217,7 +200,7 @@ def test_current_conversation_has_a_right_side_quick_outline() -> None:
 
     assert "本次对话" in javascript
     assert "function syncConversationOutline()" in javascript
-    assert '.conversation-message.user-message' in javascript
+    assert ".conversation-message.user-message" in javascript
     assert 'target.scrollIntoView({ behavior: "smooth"' in javascript
     assert "new MutationObserver(syncConversationOutline)" in javascript
     assert ".conversation-outline.is-open" in styles
@@ -225,7 +208,7 @@ def test_current_conversation_has_a_right_side_quick_outline() -> None:
     assert "position: fixed" in styles
     assert "document.body.append(conversationOutline)" in javascript
     assert 'id="conversation-outline-count"' not in javascript
-    assert '<span>${index + 1}</span>' not in javascript
+    assert "<span>${index + 1}</span>" not in javascript
     assert "conversationMessageLabel(message)" in javascript
     assert "if (toolsToggle) toolsToggle.hidden = !hasMultipleTurns;" in javascript
     assert "data-thread-rename" in javascript
@@ -243,10 +226,16 @@ def test_schedule_marks_verified_holidays_and_pending_makeup_days() -> None:
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
     styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
 
-    assert 'calendar-context`' in javascript
+    assert "calendar-context`" in javascript
     assert 'holiday ? "休" : "补"' in javascript
-    assert 'context.course_action === "makeup"' in javascript
-    assert "已自动停用课表中的固定课程" in javascript
+    assert "实际补课课程以杭助同步结果为准" in javascript
+    assert "2025年法定节假日数据尚未核验" not in javascript
+    assert 'id="timetable-term-view"' in (WEB_ROOT / "index.html").read_text(
+        encoding="utf-8"
+    )
+    assert "function renderTimetableTerms" in javascript
+    assert "item.start_at))}—${escapeHtml(timePart(item.end_at))" in javascript
     assert ".schedule-month-cell.is-holiday" in styles
     assert ".schedule-month-cell.is-workday" in styles
+    assert ".schedule-calendar-badge small" in styles
     assert "button.primary:disabled" in styles

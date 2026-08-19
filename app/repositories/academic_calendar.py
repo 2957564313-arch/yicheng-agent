@@ -19,14 +19,30 @@ class AcademicCalendarRepository:
         self.database = database
         payload = json.loads(national_path.read_text(encoding="utf-8"))
         self._days = payload.get("days", {})
-        self._calendar_year = int(payload.get("calendar_year", 0))
+        raw_years = payload.get("calendar_years")
+        if isinstance(raw_years, list):
+            self._calendar_years = {int(value) for value in raw_years}
+        elif payload.get("calendar_year"):
+            self._calendar_years = {int(payload["calendar_year"])}
+        else:
+            self._calendar_years = set()
         self._verified_at = (
             date.fromisoformat(payload["verified_at"])
             if payload.get("verified_at")
             else None
         )
-        source = payload.get("source", {})
-        self._source_ref = source.get("url")
+        sources = payload.get("sources")
+        if isinstance(sources, list):
+            self._source_refs = {
+                int(source["year"]): source.get("url")
+                for source in sources
+                if isinstance(source, dict) and source.get("year")
+            }
+        else:
+            source = payload.get("source", {})
+            self._source_refs = {
+                year: source.get("url") for year in self._calendar_years
+            }
 
     def list_overrides(self, user_id: str) -> list[CalendarOverride]:
         with self.database.connect() as connection:
@@ -140,10 +156,7 @@ class AcademicCalendarRepository:
         target_date: date,
         client_overrides: list[CalendarOverrideCreate] | None = None,
     ) -> AcademicDayContext:
-        overrides = {
-            item.date: item
-            for item in self.list_overrides(user_id)
-        }
+        overrides = {item.date: item for item in self.list_overrides(user_id)}
         for item in client_overrides or []:
             overrides[item.date] = item
         return self._resolve_context(
@@ -158,10 +171,7 @@ class AcademicCalendarRepository:
         start_date: date,
         end_date: date,
     ) -> list[AcademicDayContext]:
-        overrides = {
-            item.date: item
-            for item in self.list_overrides(user_id)
-        }
+        overrides = {item.date: item for item in self.list_overrides(user_id)}
         day_count = (end_date - start_date).days
         return [
             self._resolve_context(
@@ -180,11 +190,7 @@ class AcademicCalendarRepository:
         override = overrides.get(target_date)
         national = self._days.get(target_date.isoformat())
         if override is not None:
-            day_type = (
-                national.get("type", "normal")
-                if national
-                else "normal"
-            )
+            day_type = national.get("type", "normal") if national else "normal"
             effective_weekday = {
                 "no_class": None,
                 "normal": target_date.isoweekday(),
@@ -207,7 +213,7 @@ class AcademicCalendarRepository:
                 label=national.get("name"),
                 effective_weekday=None,
                 source=DataSource.STRUCTURED,
-                source_ref=self._source_ref,
+                source_ref=self._source_refs.get(target_date.year),
                 verified_at=self._verified_at,
             )
         if national and national.get("type") == "adjusted_workday":
@@ -218,10 +224,10 @@ class AcademicCalendarRepository:
                 label=national.get("name"),
                 effective_weekday=None,
                 source=DataSource.STRUCTURED,
-                source_ref=self._source_ref,
+                source_ref=self._source_refs.get(target_date.year),
                 verified_at=self._verified_at,
             )
-        if self._calendar_year and target_date.year != self._calendar_year:
+        if self._calendar_years and target_date.year not in self._calendar_years:
             return AcademicDayContext(
                 date=target_date,
                 day_type="unknown",

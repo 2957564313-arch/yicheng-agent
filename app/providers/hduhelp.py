@@ -124,25 +124,146 @@ class HduHelpClient:
         data = self._get("/hduhelp-neo/academic/schooltime/time", token)
         return data if isinstance(data, dict) else {}
 
-    def exams(self, token: str, school_year: str, semester: int) -> list[dict[str, Any]]:
+    def identity_bindings(self, token: str) -> dict[str, Any]:
+        data = self._get("/hduhelp-neo/identity/bindings", token)
+        return data if isinstance(data, dict) else {}
+
+    def semester_list(
+        self,
+        token: str,
+        *,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, Any]]:
+        data = self._request(
+            "GET",
+            "/hduhelp-neo/academic/schooltime/semester/list-by-date",
+            token=token,
+            params={"start_date": start_date, "end_date": end_date},
+        )
+        return (
+            [item for item in data if isinstance(item, dict)]
+            if isinstance(data, list)
+            else []
+        )
+
+    def course_selection(
+        self,
+        token: str,
+        *,
+        school_year: str,
+        semester: int,
+    ) -> list[dict[str, Any]]:
+        data = self._request(
+            "GET",
+            "/hduhelp-neo/academic/course-selection",
+            token=token,
+            params={"schoolYear": school_year, "semester": semester},
+        )
+        return (
+            [item for item in data if isinstance(item, dict)]
+            if isinstance(data, list)
+            else []
+        )
+
+    def library_attendance(self, token: str) -> dict[str, Any]:
+        data = self._request(
+            "GET",
+            "/hduhelp-neo/academic/library/attendance",
+            token=token,
+            params={"dimension": "stats"},
+        )
+        return data if isinstance(data, dict) else {}
+
+    def library_reading(self, token: str) -> dict[str, Any]:
+        data = self._request(
+            "GET",
+            "/hduhelp-neo/academic/library/reading",
+            token=token,
+            params={"metric": "summary"},
+        )
+        return data if isinstance(data, dict) else {}
+
+    def library_rooms(self, token: str) -> list[dict[str, Any]]:
+        data = self._get("/hduhelp-neo/academic/library/seat/rooms", token)
+        return (
+            [item for item in data if isinstance(item, dict)]
+            if isinstance(data, list)
+            else []
+        )
+
+    def volunteer_activities(self, token: str) -> dict[str, Any]:
+        data = self._request(
+            "GET",
+            "/hduhelp-neo/volunteer/volunteer-activities",
+            token=token,
+            params={"page": 1, "page_size": 100},
+        )
+        return data if isinstance(data, dict) else {}
+
+    def sunrun_overview(self, token: str) -> dict[str, Any]:
+        data = self._get("/hduhelp-neo/subscription/sunrun/overview", token)
+        return data if isinstance(data, dict) else {}
+
+    def subscriptions(self, token: str) -> list[dict[str, Any]]:
+        data = self._get("/hduhelp-neo/subscriptions", token)
+        return (
+            [item for item in data if isinstance(item, dict)]
+            if isinstance(data, list)
+            else []
+        )
+
+    def empty_schedule_status(self, token: str) -> dict[str, Any]:
+        data = self._get("/hduhelp-neo/emptyschedule/status", token)
+        return data if isinstance(data, dict) else {}
+
+    def empty_schedule_favorites(self, token: str) -> Any:
+        return self._request(
+            "GET",
+            "/hduhelp-neo/emptyschedule/favorites",
+            token=token,
+            params={"page": 1, "size": 100},
+        )
+
+    def empty_schedule_rooms(self, token: str) -> Any:
+        return self._get("/hduhelp-neo/emptyschedule/rooms", token)
+
+    def feed(self, token: str) -> Any:
+        return self._get("/hduhelp-neo/feed", token)
+
+    def exams(
+        self, token: str, school_year: str, semester: int
+    ) -> list[dict[str, Any]]:
         data = self._request(
             "GET",
             "/hduhelp-neo/academic/exam",
             token=token,
             params={"schoolYear": school_year, "semester": semester},
         )
-        return [item for item in data if isinstance(item, dict)] if isinstance(data, list) else []
+        return (
+            [item for item in data if isinstance(item, dict)]
+            if isinstance(data, list)
+            else []
+        )
 
     def library_reservations(self, token: str) -> list[dict[str, Any]]:
         data = self._get("/hduhelp-neo/academic/library/seat/reservations", token)
-        return [item for item in data if isinstance(item, dict)] if isinstance(data, list) else []
+        return (
+            [item for item in data if isinstance(item, dict)]
+            if isinstance(data, list)
+            else []
+        )
 
     def library_bookings(self, token: str) -> list[dict[str, Any]]:
         data = self._get("/hduhelp-neo/library-booking/bookings", token)
         if not isinstance(data, dict):
             return []
         rows = data.get("bookings")
-        return [item for item in rows if isinstance(item, dict)] if isinstance(rows, list) else []
+        return (
+            [item for item in rows if isinstance(item, dict)]
+            if isinstance(rows, list)
+            else []
+        )
 
     def library_agenda(self, token: str) -> list[dict[str, Any]]:
         """Return one normalized authoritative view of current seat reservations."""
@@ -188,7 +309,12 @@ class HduHelpClient:
         if not isinstance(data, dict):
             return []
         rows = data.get("items")
-        return [item for item in rows if isinstance(item, dict)] if isinstance(rows, list) else []
+        return (
+            [item for item in rows if isinstance(item, dict)]
+            if isinstance(rows, list)
+            else []
+        )
+
 
 def available_terms(rows: list[dict[str, Any]]) -> list[HduHelpTerm]:
     counts: dict[tuple[str, int], int] = defaultdict(int)
@@ -206,9 +332,7 @@ def available_terms(rows: list[dict[str, Any]]) -> list[HduHelpTerm]:
             semester=semester,
             raw_entry_count=count,
         )
-        for (school_year, semester), count in sorted(
-            counts.items(), reverse=True
-        )
+        for (school_year, semester), count in sorted(counts.items(), reverse=True)
     ]
 
 

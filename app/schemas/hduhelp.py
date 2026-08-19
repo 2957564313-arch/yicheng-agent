@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
-from app.schemas.timetable import TimetableImportResponse
+from app.schemas.timetable import CourseSessionCreate, TimetableImportResponse
 
 
 class HduHelpTerm(BaseModel):
@@ -35,9 +35,26 @@ class HduHelpConnectionStatus(BaseModel):
 
 
 class HduHelpSyncRequest(BaseModel):
-    school_year: str = Field(pattern=r"^\d{4}-\d{4}$")
-    semester: int = Field(ge=1, le=3)
-    name: str = Field(default="杭电助手课表", min_length=1, max_length=80)
+    # Kept optional for backwards-compatible clients. Synchronization always
+    # imports every term returned by HDUHelp.
+    school_year: str | None = Field(default=None, pattern=r"^\d{4}-\d{4}$")
+    semester: int | None = Field(default=None, ge=1, le=3)
+    name: str = Field(default="杭助课表", min_length=1, max_length=80)
+
+
+class HduHelpTimetableTerm(BaseModel):
+    school_year: str
+    semester: int
+    name: str
+    term_start: date
+    term_end: date
+    current: bool = False
+    dates_inferred: bool = False
+    entries: list[CourseSessionCreate] = Field(default_factory=list)
+
+
+class HduHelpTimetablesResponse(BaseModel):
+    terms: list[HduHelpTimetableTerm] = Field(default_factory=list)
 
 
 class HduHelpSyncResponse(TimetableImportResponse):
@@ -45,3 +62,4 @@ class HduHelpSyncResponse(TimetableImportResponse):
     semester: int
     synced_counts: dict[str, int] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
+    terms: list[HduHelpTimetableTerm] = Field(default_factory=list)

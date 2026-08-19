@@ -70,10 +70,7 @@ def make_respond_node(container: AppContainer):
                     "请提供更具体的制度名称，或以上传的正式文件为准。"
                 )
                 used_llm = False
-            elif (
-                container.settings.llm_render_enabled
-                and container.llm.configured
-            ):
+            elif container.settings.llm_render_enabled and container.llm.configured:
                 try:
                     answer = await container.llm.answer_question(
                         query=state["query"],
@@ -119,8 +116,7 @@ def make_respond_node(container: AppContainer):
             *state.get("validation_issues", []),
         ]
         has_errors = any(
-            raw.get("severity") == IssueSeverity.ERROR.value
-            for raw in warnings
+            raw.get("severity") == IssueSeverity.ERROR.value for raw in warnings
         )
         if has_errors:
             draft, suggested_actions = _infeasible_answer(
@@ -145,9 +141,7 @@ def make_respond_node(container: AppContainer):
                     WeatherContext.model_validate(raw)
                     for raw in state.get("weather_context", [])
                 ],
-                congestion_windows=container.rules.congestion_windows(
-                    plan.date
-                ),
+                congestion_windows=container.rules.congestion_windows(plan.date),
             )
             suggested_actions = _congestion_suggested_actions(
                 plan,
@@ -158,18 +152,11 @@ def make_respond_node(container: AppContainer):
 
         answer = draft
         used_llm = False
-        if (
-            container.settings.llm_plan_render_enabled
-            and container.llm.configured
-        ):
+        if container.settings.llm_plan_render_enabled and container.llm.configured:
             try:
                 weather_context = state.get("weather_context", [])
-                weather_is_relevant = (
-                    state.get("intent") == "weather_check"
-                    or any(
-                        raw.get("source") == "user"
-                        for raw in weather_context
-                    )
+                weather_is_relevant = state.get("intent") == "weather_check" or any(
+                    raw.get("source") == "user" for raw in weather_context
                 )
                 polished = await container.llm.polish_answer(
                     draft=draft,
@@ -239,9 +226,8 @@ def _clarification_answer(
     clarifications: list[str],
 ) -> str:
     details = "；".join(clarifications)
-    if (
-        any(marker in query for marker in ("事情有点多", "事情很多", "有点忙"))
-        and any("具体任务" in item for item in clarifications)
+    if any(marker in query for marker in ("事情有点多", "事情很多", "有点忙")) and any(
+        "具体任务" in item for item in clarifications
     ):
         return (
             "事情一多，很容易既惦记着这个、又担心漏掉那个。"
@@ -272,8 +258,8 @@ def _timetable_answer(summary: str) -> str:
         return (
             "我先把不确定的地方替你拦住了。\n\n"
             f"{summary}\n\n"
-            "拿到学校调课通知后，在“学校临时调课与停课”里选择"
-            "补星期几的课即可；在此之前，我不会擅自把某一天的课搬过来。"
+            "学校具体补课安排尚未从杭助同步到；在此之前，我不会擅自"
+            "把某一天的课搬过来。同步后将以杭助中的实际课程为准。"
         )
     if "没有已启用的课程记录" in summary:
         return (
@@ -315,22 +301,16 @@ def _success_answer(
     congestion_windows: list[tuple[datetime, datetime]],
 ) -> str:
     ordered_items = sorted(plan.items, key=lambda value: value.start_at)
-    task_items = [
-        item for item in ordered_items if item.item_type == "task"
-    ]
+    task_items = [item for item in ordered_items if item.item_type == "task"]
     task_titles = [item.title for item in task_items]
     task_names = "、".join(f"“{title}”" for title in task_titles)
-    travel_items = [
-        item for item in ordered_items if item.item_type == "travel"
-    ]
+    travel_items = [item for item in ordered_items if item.item_type == "travel"]
     opening_rules_available = not any(
-        raw.get("code") == "CAMPUS_KNOWLEDGE_NOT_CONFIGURED"
-        for raw in warnings
+        raw.get("code") == "CAMPUS_KNOWLEDGE_NOT_CONFIGURED" for raw in warnings
     )
-    weather_adjustment = (
-        _has_precise_weather_risk(weather)
-        and _outdoor_tasks_finish_before_weather_risk(plan, weather)
-    )
+    weather_adjustment = _has_precise_weather_risk(
+        weather
+    ) and _outdoor_tasks_finish_before_weather_risk(plan, weather)
     if weather_adjustment:
         lines = [
             "天气有变化时，安全比赶进度更重要。"
@@ -393,15 +373,11 @@ def _success_answer(
                 "太碎。"
             )
             if travel_items:
-                thought += (
-                    "跨地点之间的通勤时间也已经按你选择的出行方式"
-                    "单独留出。"
-                )
+                thought += "跨地点之间的通勤时间也已经按你选择的出行方式单独留出。"
             lines.append(thought)
         else:
             lines.append(
-                f"安排思路：把{task_names}按时间和地点顺序连起来，"
-                "尽量减少来回折返。"
+                f"安排思路：把{task_names}按时间和地点顺序连起来，尽量减少来回折返。"
             )
     if "后天" in query:
         day_label = "后天"
@@ -418,9 +394,7 @@ def _success_answer(
     )
     for item in ordered_items:
         label = item.title
-        duration_min = int(
-            (item.end_at - item.start_at).total_seconds() // 60
-        )
+        duration_min = int((item.end_at - item.start_at).total_seconds() // 60)
         lines.append(
             f"• {item.start_at:%H:%M}—{item.end_at:%H:%M}　"
             f"{label}（{duration_min}分钟）"
@@ -468,23 +442,17 @@ def _success_answer(
             verified_summary.append("通勤")
         if opening_rules_available:
             verified_summary.append("开放时段")
-        lines.append(
-            f"{'、'.join(verified_summary)}已经核对过，"
-            "可以按这份安排执行。"
-        )
+        lines.append(f"{'、'.join(verified_summary)}已经核对过，可以按这份安排执行。")
     reminder_context = " ".join([query, *task_titles])
     reminders = _knowledge_reminders(facts, query=reminder_context)
     weather_reminder = _weather_reminder(weather, query=query)
     if weather_reminder:
         reminders.insert(0, weather_reminder)
         reminders = reminders[:3]
-    elif (
-        any(word in query for word in ("天气", "下雨", "降雨", "有雨"))
-        and any(
-            raw.get("code") == "API_DEGRADED"
-            and raw.get("details", {}).get("provider") == "weather"
-            for raw in warnings
-        )
+    elif any(word in query for word in ("天气", "下雨", "降雨", "有雨")) and any(
+        raw.get("code") == "API_DEGRADED"
+        and raw.get("details", {}).get("provider") == "weather"
+        for raw in warnings
     ):
         reminders.insert(
             0,
@@ -507,13 +475,9 @@ def _success_answer(
         lines.append(f"再替你留意{count_label}：")
         lines.extend(f"• {item}" for item in reminders)
     if ordered_items:
-        finish_line = (
-            f"整套安排预计在 {ordered_items[-1].end_at:%H:%M} 收尾"
-        )
+        finish_line = f"整套安排预计在 {ordered_items[-1].end_at:%H:%M} 收尾"
         if plan.metrics.travel_minutes > 0:
-            finish_line += (
-                f"，其中已经留出 {plan.metrics.travel_minutes} 分钟通勤"
-            )
+            finish_line += f"，其中已经留出 {plan.metrics.travel_minutes} 分钟通勤"
         lines.append(finish_line + "。")
     lines.append(
         "如果临时晚出发、课程拖堂或身体状态有变化，直接告诉我"
@@ -592,11 +556,7 @@ def _weather_reminder(
     *,
     query: str = "",
 ) -> str | None:
-    live_items = [
-        item
-        for item in weather
-        if item.source.value in {"user", "live_api"}
-    ]
+    live_items = [item for item in weather if item.source.value in {"user", "live_api"}]
     if not live_items:
         return None
 
@@ -617,16 +577,12 @@ def _weather_reminder(
         key=risk_score,
     )
     condition = live.condition or ""
-    has_rain = (
-        "雨" in condition or (live.rain_probability or 0) >= 0.5
-    )
+    has_rain = "雨" in condition or (live.rain_probability or 0) >= 0.5
     has_snow = "雪" in condition
     has_wind = "风" in condition
     if has_rain or has_snow or has_wind:
         if has_rain:
-            care = (
-                "随身带把伞，雨后路面可能湿滑，步行或骑行都慢一点"
-            )
+            care = "随身带把伞，雨后路面可能湿滑，步行或骑行都慢一点"
         elif has_snow:
             care = "注意保暖和路面湿滑，步行或骑行都慢一点"
         else:
@@ -727,8 +683,7 @@ def _congestion_suggested_actions(
             "id": "prefer_off_peak",
             "label": "看看错峰方案",
             "description": (
-                "保持课程、截止时间和任务时长不变，仅在有余地时"
-                "优先避开集中通行时段。"
+                "保持课程、截止时间和任务时长不变，仅在有余地时优先避开集中通行时段。"
             ),
             "query": (
                 "在不改变固定课程、截止时间、任务时长和原有顺序的"
@@ -779,10 +734,7 @@ def _knowledge_reminders(
             continue
         if len(excerpt) > 180:
             excerpt = excerpt[:180].rstrip() + "…"
-        if any(
-            excerpt[:60] == existing[:60]
-            for existing in reminders
-        ):
+        if any(excerpt[:60] == existing[:60] for existing in reminders):
             continue
         topic = fact_topic or _knowledge_topic(excerpt)
         if topic and topic in reminder_topics:
@@ -852,14 +804,10 @@ def _infeasible_answer(
         if raw.get("severity") == IssueSeverity.ERROR.value
     ]
     scheduled_ids = {
-        item.task_id
-        for item in plan.items
-        if item.item_type == "task" and item.task_id
+        item.task_id for item in plan.items if item.item_type == "task" and item.task_id
     }
     unscheduled = [task for task in tasks if task.id not in scheduled_ids]
-    unscheduled_names = "、".join(
-        f"“{task.title}”" for task in unscheduled
-    )
+    unscheduled_names = "、".join(f"“{task.title}”" for task in unscheduled)
     all_task_names = "、".join(f"“{task.title}”" for task in tasks)
     has_overall_deadline = bool(
         re.search(
@@ -875,11 +823,7 @@ def _infeasible_answer(
         else []
     )
     deadline = min(deadline_values) if deadline_values else None
-    starts = [
-        task.earliest_start
-        for task in tasks
-        if task.earliest_start is not None
-    ]
+    starts = [task.earliest_start for task in tasks if task.earliest_start is not None]
     target_start = (
         now
         if now.date() == plan.date
@@ -896,9 +840,7 @@ def _infeasible_answer(
         if task.fixed_end is None or task.fixed_end > planning_start
     ]
     route_minutes = _ordered_route_minutes(active_tasks, routes)
-    required_minutes = (
-        sum(task.duration_min for task in active_tasks) + route_minutes
-    )
+    required_minutes = sum(task.duration_min for task in active_tasks) + route_minutes
     available_minutes = (
         max(0, int((deadline - planning_start).total_seconds() // 60))
         if deadline
@@ -921,10 +863,7 @@ def _infeasible_answer(
         task.notes
         for task in unscheduled
         if task.notes
-        and any(
-            marker in task.notes
-            for marker in ("营业时间", "开放时间", "硬约束")
-        )
+        and any(marker in task.notes for marker in ("营业时间", "开放时间", "硬约束"))
     ]
     if venue_errors:
         if len(unscheduled) == 1 and not plan.items:
@@ -939,9 +878,7 @@ def _infeasible_answer(
                 "我先把它保留为“待调整”，没有替你删掉。",
                 f"你希望在{requested_time}处理这件事，"
                 + "但"
-                + "；".join(
-                    dict.fromkeys(hard_rule_notes or venue_errors)
-                )
+                + "；".join(dict.fromkeys(hard_rule_notes or venue_errors))
                 + "。",
             ]
             suggestions = _opening_time_suggestions(
@@ -962,8 +899,7 @@ def _infeasible_answer(
                 )
             if suggestions:
                 lines.append(
-                    "我已经把可直接重排的时间方案放在下方，"
-                    "你确认后我再生成完整日程。"
+                    "我已经把可直接重排的时间方案放在下方，你确认后我再生成完整日程。"
                 )
             return "\n".join(lines), suggestions
 
@@ -981,9 +917,7 @@ def _infeasible_answer(
             )
         if plan.items:
             completed_names = "、".join(
-                item.title
-                for item in plan.items
-                if item.item_type == "task"
+                item.title for item in plan.items if item.item_type == "task"
             )
             lines.append(
                 f"{completed_names}等不受影响的安排已经保留在下方时间轴，"
@@ -1000,17 +934,13 @@ def _infeasible_answer(
         lines.append(
             f"{unscheduled_names}都还在清单里，我没有替你删掉；"
             + (
-                "只是按现在的结束时间，还没有足够的空档把它们妥善"
-                "放进去。"
+                "只是按现在的结束时间，还没有足够的空档把它们妥善放进去。"
                 if deadline
-                else "只是当前的通勤、开放时段或先后约束还没有同时"
-                "满足。"
+                else "只是当前的通勤、开放时段或先后约束还没有同时满足。"
             )
         )
     else:
-        lines.append(
-            "这些任务都已经记下，只是它们和当前结束时间撞在了一起。"
-        )
+        lines.append("这些任务都已经记下，只是它们和当前结束时间撞在了一起。")
 
     if deadline and available_minutes is not None:
         lines.append(
@@ -1042,11 +972,7 @@ def _infeasible_answer(
         deficit=deficit,
     )
     study_task = next(
-        (
-            task
-            for task in tasks
-            if "自习" in task.title or "学习" in task.title
-        ),
+        (task for task in tasks if "自习" in task.title or "学习" in task.title),
         None,
     )
     if (
@@ -1068,9 +994,7 @@ def _infeasible_answer(
             for index, action in enumerate(suggestions, start=1)
         )
         lines.append(
-            (
-                "选一个更符合你今天状态的方案，我再把完整日程排好。"
-            )
+            ("选一个更符合你今天状态的方案，我再把完整日程排好。")
             if len(suggestions) >= 2
             else (
                 "如果这个结束时间可以接受，点一下我就重新排好；"
@@ -1116,9 +1040,7 @@ def _opening_time_suggestions(
             close_at,
             now.tzinfo,
         )
-    start_datetime = close_datetime - timedelta(
-        minutes=task.duration_min + 10
-    )
+    start_datetime = close_datetime - timedelta(minutes=task.duration_min + 10)
     opening_datetime = datetime.combine(
         candidate_date,
         open_at,
@@ -1148,8 +1070,7 @@ def _ordered_route_minutes(
     routes: list[TravelEstimate],
 ) -> int:
     route_map = {
-        (route.origin_id, route.destination_id): route.duration_min
-        for route in routes
+        (route.origin_id, route.destination_id): route.duration_min for route in routes
     }
     total = 0
     for previous, current in zip(tasks, tasks[1:]):
@@ -1177,26 +1098,14 @@ def _adjustment_suggestions(
         return []
     action_safety_min = 10
     adjustable = next(
-        (
-            task
-            for task in tasks
-            if "自习" in task.title or "学习" in task.title
-        ),
+        (task for task in tasks if "自习" in task.title or "学习" in task.title),
         max(tasks, key=lambda task: task.duration_min, default=None),
     )
     suggestions: list[dict] = []
     if adjustable:
         shortened = max(
             5,
-            (
-                (
-                    adjustable.duration_min
-                    - deficit
-                    - action_safety_min
-                )
-                // 5
-            )
-            * 5,
+            ((adjustable.duration_min - deficit - action_safety_min) // 5) * 5,
         )
         if shortened >= 30:
             description = (
@@ -1218,17 +1127,14 @@ def _adjustment_suggestions(
                 }
             )
     earliest_finish = _ceil_five_minutes(
-        planning_start
-        + timedelta(minutes=required_minutes + action_safety_min)
+        planning_start + timedelta(minutes=required_minutes + action_safety_min)
     )
     suggestions.append(
         {
             "id": "option_2",
             "label": "保留完整安排",
             "description": (
-                "不牺牲"
-                + "、".join(task.title for task in tasks)
-                + "的完整性，"
+                "不牺牲" + "、".join(task.title for task in tasks) + "的完整性，"
                 f"把最晚结束时间放宽到约 {earliest_finish:%H:%M}。"
             ),
             "query": _standalone_query(
@@ -1263,11 +1169,7 @@ def _standalone_query(
 def _ceil_five_minutes(value: datetime) -> datetime:
     value = value.replace(second=0, microsecond=0)
     remainder = value.minute % 5
-    return (
-        value
-        if remainder == 0
-        else value + timedelta(minutes=5 - remainder)
-    )
+    return value if remainder == 0 else value + timedelta(minutes=5 - remainder)
 
 
 def _covers_all_tasks(answer: str, tasks: list[Task]) -> bool:
@@ -1296,17 +1198,14 @@ def _polished_answer_is_grounded(
 
     for task in tasks:
         if not task.notes or not any(
-            marker in task.notes
-            for marker in ("营业时间", "开放时间")
+            marker in task.notes for marker in ("营业时间", "开放时间")
         ):
             continue
         required_times = re.findall(r"\b\d{2}:\d{2}\b", task.notes)
         if any(value not in answer for value in required_times):
             return False
 
-    has_peak_congestion = any(
-        raw.get("code") == "PEAK_CONGESTION" for raw in warnings
-    )
+    has_peak_congestion = any(raw.get("code") == "PEAK_CONGESTION" for raw in warnings)
     if has_peak_congestion and _claims_peak_was_avoided(answer):
         return False
 
@@ -1321,8 +1220,7 @@ def _polished_answer_is_grounded(
     ):
         return False
     campus_rules_missing = any(
-        raw.get("code") == "CAMPUS_KNOWLEDGE_NOT_CONFIGURED"
-        for raw in warnings
+        raw.get("code") == "CAMPUS_KNOWLEDGE_NOT_CONFIGURED" for raw in warnings
     )
     if campus_rules_missing and re.search(
         r"(?:开放时间|开放时段|场所开放)[^。；\n]{0,12}"
@@ -1330,9 +1228,7 @@ def _polished_answer_is_grounded(
         answer,
     ):
         return False
-    has_travel = any(
-        item.item_type == "travel" for item in plan.items
-    )
+    has_travel = any(item.item_type == "travel" for item in plan.items)
     if not has_travel and re.search(r"(?:留出|预留)\s*0\s*分钟通勤", answer):
         return False
     return True
@@ -1401,8 +1297,7 @@ def _facts_answer(
     selected: list[RetrievedFact] = []
     excerpts: list[str] = []
     wants_decisive_quantity = any(
-        marker in query
-        for marker in ("最长", "最多", "几年")
+        marker in query for marker in ("最长", "最多", "几年")
     )
     for excerpt, fact in candidates:
         if primary_source and fact.source_ref != primary_source:
@@ -1414,8 +1309,7 @@ def _facts_answer(
         selected.append(fact)
         excerpts.append(excerpt)
         if wants_decisive_quantity and any(
-            marker in excerpt
-            for marker in ("不得超过", "最长", "至多", "累计")
+            marker in excerpt for marker in ("不得超过", "最长", "至多", "累计")
         ):
             break
         if len(selected) >= 3:
@@ -1585,27 +1479,27 @@ def _direct_operational_answer(
         upper_floor_requested = any(
             marker in query
             for marker in (
-            "七层",
-            "七楼",
-            "八层",
-            "八楼",
-            "九层",
-            "九楼",
-            "十层",
-            "十楼",
-            "十一层",
-            "十一楼",
-            "7层",
-            "7楼",
-            "8层",
-            "8楼",
-            "9层",
-            "9楼",
-            "10层",
-            "10楼",
-            "11层",
-            "11楼",
-        )
+                "七层",
+                "七楼",
+                "八层",
+                "八楼",
+                "九层",
+                "九楼",
+                "十层",
+                "十楼",
+                "十一层",
+                "十一楼",
+                "7层",
+                "7楼",
+                "8层",
+                "8楼",
+                "9层",
+                "9楼",
+                "10层",
+                "10楼",
+                "11层",
+                "11楼",
+            )
         )
         lower_floor_requested = any(
             marker in query
@@ -1665,10 +1559,7 @@ def _direct_operational_answer(
                 "硬撑；需要的话我也可以帮你把当天其他安排顺延。\n\n"
                 f"依据来源：{fact.source_ref or '杭电时间知识库'}"
             )
-    if any(
-        marker in query
-        for marker in ("快递", "驿站", "顺丰", "京东", "菜鸟")
-    ):
+    if any(marker in query for marker in ("快递", "驿站", "顺丰", "京东", "菜鸟")):
         fact = by_id.get("express_service_hours")
         if fact is not None:
             if "顺丰" in query:
@@ -1678,21 +1569,14 @@ def _direct_operational_answer(
             elif "菜鸟" in query or "驿站" in query:
                 detail = "菜鸟驿站 8:30—22:30 开放"
             else:
-                detail = (
-                    "顺丰 8:00—18:00、京东 8:00—22:00、"
-                    "菜鸟驿站 8:30—22:30 开放"
-                )
+                detail = "顺丰 8:00—18:00、京东 8:00—22:00、菜鸟驿站 8:30—22:30 开放"
             return (
                 f"{detail}。不同快递点闭门时间差异很大，安排取件时"
                 "最好说清具体站点，我会把通勤和截止时间一起算进去。\n\n"
                 f"依据来源：{fact.source_ref or '杭电时间知识库'}"
             )
-    if (
-        not any(marker in query for marker in ("热水", "供水"))
-        and any(
-            marker in query
-            for marker in ("宿舍", "寝室", "公寓", "门禁", "熄灯")
-        )
+    if not any(marker in query for marker in ("热水", "供水")) and any(
+        marker in query for marker in ("宿舍", "寝室", "公寓", "门禁", "熄灯")
     ):
         fact = by_id.get("dormitory_access_and_lights")
         if fact is not None:
@@ -1703,10 +1587,7 @@ def _direct_operational_answer(
                 "熄灯。晚间安排还要把回宿舍的通勤时间留在门禁之前。\n\n"
                 f"依据来源：{fact.source_ref or '杭电时间知识库'}"
             )
-    if any(
-        marker in query
-        for marker in ("体育馆", "综合馆", "羽毛球", "乒乓球")
-    ):
+    if any(marker in query for marker in ("体育馆", "综合馆", "羽毛球", "乒乓球")):
         fact = by_id.get("summer_indoor_sports_hours")
         if fact is not None:
             return (
@@ -1730,9 +1611,7 @@ def _direct_operational_answer(
 
 
 def _answer_relevance_score(content: str, query: str) -> int:
-    query_text = "".join(
-        char for char in query if "\u4e00" <= char <= "\u9fff"
-    )
+    query_text = "".join(char for char in query if "\u4e00" <= char <= "\u9fff")
     terms = {
         query_text[index : index + width]
         for width in (2, 3, 4)
@@ -1750,10 +1629,7 @@ def _answer_relevance_score(content: str, query: str) -> int:
         "是多少",
     }
     score = sum(len(term) ** 2 for term in terms if term in content)
-    if any(
-        marker in query
-        for marker in ("最长", "最多", "几年")
-    ):
+    if any(marker in query for marker in ("最长", "最多", "几年")):
         decisive_topics = (
             "请假",
             "休学",
@@ -1763,16 +1639,13 @@ def _answer_relevance_score(content: str, query: str) -> int:
             "注册",
             "旷课",
         )
-        requested_topics = {
-            topic for topic in decisive_topics if topic in query
-        }
+        requested_topics = {topic for topic in decisive_topics if topic in query}
         same_topic = not requested_topics or any(
             topic in content for topic in requested_topics
         )
         if same_topic:
             if any(
-                marker in content
-                for marker in ("不得超过", "最长", "至多", "累计")
+                marker in content for marker in ("不得超过", "最长", "至多", "累计")
             ):
                 score += 500
             quantities = re.findall(
@@ -1800,8 +1673,7 @@ def _ensure_query_guardrails(
         and "不同楼层" not in answer
     ):
         additions.append(
-            "还要留意：不同楼层开放时间不同，晚间前往时请按具体"
-            "楼层的闭馆时间安排。"
+            "还要留意：不同楼层开放时间不同，晚间前往时请按具体楼层的闭馆时间安排。"
         )
     holiday_names = (
         "元旦",
@@ -1815,10 +1687,7 @@ def _ensure_query_guardrails(
     )
     if (
         any(name in query for name in holiday_names)
-        and any(
-            marker in evidence
-            for marker in ("放假", "调休", "国务院办公厅")
-        )
+        and any(marker in evidence for marker in ("放假", "调休", "国务院办公厅"))
         and not any(marker in answer for marker in ("学校校历", "教务通知"))
     ):
         additions.append(
@@ -1844,12 +1713,8 @@ def _knowledge_answer_excerpt(content: str, query: str) -> str:
         )
         if provincial_processing_match:
             return provincial_processing_match.group(1)
-    if (
-        "申诉" in query
-        and any(
-            marker in query
-            for marker in ("没告诉", "未告知", "没有告知")
-        )
+    if "申诉" in query and any(
+        marker in query for marker in ("没告诉", "未告知", "没有告知")
     ):
         compact_uninformed_content = re.sub(r"\s+", "", content)
         uninformed_deadline_match = re.search(
@@ -1860,12 +1725,8 @@ def _knowledge_answer_excerpt(content: str, query: str) -> str:
         )
         if uninformed_deadline_match:
             return uninformed_deadline_match.group(1)
-    if (
-        "退学警示" in query
-        and any(
-            marker in query
-            for marker in ("什么情况", "哪些情况", "条件", "会收到")
-        )
+    if "退学警示" in query and any(
+        marker in query for marker in ("什么情况", "哪些情况", "条件", "会收到")
     ):
         compact_warning_content = re.sub(r"\s+", "", content)
         warning_match = re.search(
@@ -1905,8 +1766,7 @@ def _knowledge_answer_excerpt(content: str, query: str) -> str:
             )
         )
         lower_floor_requested = any(
-            marker in query
-            for marker in ("六层", "十二层", "6层", "12层")
+            marker in query for marker in ("六层", "十二层", "6层", "12层")
         )
         if upper_floor_requested:
             floor_match = re.search(
@@ -1935,10 +1795,7 @@ def _knowledge_answer_excerpt(content: str, query: str) -> str:
     if (
         "申诉" in query
         and any(marker in query for marker in ("浙江省教育厅", "省级"))
-        and any(
-            marker in query
-            for marker in ("多久", "多少天", "期限", "什么时候")
-        )
+        and any(marker in query for marker in ("多久", "多少天", "期限", "什么时候"))
     ):
         compact_appeal_content = re.sub(r"\s+", "", content)
         provincial_appeal_match = re.search(
@@ -1953,14 +1810,8 @@ def _knowledge_answer_excerpt(content: str, query: str) -> str:
     if (
         "申诉" in query
         and "学校" in query
-        and any(
-            marker in query
-            for marker in ("处理决定", "复查结论", "作出决定")
-        )
-        and any(
-            marker in query
-            for marker in ("多久", "多少天", "期限", "什么时候")
-        )
+        and any(marker in query for marker in ("处理决定", "复查结论", "作出决定"))
+        and any(marker in query for marker in ("多久", "多少天", "期限", "什么时候"))
     ):
         compact_appeal_content = re.sub(r"\s+", "", content)
         school_appeal_match = re.search(
@@ -1999,10 +1850,7 @@ def _knowledge_answer_excerpt(content: str, query: str) -> str:
         )
         if registration_match:
             return registration_match.group(1)
-    if (
-        "请假" in query
-        and any(marker in query for marker in ("最长", "多久"))
-    ):
+    if "请假" in query and any(marker in query for marker in ("最长", "多久")):
         compact_leave_content = re.sub(r"\s+", "", content)
         leave_match = re.search(
             r"(最长请假时间不能超过四周。?)",
@@ -2010,12 +1858,8 @@ def _knowledge_answer_excerpt(content: str, query: str) -> str:
         )
         if leave_match:
             return leave_match.group(1)
-    if (
-        "休学" in query
-        and any(
-            marker in query
-            for marker in ("最长", "最多", "多久", "期限", "几年")
-        )
+    if "休学" in query and any(
+        marker in query for marker in ("最长", "最多", "多久", "期限", "几年")
     ):
         compact_suspension_content = re.sub(r"\s+", "", content)
         suspension_match = re.search(
@@ -2051,8 +1895,7 @@ def _knowledge_answer_excerpt(content: str, query: str) -> str:
     units = [
         re.sub(r"^#+\s*|^[-*]\s*", "", item.strip())
         for item in re.split(r"\n+|(?<=[。！？；])", content)
-        if item.strip()
-        and not re.match(r"^#{1,6}\s*", item.strip())
+        if item.strip() and not re.match(r"^#{1,6}\s*", item.strip())
     ]
     known_terms = (
         "元旦",
@@ -2086,11 +1929,7 @@ def _knowledge_answer_excerpt(content: str, query: str) -> str:
 
     def score(unit: str) -> tuple[int, int]:
         exact = sum(len(term) ** 2 for term in query_terms if term in unit)
-        digit_bonus = sum(
-            4
-            for value in re.findall(r"\d{1,4}", query)
-            if value in unit
-        )
+        digit_bonus = sum(4 for value in re.findall(r"\d{1,4}", query) if value in unit)
         quantity_bonus = (
             30
             if any(marker in query for marker in ("多少", "几天", "多久"))
@@ -2125,9 +1964,8 @@ def _knowledge_answer_excerpt(content: str, query: str) -> str:
             ),
         )
         for query_markers, unit_pattern in expected_quantity_patterns:
-            if (
-                any(marker in query for marker in query_markers)
-                and re.search(unit_pattern, unit)
+            if any(marker in query for marker in query_markers) and re.search(
+                unit_pattern, unit
             ):
                 expected_unit_bonus += 80
         return (

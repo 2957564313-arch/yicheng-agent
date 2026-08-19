@@ -1,14 +1,62 @@
 {
   "schema_version": "1.0",
-  "calendar_year": 2026,
+  "calendar_years": [2025, 2026],
   "country": "CN",
-  "verified_at": "2025-11-04",
-  "source": {
-    "title": "国务院办公厅关于2026年部分节假日安排的通知",
-    "document_number": "国办发明电〔2025〕7号",
-    "url": "https://www.gov.cn/zhengce/content/202511/content_7047090.htm"
-  },
+  "verified_at": "2026-08-19",
+  "sources": [
+    {
+      "year": 2025,
+      "title": "国务院办公厅关于2025年部分节假日安排的通知",
+      "document_number": "国办发明电〔2024〕12号",
+      "url": "https://www.gov.cn/gongbao/2024/issue_11726/material/gwygb202433.pdf"
+    },
+    {
+      "year": 2026,
+      "title": "国务院办公厅关于2026年部分节假日安排的通知",
+      "document_number": "国办发明电〔2025〕7号",
+      "url": "https://www.gov.cn/zhengce/content/202511/content_7047090.htm"
+    }
+  ],
   "days": {
+    "2025-01-01": {"type": "holiday", "name": "元旦"},
+
+    "2025-01-26": {"type": "adjusted_workday", "name": "春节调休工作日"},
+    "2025-01-28": {"type": "holiday", "name": "春节"},
+    "2025-01-29": {"type": "holiday", "name": "春节"},
+    "2025-01-30": {"type": "holiday", "name": "春节"},
+    "2025-01-31": {"type": "holiday", "name": "春节"},
+    "2025-02-01": {"type": "holiday", "name": "春节"},
+    "2025-02-02": {"type": "holiday", "name": "春节"},
+    "2025-02-03": {"type": "holiday", "name": "春节"},
+    "2025-02-04": {"type": "holiday", "name": "春节"},
+    "2025-02-08": {"type": "adjusted_workday", "name": "春节调休工作日"},
+
+    "2025-04-04": {"type": "holiday", "name": "清明节"},
+    "2025-04-05": {"type": "holiday", "name": "清明节"},
+    "2025-04-06": {"type": "holiday", "name": "清明节"},
+
+    "2025-04-27": {"type": "adjusted_workday", "name": "劳动节调休工作日"},
+    "2025-05-01": {"type": "holiday", "name": "劳动节"},
+    "2025-05-02": {"type": "holiday", "name": "劳动节"},
+    "2025-05-03": {"type": "holiday", "name": "劳动节"},
+    "2025-05-04": {"type": "holiday", "name": "劳动节"},
+    "2025-05-05": {"type": "holiday", "name": "劳动节"},
+
+    "2025-05-31": {"type": "holiday", "name": "端午节"},
+    "2025-06-01": {"type": "holiday", "name": "端午节"},
+    "2025-06-02": {"type": "holiday", "name": "端午节"},
+
+    "2025-09-28": {"type": "adjusted_workday", "name": "国庆节调休工作日"},
+    "2025-10-01": {"type": "holiday", "name": "国庆节、中秋节"},
+    "2025-10-02": {"type": "holiday", "name": "国庆节、中秋节"},
+    "2025-10-03": {"type": "holiday", "name": "国庆节、中秋节"},
+    "2025-10-04": {"type": "holiday", "name": "国庆节、中秋节"},
+    "2025-10-05": {"type": "holiday", "name": "国庆节、中秋节"},
+    "2025-10-06": {"type": "holiday", "name": "国庆节、中秋节"},
+    "2025-10-07": {"type": "holiday", "name": "国庆节、中秋节"},
+    "2025-10-08": {"type": "holiday", "name": "国庆节、中秋节"},
+    "2025-10-11": {"type": "adjusted_workday", "name": "国庆节调休工作日"},
+
     "2026-01-01": {"type": "holiday", "name": "元旦"},
     "2026-01-02": {"type": "holiday", "name": "元旦"},
     "2026-01-03": {"type": "holiday", "name": "元旦"},

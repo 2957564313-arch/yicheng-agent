@@ -60,9 +60,7 @@ class WeeklyCapacityBuilder:
             if profile.use_memories
             else []
         )
-        memory_values = {
-            item.key: item.value for item in enabled_memories
-        }
+        memory_values = {item.key: item.value for item in enabled_memories}
         memory_labels: list[str] = []
         preferred_period = memory_values.get("preferred_study_period")
         preferred_location = memory_values.get("preferred_study_location")
@@ -114,12 +112,9 @@ class WeeklyCapacityBuilder:
                 if profile.use_calendar
                 else target_date.isoweekday()
             )
-            if (
-                profile.use_calendar
-                and (
-                    calendar.course_action != "normal"
-                    or effective_weekday != target_date.isoweekday()
-                )
+            if profile.use_calendar and (
+                calendar.course_action != "normal"
+                or effective_weekday != target_date.isoweekday()
             ):
                 calendar_adjusted_dates.append(target_date)
 
@@ -165,9 +160,7 @@ class WeeklyCapacityBuilder:
                                 raw_window,
                                 preferred_period,
                             ),
-                            location_id=(
-                                raw_window.location_id
-                            ),
+                            location_id=(raw_window.location_id),
                         )
                     )
             limit = day_profile.max_focus_min
@@ -175,13 +168,9 @@ class WeeklyCapacityBuilder:
                 windows = self._limit_windows(windows, limit)
             day_notes = list(day_profile.notes)
             if course_tasks:
-                day_notes.append(
-                    f"已从可用时段中扣除 {len(course_tasks)} 段固定课程"
-                )
+                day_notes.append(f"已从可用时段中扣除 {len(course_tasks)} 段固定课程")
             if calendar.label:
-                day_notes.append(
-                    f"校历：{calendar.label}（{calendar.course_action}）"
-                )
+                day_notes.append(f"校历：{calendar.label}（{calendar.course_action}）")
             capacities.append(
                 DailyCapacity(
                     date=target_date,
@@ -195,10 +184,8 @@ class WeeklyCapacityBuilder:
         else:
             notes.append("尚未启用个人课表，本周容量未扣除课程")
         if memory_labels:
-            notes.append(
-                "已应用个性化设置：" + "、".join(memory_labels)
-            )
-        notes.append("学校上课节次和法定节假日按杭电知识底座解析")
+            notes.append("已应用个性化设置：" + "、".join(memory_labels))
+        notes.append("课程与学校调整以杭助为准，法定节假日按国家日历解析")
         return WeeklyCapacityResult(
             capacities=capacities,
             summary=WeeklyCapacitySummary(
@@ -242,10 +229,7 @@ class WeeklyCapacityBuilder:
     ) -> EnergyLevel:
         if preferred_period == "morning" and window.start.hour < 12:
             return EnergyLevel.HIGH
-        if (
-            preferred_period == "afternoon"
-            and 12 <= window.start.hour < 18
-        ):
+        if preferred_period == "afternoon" and 12 <= window.start.hour < 18:
             return EnergyLevel.HIGH
         if preferred_period == "evening" and window.start.hour >= 18:
             return EnergyLevel.HIGH
@@ -275,10 +259,7 @@ class WeeklyCapacityBuilder:
             duration = min(window.duration_min, remaining)
             result.append(
                 window.model_copy(
-                    update={
-                        "end_at": window.start_at
-                        + timedelta(minutes=duration)
-                    }
+                    update={"end_at": window.start_at + timedelta(minutes=duration)}
                 )
             )
             remaining -= duration

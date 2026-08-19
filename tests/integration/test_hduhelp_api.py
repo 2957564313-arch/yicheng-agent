@@ -27,7 +27,7 @@ class FakeHduHelp:
 
     def schedule(self, token: str):
         assert token == TOKEN
-        return [
+        current_term = [
             {
                 "schoolYear": "2026-2027",
                 "semester": 1,
@@ -41,6 +41,21 @@ class FakeHduHelp:
             }
             for week in (1, 2)
         ]
+        historical_term = [
+            {
+                "schoolYear": "2025-2026",
+                "semester": 2,
+                "week": week,
+                "day": 2,
+                "courseName": "工程伦理",
+                "location": "第6教研楼北214",
+                "courseId": "course-2",
+                "weeks": [1, 2],
+                "sections": [3, 4],
+            }
+            for week in (1, 2)
+        ]
+        return [*current_term, *historical_term]
 
     def school_time(self, token: str):
         assert token == TOKEN
@@ -91,6 +106,8 @@ class FakeHduHelp:
 
     def exams(self, token: str, school_year: str, semester: int):
         assert token == TOKEN
+        if (school_year, semester) == ("2025-2026", 2):
+            return []
         assert (school_year, semester) == ("2026-2027", 1)
         if self.cancelled:
             return []
@@ -102,6 +119,7 @@ class FakeHduHelp:
                 "classroom": "第6教研楼北204",
             }
         ]
+
 
 def build_hduhelp_app(tmp_path: Path, *, access_enabled: bool = False):
     return create_app(
@@ -154,7 +172,12 @@ def test_connect_sync_authoritative_cancellation_and_disconnect(tmp_path):
                 "school_year": "2026-2027",
                 "semester": 1,
                 "raw_entry_count": 2,
-            }
+            },
+            {
+                "school_year": "2025-2026",
+                "semester": 2,
+                "raw_entry_count": 2,
+            },
         ]
         assert "token" not in connected.text.lower()
 
@@ -166,16 +189,35 @@ def test_connect_sync_authoritative_cancellation_and_disconnect(tmp_path):
         assert TOKEN not in row["credential_ciphertext"]
 
         synced = sync(client).json()
-        assert synced["imported_count"] == 1
+        assert synced["imported_count"] == 2
         assert synced["entries"][0]["weeks"] == [1, 2]
         assert synced["timetable"]["term_start"] == "2026-09-07"
         assert synced["timetable"]["term_end"] == "2027-01-10"
-        assert synced["synced_counts"] == {
-            "course": 1,
+        expected_counts = {
+            "course": 2,
             "library_reservation": 1,
             "second_classroom": 1,
             "exam": 1,
         }
+        for key, count in expected_counts.items():
+            assert synced["synced_counts"][key] == count
+        assert synced["synced_counts"]["timetable_terms"] == 2
+        assert len(synced["terms"]) == 2
+
+        timetables = client.get(
+            "/api/v1/users/visitor-1/connections/hduhelp/timetables"
+        )
+        assert timetables.status_code == 200, timetables.text
+        terms = timetables.json()["terms"]
+        assert [
+            (term["school_year"], term["semester"], term["current"])
+            for term in terms
+        ] == [
+            ("2026-2027", 1, True),
+            ("2025-2026", 2, False),
+        ]
+        assert terms[0]["entries"][0]["course_name"] == "高等数学A2"
+        assert terms[1]["entries"][0]["course_name"] == "工程伦理"
 
         agenda_items = []
         for start_date, end_date in (
@@ -188,9 +230,7 @@ def test_connect_sync_authoritative_cancellation_and_disconnect(tmp_path):
             )
             assert agenda.status_code == 200, agenda.text
             agenda_items.extend(agenda.json()["items"])
-        external = [
-            item for item in agenda_items if item["source"] == "external"
-        ]
+        external = [item for item in agenda_items if item["source"] == "external"]
         assert {item["title"] for item in external} == {
             "图书馆自习预约",
             "二课讲座",
@@ -205,13 +245,9 @@ def test_connect_sync_authoritative_cancellation_and_disconnect(tmp_path):
         assert resynced["synced_counts"]["exam"] == 0
         assert app.state.container.external_agenda.counts("visitor-1") == {}
 
-        disconnected = client.delete(
-            "/api/v1/users/visitor-1/connections/hduhelp"
-        )
+        disconnected = client.delete("/api/v1/users/visitor-1/connections/hduhelp")
         assert disconnected.status_code == 204
-        status = client.get(
-            "/api/v1/users/visitor-1/connections/hduhelp"
-        )
+        status = client.get("/api/v1/users/visitor-1/connections/hduhelp")
         assert status.json()["connected"] is False
 
 
@@ -225,9 +261,10 @@ def test_provider_failure_preserves_last_successful_source(tmp_path):
         fake.library_unavailable = True
         response = sync(client)
         assert response.json()["synced_counts"]["library_reservation"] == 1
-        assert "图书馆上游暂时不可用" in "".join(
-            response.json()["warnings"]
+        assert "图书馆上游暂时不可用" in "".join(response.json()["warnings"])
+        assert (
+            app.state.container.external_agenda.counts("visitor-1")[
+                "library_reservation"
+            ]
+            == 1
         )
-        assert app.state.container.external_agenda.counts("visitor-1")[
-            "library_reservation"
-        ] == 1

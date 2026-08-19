@@ -96,3 +96,31 @@ def test_unverified_future_year_keeps_weekday_but_does_not_guess_holidays(
     assert context.course_action == "normal"
     assert context.effective_weekday == 5
     assert context.source.value == "unknown"
+
+
+def test_verified_2025_calendar_only_marks_real_holidays(temp_database):
+    repository = AcademicCalendarRepository(
+        temp_database,
+        BASE_DIR / "data" / "academic_calendar.json",
+    )
+
+    ordinary = repository.resolve(
+        user_id="calendar_2025",
+        target_date=date(2025, 9, 2),
+    )
+    national_day = repository.resolve(
+        user_id="calendar_2025",
+        target_date=date(2025, 10, 1),
+    )
+    makeup_day = repository.resolve(
+        user_id="calendar_2025",
+        target_date=date(2025, 10, 11),
+    )
+
+    assert ordinary.day_type == "normal"
+    assert ordinary.course_action == "normal"
+    assert ordinary.label is None
+    assert national_day.day_type == "holiday"
+    assert national_day.label == "国庆节、中秋节"
+    assert makeup_day.day_type == "adjusted_workday"
+    assert makeup_day.course_action == "awaiting_school_notice"

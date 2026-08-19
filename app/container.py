@@ -25,6 +25,7 @@ from app.repositories.connections import ExternalConnectionRepository
 from app.repositories.conversations import ConversationRepository
 from app.repositories.database import Database
 from app.repositories.external_agenda import ExternalAgendaRepository
+from app.repositories.external_data import ExternalDataRepository
 from app.repositories.memories import MemoryRepository
 from app.repositories.plans import PlanRepository
 from app.repositories.reminders import ReminderSettingsRepository
@@ -53,6 +54,7 @@ class AppContainer:
     conversations: ConversationRepository
     external_connections: ExternalConnectionRepository
     external_agenda: ExternalAgendaRepository
+    external_data: ExternalDataRepository
     credential_cipher: CredentialCipher
     hduhelp: HduHelpClient
     plans: PlanRepository
@@ -91,10 +93,7 @@ def _load_campus_profile(data_dir: Path) -> dict:
 
 def _profile_amap_settings(profile: dict) -> dict[str, str]:
     """Read non-secret AMap settings from the active campus profile."""
-    raw = (
-        profile.get("external_services", {})
-        .get("amap", {})
-    )
+    raw = profile.get("external_services", {}).get("amap", {})
     return {
         key: str(raw.get(key, "")).strip()
         for key in ("weather_adcode", "search_city", "campus_query")
@@ -121,6 +120,7 @@ def build_container(settings: Settings) -> AppContainer:
     conversations = ConversationRepository(database)
     external_connections = ExternalConnectionRepository(database)
     external_agenda = ExternalAgendaRepository(database)
+    external_data = ExternalDataRepository(database)
     credential_cipher = CredentialCipher(settings.credential_secret)
     hduhelp = HduHelpClient(
         base_url=settings.hduhelp_api_base_url,
@@ -160,12 +160,9 @@ def build_container(settings: Settings) -> AppContainer:
     memories = MemoryRepository(database)
     plans = PlanRepository(database)
     reminders = ReminderSettingsRepository(database)
-    class_periods = _load_class_periods(
-        settings.app_data_dir / "class_periods.json"
-    )
-    weather_city_adcode = (
-        settings.weather_city_adcode
-        or amap_profile.get("weather_adcode", "")
+    class_periods = _load_class_periods(settings.app_data_dir / "class_periods.json")
+    weather_city_adcode = settings.weather_city_adcode or amap_profile.get(
+        "weather_adcode", ""
     )
     geocoder = (
         AmapGeocodingProvider(
@@ -246,6 +243,7 @@ def build_container(settings: Settings) -> AppContainer:
         conversations=conversations,
         external_connections=external_connections,
         external_agenda=external_agenda,
+        external_data=external_data,
         credential_cipher=credential_cipher,
         hduhelp=hduhelp,
         plans=plans,
@@ -294,8 +292,6 @@ def build_container(settings: Settings) -> AppContainer:
             enable_thinking=settings.llm_enable_thinking,
             timeout_seconds=settings.llm_timeout_seconds,
             prompt_dir=BASE_DIR / "prompts",
-            campus_context_path=(
-                settings.app_data_dir / "class_periods.json"
-            ),
+            campus_context_path=(settings.app_data_dir / "class_periods.json"),
         ),
     )

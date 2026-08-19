@@ -94,6 +94,19 @@ CREATE TABLE IF NOT EXISTS external_agenda_items (
 CREATE INDEX IF NOT EXISTS idx_external_agenda_user_time
 ON external_agenda_items(user_id, start_at, end_at);
 
+CREATE TABLE IF NOT EXISTS external_data_snapshots (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,
+    source_kind TEXT NOT NULL,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    item_count INTEGER NOT NULL DEFAULT 0,
+    synced_at TEXT NOT NULL,
+    PRIMARY KEY(user_id, provider, source_kind)
+);
+
+CREATE INDEX IF NOT EXISTS idx_external_data_user_provider
+ON external_data_snapshots(user_id, provider);
+
 CREATE TABLE IF NOT EXISTS timetables (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
@@ -373,8 +386,7 @@ class Database:
         try:
             connection.executescript(SCHEMA_SQL)
             columns = {
-                row["name"]
-                for row in connection.execute("PRAGMA table_info(plans)")
+                row["name"] for row in connection.execute("PRAGMA table_info(plans)")
             }
             if "agenda_published" not in columns:
                 connection.execute(
@@ -382,16 +394,13 @@ class Database:
                     "INTEGER NOT NULL DEFAULT 0 "
                     "CHECK (agenda_published IN (0, 1))"
                 )
-                connection.execute(
-                    "UPDATE plans SET agenda_published = 1"
-                )
+                connection.execute("UPDATE plans SET agenda_published = 1")
             if "source_message_id" not in columns:
                 connection.execute(
                     "ALTER TABLE plans ADD COLUMN source_message_id TEXT"
                 )
             thread_columns = {
-                row["name"]
-                for row in connection.execute("PRAGMA table_info(threads)")
+                row["name"] for row in connection.execute("PRAGMA table_info(threads)")
             }
             if "parent_thread_id" not in thread_columns:
                 connection.execute(
@@ -403,9 +412,7 @@ class Database:
                     "ALTER TABLE threads ADD COLUMN forked_from_message_id TEXT"
                 )
             if "deleted_at" not in thread_columns:
-                connection.execute(
-                    "ALTER TABLE threads ADD COLUMN deleted_at TEXT"
-                )
+                connection.execute("ALTER TABLE threads ADD COLUMN deleted_at TEXT")
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_threads_parent "
                 "ON threads(parent_thread_id)"

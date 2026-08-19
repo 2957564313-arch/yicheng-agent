@@ -221,8 +221,8 @@
               <span id="hduhelp-badge" class="connection-badge">未连接</span>
             </div>
             <p class="panel-note">
-              绑定个人访问令牌后同步课程、考试、图书馆自习预约和已报名二课。
-              杭助记录优先；预约、活动或课程取消后，下次同步会从日程中移除。
+              绑定个人访问令牌后同步课程、考试、图书馆预约、二课、志愿活动等校园数据。
+              杭助中的实际安排优先；记录取消后，下次同步会从日程中移除。
             </p>
             <section class="hduhelp-card" aria-labelledby="hduhelp-title">
               <div class="hduhelp-card-heading">
@@ -241,7 +241,6 @@
               </div>
             </section>
             <div id="hduhelp-sync-form" class="hduhelp-sync-form" hidden>
-              <select id="hduhelp-term" aria-label="选择杭电助手学期"></select>
               <button id="hduhelp-sync" class="primary" type="button">同步全部校园数据</button>
               <button id="hduhelp-disconnect" class="text-button danger-link" type="button">退出杭助账号</button>
             </div>
@@ -254,52 +253,20 @@
           <article class="panel timetable-panel tool-collapsible">
             <div class="panel-heading compact">
               <div>
-                <p class="step">个人课表</p>
-                <h2>同步后自动避开上课时间</h2>
+                <p class="step">课程与校历</p>
+                <h2>按学期查看课程与教学周</h2>
               </div>
             </div>
             <p class="panel-note">
-              这里只展示杭助同步的课程与学校临时调课；不再需要上传课表文件。
+              课程、调课、停课与补课均以杭助同步结果为准；法定节假日仍按国家日历标注。
             </p>
+            <div id="timetable-term-controls" class="timetable-term-controls" hidden>
+              <label for="timetable-term-view">查看课表与校历</label>
+              <select id="timetable-term-view" aria-label="选择要查看的课表学期"></select>
+            </div>
             <div id="timetable-summary" class="timetable-summary muted">
               当前还没有同步个人课表。
             </div>
-            <details class="calendar-editor">
-              <summary>学校临时调课与停课</summary>
-              <p class="panel-note">
-                法定节假日会自动参考国家日历；学校补哪天的课必须以
-                教务通知为准，可在这里手动覆盖。
-              </p>
-              <div class="calendar-form">
-                <input
-                  id="calendar-date"
-                  type="date"
-                  aria-label="校历调整日期"
-                />
-                <select id="calendar-action" aria-label="当天课程安排">
-                  <option value="no_class">当天不上课</option>
-                  <option value="makeup">按其他星期补课</option>
-                  <option value="normal">按当天正常课表</option>
-                </select>
-                <select
-                  id="calendar-weekday"
-                  aria-label="补星期几的课程"
-                  hidden
-                >
-                  <option value="1">补星期一的课</option>
-                  <option value="2">补星期二的课</option>
-                  <option value="3">补星期三的课</option>
-                  <option value="4">补星期四的课</option>
-                  <option value="5">补星期五的课</option>
-                  <option value="6">补星期六的课</option>
-                  <option value="7">补星期日的课</option>
-                </select>
-                <button id="calendar-save" class="ghost">保存这天的安排</button>
-              </div>
-              <div id="calendar-list" class="calendar-list muted">
-                暂无学校校历调整。
-              </div>
-            </details>
             <p class="storage-note">
               当前为公开测试版；系统更新时，体验数据可能重置。
             </p>

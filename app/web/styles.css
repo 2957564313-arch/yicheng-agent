@@ -514,61 +514,6 @@ textarea:focus {
 
 .danger-link { color: var(--red); }
 
-.calendar-editor {
-  margin-top: 13px;
-  padding-top: 11px;
-  border-top: 1px solid var(--line);
-}
-
-.calendar-editor summary {
-  cursor: pointer;
-  color: var(--green);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.calendar-editor .panel-note { margin: 9px 0; }
-
-.calendar-form,
-.calendar-list {
-  display: grid;
-  gap: 7px;
-}
-
-.calendar-form select,
-.calendar-form button {
-  width: 100%;
-}
-
-.calendar-list {
-  margin-top: 10px;
-  font-size: 10px;
-}
-
-.calendar-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 9px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fff;
-}
-
-.calendar-item span {
-  color: var(--muted);
-  line-height: 1.45;
-}
-
-.calendar-item button {
-  width: auto;
-  padding: 3px 6px;
-  border: 0;
-  color: var(--red);
-  background: transparent;
-  font-size: 9px;
-}
-
 .storage-note {
   margin: 10px 0 0;
   color: var(--muted);
@@ -2228,10 +2173,18 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
 .schedule-month-cell b.activity { background: #7c3aed; }
 .schedule-month-cell.is-holiday { border-color: #fecdd3; background: #fffafb; }
 .schedule-month-cell.is-workday { border-color: #fde68a; background: #fffdf5; }
-.schedule-calendar-badge { display: inline-flex; align-items: center; gap: 3px; width: fit-content; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; color: #fff; background: #be123c; font-size: 9px; font-style: normal; font-weight: 800; line-height: 18px; }
-.schedule-calendar-badge.workday { color: #854d0e; background: #fef3c7; }
-.schedule-calendar-badge small { font-size: 8px; font-weight: 650; white-space: nowrap; }
+.schedule-calendar-badge { display: inline-flex; align-items: center; gap: 3px; width: fit-content; min-width: 18px; height: 20px; padding: 0 6px; border-radius: 999px; color: #fff; background: #9f1239; font-size: 10px; font-style: normal; font-weight: 850; line-height: 20px; }
+.schedule-calendar-badge.workday { color: #713f12; background: #fde68a; }
+.schedule-calendar-badge small { color: inherit; font-size: 9px; font-weight: 800; opacity: 1; white-space: nowrap; }
 .schedule-week-day > header .schedule-calendar-badge { grid-column: 1 / -1; margin-top: 4px; }
+
+.timetable-term-controls { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin: 14px 0 8px; }
+.timetable-term-controls label { color: var(--muted); font-size: 13px; font-weight: 700; }
+.timetable-term-controls select { min-width: 220px; max-width: 100%; }
+@media (max-width: 720px) {
+  .timetable-term-controls { align-items: stretch; flex-direction: column; }
+  .timetable-term-controls select { width: 100%; min-width: 0; }
+}
 .schedule-calendar-notice { display: flex; gap: 9px; align-items: center; margin-bottom: 12px; padding: 10px 12px; border: 1px solid #fecdd3; border-radius: 12px; color: #881337; background: #fff7f8; }
 .schedule-calendar-notice.workday { border-color: #fde68a; color: #713f12; background: #fffbeb; }
 .schedule-calendar-notice > span { display: grid; gap: 1px; font-size: 10px; }

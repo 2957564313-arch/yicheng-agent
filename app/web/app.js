@@ -62,17 +62,13 @@ const hduhelpToken = $("#hduhelp-token");
 const hduhelpConnect = $("#hduhelp-connect");
 const hduhelpDisconnect = $("#hduhelp-disconnect");
 const hduhelpSync = $("#hduhelp-sync");
-const hduhelpTerm = $("#hduhelp-term");
 const hduhelpBadge = $("#hduhelp-badge");
 const hduhelpState = $("#hduhelp-state");
 const hduhelpConnectForm = $("#hduhelp-connect-form");
 const hduhelpSyncForm = $("#hduhelp-sync-form");
 const hduhelpDataSummary = $("#hduhelp-data-summary");
-const calendarDate = $("#calendar-date");
-const calendarAction = $("#calendar-action");
-const calendarWeekday = $("#calendar-weekday");
-const calendarSave = $("#calendar-save");
-const calendarList = $("#calendar-list");
+const timetableTermControls = $("#timetable-term-controls");
+const timetableTermView = $("#timetable-term-view");
 const campusName = $("#campus-name");
 const campusCity = $("#campus-city");
 const campusDiscover = $("#campus-discover");
@@ -592,23 +588,21 @@ function scheduleCalendarBadge(date, includeName = false) {
   const context = scheduleCalendarContexts[date];
   if (!context || !["holiday", "adjusted_workday"].includes(context.day_type)) return "";
   const holiday = context.day_type === "holiday";
-  if (!holiday && context.course_action === "makeup") return "";
   const label = context.label || (holiday ? "法定节假日" : "待确认补课安排");
-  return `<span class="schedule-calendar-badge ${holiday ? "holiday" : "workday"}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${holiday ? "休" : "补"}${includeName ? `<small>${escapeHtml(holiday ? label : "待定")}</small>` : ""}</span>`;
+  return `<span class="schedule-calendar-badge ${holiday ? "holiday" : "workday"}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${holiday ? "休" : "补"}${includeName ? `<small>${escapeHtml(label)}</small>` : ""}</span>`;
 }
 
 function scheduleCalendarNotice(date) {
   const context = scheduleCalendarContexts[date];
   if (!context || !["holiday", "adjusted_workday"].includes(context.day_type)) return "";
   const holiday = context.day_type === "holiday";
-  if (!holiday && context.course_action === "makeup") return "";
-  return `<div class="schedule-calendar-notice ${holiday ? "holiday" : "workday"}">${scheduleCalendarBadge(date)}<span><strong>${escapeHtml(context.label || (holiday ? "法定节假日" : "待确认补课安排"))}</strong>${holiday ? "法定节假日，已自动停用课表中的固定课程" : "学校尚未指定按周几课表执行，可在偏好与校历中手动设置"}</span></div>`;
+  return `<div class="schedule-calendar-notice ${holiday ? "holiday" : "workday"}">${scheduleCalendarBadge(date)}<span><strong>${escapeHtml(context.label || (holiday ? "法定节假日" : "调休工作日"))}</strong>${holiday ? "法定节假日，常规课程不执行；如杭助同步到特殊安排，仍以杭助记录为准" : "调休工作日已标注，实际补课课程以杭助同步结果为准"}</span></div>`;
 }
 
 function scheduleItemMarkup(item, compact = false) {
   return `
     <article class="schedule-event ${escapeHtml(item.kind || "task")}" title="${escapeHtml(item.title || "日程")}">
-      <time>${escapeHtml(timePart(item.start_at))}${compact ? "" : ` — ${escapeHtml(timePart(item.end_at))}`}</time>
+      <time>${escapeHtml(timePart(item.start_at))}—${escapeHtml(timePart(item.end_at))}</time>
       <div><strong>${escapeHtml(item.title || "未命名安排")}</strong>${compact ? "" : `<small>${escapeHtml(item.location_name || (item.kind === "travel" ? "通勤时间" : "个人安排"))}</small>`}</div>
     </article>`;
 }
@@ -927,7 +921,6 @@ function initializeWorkspaceNavigation() {
 function clientContextSnapshot() {
   const memories = readLocalSnapshot(memorySnapshotKey, []);
   const timetableData = readLocalSnapshot(timetableSnapshotKey, null);
-  const calendarOverrides = readLocalSnapshot(calendarSnapshotKey, []);
   const previousPlan = readLocalSnapshot(planSnapshotKey, null);
   const campus = readLocalSnapshot(campusSnapshotKey, null);
   return {
@@ -947,13 +940,7 @@ function clientContextSnapshot() {
         entries: timetableData.entries,
       }
       : null,
-    calendar_overrides: calendarOverrides.map((item) => ({
-      date: item.date,
-      action: item.action,
-      replacement_weekday: item.replacement_weekday || null,
-      label: item.label,
-      source_ref: item.source_ref || null,
-    })),
+    calendar_overrides: [],
     previous_plan: previousPlan,
     previous_plan_published: Boolean(
       previousPlan
@@ -1084,7 +1071,6 @@ const personalCacheKeys = [
   "yicheng_thread_id",
   memorySnapshotKey,
   timetableSnapshotKey,
-  calendarSnapshotKey,
   planSnapshotKey,
   planPublishedKey,
   behaviorHistoryKey,
@@ -3497,21 +3483,20 @@ function renderHduHelpConnection(data) {
   hduhelpBadge.classList.toggle("connected", connected);
   hduhelpConnectForm.hidden = connected;
   hduhelpSyncForm.hidden = !connected;
-  hduhelpTerm.innerHTML = (data?.available_terms || []).map((term) => `
-    <option value="${escapeHtml(`${term.school_year}|${term.semester}`)}">
-      ${escapeHtml(hduhelpTermLabel(term))}
-    </option>
-  `).join("");
+  hduhelpAvailableTerms = data?.available_terms || [];
   hduhelpState.classList.remove("error", "ready");
   const labels = {
     course: "课程",
     library_reservation: "自习预约",
     second_classroom: "二课",
     exam: "考试",
+    volunteer: "志愿活动",
+    timetable_terms: "学期课表",
   };
-  hduhelpDataSummary.innerHTML = Object.entries(data?.synced_counts || {})
-    .filter(([, count]) => Number(count) > 0)
-    .map(([key, count]) => `<span>${escapeHtml(labels[key] || key)} ${Number(count)}</span>`)
+  hduhelpDataSummary.innerHTML = Object.entries(labels)
+    .map(([key, label]) => [label, Number(data?.synced_counts?.[key] || 0)])
+    .filter(([, count]) => count > 0)
+    .map(([label, count]) => `<span>${escapeHtml(label)} ${count}</span>`)
     .join("");
   if (!connected) {
     hduhelpState.textContent = "登录易程智策后，可在这里绑定自己的杭助个人访问令牌。";
@@ -3519,7 +3504,7 @@ function renderHduHelpConnection(data) {
   }
   hduhelpState.textContent = data.last_synced_at
     ? `已连接${data.display_name ? `：${data.display_name}` : ""}，校园数据已同步。`
-    : `已连接${data.display_name ? `：${data.display_name}` : ""}，请选择学期后同步全部数据。`;
+    : `已连接${data.display_name ? `：${data.display_name}` : ""}，系统会自动同步全部可用学期和校园数据。`;
   hduhelpState.classList.add("ready");
 }
 
@@ -3531,7 +3516,7 @@ async function loadHduHelpConnection() {
   if (!response.ok) throw data;
   renderHduHelpConnection(data);
   const syncedAt = Date.parse(data.last_synced_at || "");
-  const needsRefresh = data.connected && hduhelpTerm.value && (
+  const needsRefresh = data.connected && hduhelpAvailableTerms.length > 0 && (
     !Number.isFinite(syncedAt) || Date.now() - syncedAt > 15 * 60 * 1000
   );
   const autoSyncKey = `yicheng_hduhelp_autosync_${consoleUserId}`;
@@ -3566,6 +3551,7 @@ hduhelpConnect.addEventListener("click", async () => {
     if (!response.ok) throw data;
     hduhelpToken.value = "";
     renderHduHelpConnection(data);
+    setTimeout(() => hduhelpSync.click(), 0);
   } catch (error) {
     hduhelpState.textContent = error?.error?.message
       || "杭电助手暂时没有连接成功。";
@@ -3599,15 +3585,9 @@ hduhelpDisconnect.addEventListener("click", async () => {
 });
 
 hduhelpSync.addEventListener("click", async () => {
-  const [schoolYear, semester] = hduhelpTerm.value.split("|");
-  if (!schoolYear || !semester) {
-    hduhelpState.textContent = "请先选择要同步的学期。";
-    hduhelpState.classList.add("error");
-    return;
-  }
   hduhelpSync.disabled = true;
   hduhelpSync.textContent = "正在同步…";
-  hduhelpState.textContent = "正在合并重复周次并校验课程节次。";
+  hduhelpState.textContent = "正在同步全部学期、课程、预约、考试和校园数据。";
   hduhelpState.classList.remove("error", "ready");
   try {
     const response = await fetch(
@@ -3615,17 +3595,13 @@ hduhelpSync.addEventListener("click", async () => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          school_year: schoolYear,
-          semester: Number(semester),
-          name: `${schoolYear} 杭电课表`,
-        }),
+        body: JSON.stringify({}),
       },
     );
     const data = await response.json();
     if (!response.ok) throw data;
     writeLocalSnapshot(timetableSnapshotKey, data);
-    renderTimetable(data);
+    renderTimetableTerms(data.terms || []);
     const warning = data.warnings?.length ? `；${data.warnings.join("；")}` : "";
     hduhelpState.textContent = `已同步 ${data.imported_count} 个课程时段和校园安排${warning}`;
     hduhelpState.classList.add("ready");
@@ -3663,10 +3639,13 @@ function renderTimetable(data) {
     if (!grouped.has(entry.weekday)) grouped.set(entry.weekday, []);
     grouped.get(entry.weekday).push(entry);
   });
+  const termRange = data.timetable?.term_start && data.timetable?.term_end
+    ? `${data.timetable.term_start}—${data.timetable.term_end}`
+    : "";
   timetableSummary.innerHTML = `
     <div class="timetable-status">
       <strong>${escapeHtml(data.timetable?.name || "我的课表")}</strong>
-      <span>${entries.length}个课程时段 · 杭助同步</span>
+      <span>${termRange ? `${escapeHtml(termRange)} · ` : ""}${entries.length}个课程时段 · 杭助同步</span>
     </div>
     ${[...grouped.entries()].map(([weekday, values]) => `
       <div class="timetable-day">
@@ -3689,7 +3668,65 @@ function renderTimetable(data) {
   `;
 }
 
+let hduhelpAvailableTerms = [];
+let syncedTimetableTerms = [];
+
+function timetableTermKey(term) {
+  return `${term.school_year}|${term.semester}`;
+}
+
+function renderTimetableTerms(terms, preferredKey = "") {
+  syncedTimetableTerms = Array.isArray(terms) ? terms : [];
+  timetableTermControls.hidden = syncedTimetableTerms.length === 0;
+  if (!syncedTimetableTerms.length) {
+    renderTimetable({ entries: [] });
+    return;
+  }
+  timetableTermView.innerHTML = syncedTimetableTerms.map((term) => `
+    <option value="${escapeHtml(timetableTermKey(term))}">
+      ${escapeHtml(hduhelpTermLabel(term))}${term.current ? "（当前）" : ""}
+    </option>
+  `).join("");
+  const selected = syncedTimetableTerms.find(
+    (term) => timetableTermKey(term) === preferredKey,
+  ) || syncedTimetableTerms.find((term) => term.current) || syncedTimetableTerms[0];
+  timetableTermView.value = timetableTermKey(selected);
+  renderTimetable({
+    timetable: {
+      name: selected.name,
+      term_start: selected.term_start,
+      term_end: selected.term_end,
+    },
+    entries: selected.entries || [],
+  });
+}
+
+timetableTermView.addEventListener("change", () => {
+  const selected = syncedTimetableTerms.find(
+    (term) => timetableTermKey(term) === timetableTermView.value,
+  );
+  if (!selected) return;
+  renderTimetable({
+    timetable: {
+      name: selected.name,
+      term_start: selected.term_start,
+      term_end: selected.term_end,
+    },
+    entries: selected.entries || [],
+  });
+});
+
 async function loadTimetable() {
+  const hduResponse = await fetch(
+    `/api/v1/users/${consoleUserId}/connections/hduhelp/timetables`,
+  );
+  if (hduResponse.ok) {
+    const hduData = await hduResponse.json();
+    if (hduData.terms?.length) {
+      renderTimetableTerms(hduData.terms);
+      return;
+    }
+  }
   const response = await fetch(`/api/v1/users/${consoleUserId}/timetable`);
   const data = await response.json();
   if (!response.ok) throw data;
@@ -3701,126 +3738,6 @@ async function loadTimetable() {
   }
   renderTimetable(timetableData);
 }
-
-const calendarActionLabels = {
-  no_class: "不上课",
-  normal: "按当天课表",
-  makeup: "补课",
-};
-
-function renderCalendarOverrides(items) {
-  calendarList.classList.toggle("muted", !items.length);
-  if (!items.length) {
-    calendarList.textContent = "暂无学校校历调整。";
-    return;
-  }
-  calendarList.innerHTML = items.map((item) => {
-    const weekday = item.replacement_weekday
-      ? ` · 按周${"一二三四五六日"[item.replacement_weekday - 1]}课表`
-      : "";
-    return `
-      <div class="calendar-item">
-        <span>
-          <strong>${escapeHtml(item.date)}</strong> ·
-          ${calendarActionLabels[item.action] || escapeHtml(item.action)}
-          ${weekday}<br />
-          ${escapeHtml(item.label || "学校校历调整")}
-        </span>
-        <button type="button" data-calendar-delete="${escapeHtml(item.date)}">
-          删除
-        </button>
-      </div>
-    `;
-  }).join("");
-}
-
-async function loadCalendarOverrides() {
-  const response = await fetch(
-    `/api/v1/users/${consoleUserId}/calendar-overrides`,
-  );
-  const data = await response.json();
-  if (!response.ok) throw data;
-  const items = data.items?.length
-    ? data.items
-    : readLocalSnapshot(calendarSnapshotKey, []);
-  if (data.items?.length) {
-    writeLocalSnapshot(calendarSnapshotKey, data.items);
-  }
-  renderCalendarOverrides(items);
-}
-
-calendarAction.addEventListener("change", () => {
-  calendarWeekday.hidden = calendarAction.value !== "makeup";
-});
-
-calendarSave.addEventListener("click", async () => {
-  if (!calendarDate.value) {
-    calendarList.textContent = "请先选择需要调整的日期。";
-    calendarList.classList.remove("muted");
-    calendarDate.focus();
-    return;
-  }
-  const payload = {
-    date: calendarDate.value,
-    action: calendarAction.value,
-    replacement_weekday: calendarAction.value === "makeup"
-      ? Number(calendarWeekday.value)
-      : null,
-    label: calendarAction.value === "makeup"
-      ? `补周${"一二三四五六日"[Number(calendarWeekday.value) - 1]}课程`
-      : calendarActionLabels[calendarAction.value],
-  };
-  calendarSave.disabled = true;
-  try {
-    const response = await fetch(
-      `/api/v1/users/${consoleUserId}/calendar-overrides`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      },
-    );
-    const data = await response.json();
-    if (!response.ok) throw data;
-    const current = readLocalSnapshot(calendarSnapshotKey, []);
-    const items = [
-      data,
-      ...current.filter((item) => item.date !== data.date),
-    ].sort((left, right) => left.date.localeCompare(right.date));
-    writeLocalSnapshot(calendarSnapshotKey, items);
-    renderCalendarOverrides(items);
-    answer.textContent = (
-      `已记下 ${data.date} 的校历安排。之后规划这一天时，`
-      + "我会先按这条学校通知处理课程，再安排其他活动。"
-    );
-    answer.classList.remove("muted");
-    await loadAgenda(agendaDate.value || shanghaiDateString());
-  } catch (error) {
-    calendarList.textContent = error?.error?.message
-      || "这条校历调整暂时没有保存成功。";
-    calendarList.classList.remove("muted");
-    renderDebug(error);
-  } finally {
-    calendarSave.disabled = false;
-  }
-});
-
-calendarList.addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-calendar-delete]");
-  if (!button) return;
-  const eventDate = button.dataset.calendarDelete;
-  const response = await fetch(
-    `/api/v1/users/${consoleUserId}/calendar-overrides/${eventDate}`,
-    { method: "DELETE" },
-  );
-  if (response.ok || response.status === 404) {
-    const items = readLocalSnapshot(calendarSnapshotKey, [])
-      .filter((item) => item.date !== eventDate);
-    writeLocalSnapshot(calendarSnapshotKey, items);
-    renderCalendarOverrides(items);
-    await loadAgenda(agendaDate.value || shanghaiDateString());
-  }
-});
 
 async function checkHealth() {
   try {
@@ -3888,7 +3805,6 @@ async function initializeApp() {
   loadMemories().catch((error) => renderDebug(error));
   loadHduHelpConnection().catch((error) => renderDebug(error));
   loadTimetable().catch((error) => renderDebug(error));
-  loadCalendarOverrides().catch((error) => renderDebug(error));
 }
 
 initializeApp();
