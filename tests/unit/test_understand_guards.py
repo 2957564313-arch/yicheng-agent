@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.nodes.understand import (
+    _apply_activity_location_memories,
     _apply_memory_preferences,
     _apply_timetable_relative_constraints,
     _can_apply_rule_guard,
@@ -11,8 +12,8 @@ from app.nodes.understand import (
     _merge_llm_with_rule_constraints,
     _release_destination_from_departure_anchor,
 )
-from app.schemas.memory import MemoryCreate
 from app.schemas.common import Intent, TaskFlexibility
+from app.schemas.memory import MemoryCreate
 from app.schemas.task import Task, UserPreferences
 from app.schemas.understand import UnderstandResult
 from app.services.requirement_parser import RuleBasedRequirementParser
@@ -54,6 +55,81 @@ def test_saved_meal_times_replace_default_meal_windows():
         ("12:40:00", "13:30:00"),
         ("18:10:00", "18:55:00"),
     ]
+
+
+def test_schedule_pace_uses_natural_three_level_setting():
+    compact = _apply_memory_preferences(
+        UserPreferences(),
+        [
+            MemoryCreate(
+                category="preference",
+                key="schedule_pace",
+                label="日程节奏",
+                value="compact",
+            )
+        ],
+    )
+    relaxed = _apply_memory_preferences(
+        UserPreferences(buffer_min=5),
+        [
+            MemoryCreate(
+                category="preference",
+                key="schedule_pace",
+                label="日程节奏",
+                value="relaxed",
+            )
+        ],
+    )
+
+    assert compact.avoid_tight_schedule is False
+    assert compact.buffer_min == 0
+    assert relaxed.avoid_tight_schedule is True
+    assert relaxed.buffer_min == 15
+
+
+def test_activity_location_memory_only_fills_matching_missing_place():
+    tasks = [
+        Task(
+            id="rehearsal",
+            title="乐团排练",
+            date=NOW.date(),
+            duration_min=60,
+        ),
+        Task(
+            id="meeting",
+            title="和导师碰头",
+            date=NOW.date(),
+            duration_min=30,
+            location_raw="导师办公室",
+        ),
+        Task(
+            id="parcel",
+            title="取快递",
+            date=NOW.date(),
+            duration_min=20,
+        ),
+    ]
+    memories = [
+        MemoryCreate(
+            category="preference",
+            key="activity_location",
+            label="事情对应地点",
+            value=[
+                {"activity": "乐团排练", "location": "学活A区"},
+                {"activity": "导师碰头", "location": "10教408"},
+            ],
+        )
+    ]
+
+    adjusted = _apply_activity_location_memories(
+        tasks,
+        memories=memories,
+    )
+
+    assert adjusted[0].location_raw == "学活A区"
+    assert "memory_activity_location" in adjusted[0].tags
+    assert adjusted[1].location_raw == "导师办公室"
+    assert adjusted[2].location_raw is None
 
 
 def _parse(query: str) -> UnderstandResult:

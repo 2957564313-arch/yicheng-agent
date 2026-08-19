@@ -721,10 +721,6 @@ def _apply_weekly_goal_memories(
     }
     preferred_period = memories.get("preferred_study_period")
     preferred_location = memories.get("preferred_study_location")
-    if not preferred_location:
-        locations = memories.get("preferred_locations")
-        if isinstance(locations, list) and locations:
-            preferred_location = locations[0]
     if (
         preferred_period not in {"morning", "afternoon", "evening"}
         and not (

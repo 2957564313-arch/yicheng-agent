@@ -283,12 +283,6 @@
                   <option value="6">补星期六的课</option>
                   <option value="7">补星期日的课</option>
                 </select>
-                <input
-                  id="calendar-label"
-                  type="text"
-                  placeholder="例如：校庆停课 / 补周五课程"
-                  maxlength="100"
-                />
                 <button id="calendar-save" class="ghost">保存这天的安排</button>
               </div>
               <div id="calendar-list" class="calendar-list muted">
@@ -340,9 +334,8 @@
                 <option value="walking_speed">步行节奏</option>
                 <option value="transport_mode">常用出行方式</option>
                 <option value="avoid_congestion">偏好错峰通勤</option>
-                <option value="avoid_rain">避雨偏好</option>
-                <option value="avoid_tight_schedule">日程松紧</option>
-                <option value="preferred_locations">常用地点</option>
+                <option value="schedule_pace">日程节奏</option>
+                <option value="activity_location">事情对应地点</option>
                 <option value="preferred_study_period">高效学习时段</option>
                 <option value="preferred_study_location">常用自习地点</option>
                 <option value="usual_lunch_time">常用午餐时间</option>
@@ -350,15 +343,12 @@
                 <option value="usual_bedtime">常用就寝时间</option>
                 <option value="usual_wake_time">常用起床时间</option>
                 <option value="sleep_goal_hours">希望睡眠时长</option>
-                <option value="weekly_daily_focus_limit_min">
-                  每日自主安排上限
-                </option>
               </select>
               <input
                 id="memory-value"
                 type="text"
                 placeholder="例如：15分钟"
-                maxlength="120"
+                maxlength="500"
               />
               <button id="memory-save" class="ghost">保存记忆</button>
             </div>
@@ -729,6 +719,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260818-11" defer></script>
+    <script src="/app.js?v=20260818-12" defer></script>
   </body>
 </html>

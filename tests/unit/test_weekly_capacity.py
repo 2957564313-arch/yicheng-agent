@@ -16,7 +16,6 @@ from app.schemas.weekly import (
 )
 from app.services.weekly_capacity import WeeklyCapacityBuilder
 
-
 BASE_DIR = Path(__file__).resolve().parents[2]
 
 
@@ -59,16 +58,6 @@ def test_personal_timetable_and_memories_shape_weekly_capacity(
         ),
         now=now,
     )
-    memories.upsert(
-        user_id="capacity_user",
-        payload=MemoryCreate(
-            category="preference",
-            key="weekly_daily_focus_limit_min",
-            label="每日专注上限",
-            value=120,
-        ),
-        now=now,
-    )
     builder = WeeklyCapacityBuilder(
         timetables=timetables,
         memories=memories,
@@ -101,11 +90,8 @@ def test_personal_timetable_and_memories_shape_weekly_capacity(
     monday = result.capacities[0]
     assert result.summary.timetable_applied is True
     assert result.summary.excluded_course_count == 1
-    assert result.summary.memory_labels == [
-        "常用学习时段",
-        "每日自主安排上限",
-    ]
-    assert sum(item.duration_min for item in monday.windows) == 120
+    assert result.summary.memory_labels == ["常用学习时段"]
+    assert sum(item.duration_min for item in monday.windows) == 145
     assert all(
         not (
             item.start_at < datetime(2026, 7, 27, 9, 40, tzinfo=timezone)

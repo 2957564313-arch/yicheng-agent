@@ -254,10 +254,14 @@ def make_understand_node(container: AppContainer):
             result.tasks,
             memories=memories,
         )
+        tasks_with_activity_locations = _apply_activity_location_memories(
+            tasks_with_study_preferences,
+            memories=memories,
+        )
         result = result.model_copy(
             update={
                 "tasks": _apply_preferred_locations(
-                    tasks_with_study_preferences,
+                    tasks_with_activity_locations,
                     preferences=preferences,
                     query=state["query"],
                 )
@@ -664,19 +668,31 @@ def _apply_memory_preferences(
         "walking_speed",
         "transport_mode",
         "avoid_congestion",
-        "avoid_rain",
-        "avoid_tight_schedule",
-        "preferred_locations",
+        "schedule_pace",
         "preferred_study_location",
         "usual_lunch_time",
         "usual_dinner_time",
     }
     meal_starts: dict[str, time] = {}
+    schedule_pace = None
     for memory in memories:
         if memory.key not in supported:
             continue
         value = memory.value
         target_key = memory.key
+        if memory.key == "schedule_pace":
+            schedule_pace = {
+                "宽松": "relaxed",
+                "松": "relaxed",
+                "relaxed": "relaxed",
+                "适中": "balanced",
+                "正常": "balanced",
+                "balanced": "balanced",
+                "紧凑": "compact",
+                "紧": "compact",
+                "compact": "compact",
+            }.get(str(value).strip())
+            continue
         if memory.key == "walking_speed":
             value = {
                 "慢": "slow",
@@ -734,7 +750,16 @@ def _apply_memory_preferences(
             ).time()
             meal_windows.append({"start": start, "end": end})
         update["meal_windows"] = meal_windows
-    if (
+    if schedule_pace and "buffer_min" not in update:
+        pace_updates = {
+            "relaxed": (True, max(preferences.buffer_min, 15)),
+            "balanced": (True, max(preferences.buffer_min, 10)),
+            "compact": (False, 0),
+        }
+        avoid_tight, buffer_min = pace_updates[schedule_pace]
+        update["avoid_tight_schedule"] = avoid_tight
+        update["buffer_min"] = buffer_min
+    elif (
         update.get("avoid_tight_schedule") is False
         and "buffer_min" not in update
     ):
@@ -852,6 +877,74 @@ def _apply_preferred_locations(
                 update={
                     "location_id": None,
                     "location_raw": choice,
+                }
+            )
+        )
+    return adjusted
+
+
+def _apply_activity_location_memories(
+    tasks: list[Task],
+    *,
+    memories,
+) -> list[Task]:
+    """Apply explicit activity-to-place mappings without overriding facts."""
+    raw_value = next(
+        (
+            memory.value
+            for memory in memories
+            if memory.key == "activity_location"
+        ),
+        None,
+    )
+    mappings: list[tuple[str, str]] = []
+    if isinstance(raw_value, dict):
+        mappings = [
+            (str(activity).strip(), str(location).strip())
+            for activity, location in raw_value.items()
+        ]
+    elif isinstance(raw_value, list):
+        for item in raw_value:
+            if not isinstance(item, dict):
+                continue
+            activity = str(item.get("activity", "")).strip()
+            location = str(item.get("location", "")).strip()
+            if activity and location:
+                mappings.append((activity, location))
+    mappings = [item for item in mappings if all(item)]
+    if not mappings:
+        return tasks
+
+    adjusted: list[Task] = []
+    for task in tasks:
+        if task.location_raw and task.location_raw.strip():
+            adjusted.append(task)
+            continue
+        normalized_title = _normalize_task_text(task.title)
+        choice = next(
+            (
+                location
+                for activity, location in mappings
+                if (
+                    _normalize_task_text(activity) in normalized_title
+                    or normalized_title in _normalize_task_text(activity)
+                )
+            ),
+            None,
+        )
+        if choice is None:
+            adjusted.append(task)
+            continue
+        # A place explicitly written in the current request always wins; an
+        # empty task location means this saved mapping is safe to apply.
+        adjusted.append(
+            task.model_copy(
+                update={
+                    "location_id": None,
+                    "location_raw": choice,
+                    "tags": list(
+                        dict.fromkeys([*task.tags, "memory_activity_location"])
+                    ),
                 }
             )
         )

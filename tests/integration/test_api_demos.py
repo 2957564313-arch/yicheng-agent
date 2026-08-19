@@ -1524,7 +1524,7 @@ def test_saved_walking_pace_personalizes_travel_time(tmp_path):
     assert slow["end_at"] > normal["end_at"]
 
 
-def test_saved_preferred_place_applies_when_request_has_no_place(tmp_path):
+def test_legacy_generic_place_does_not_apply_without_activity_mapping(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         response = client.post(
             "/api/v1/chat",
@@ -1554,7 +1554,41 @@ def test_saved_preferred_place_applies_when_request_has_no_place(tmp_path):
         for item in task_items(response.json()).values()
         if "自习" in item["title"]
     )
-    assert study["location_id"] == "teaching_building_6"
+    assert study["location_id"] != "teaching_building_6"
+
+
+def test_activity_place_mapping_applies_to_matching_task(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "activity_place_user",
+                "thread_id": "activity_place_thread",
+                "query": "今天14点后准备二课报告30分钟。",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-24T13:00:00+08:00",
+                    "memories": [
+                        {
+                            "category": "preference",
+                            "key": "activity_location",
+                            "label": "事情对应地点",
+                            "value": [
+                                {
+                                    "activity": "参加第二课堂活动",
+                                    "location": "第十教学楼408",
+                                }
+                            ],
+                            "enabled": True,
+                        }
+                    ],
+                },
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    meeting = next(iter(task_items(response.json()).values()))
+    assert meeting["location_raw"] == "第十教学楼408"
 
 
 def test_saved_study_place_applies_to_daily_plan(tmp_path):
@@ -1628,7 +1662,7 @@ def test_saved_study_period_is_soft_daily_preference(tmp_path):
     assert datetime.fromisoformat(deadline_override["end_at"]).hour <= 17
 
 
-def test_avoid_tight_schedule_memory_can_be_disabled(tmp_path):
+def test_schedule_pace_memory_controls_buffer(tmp_path):
     def buffer_after_travel(client, user_id, memory_value):
         response = client.post(
             "/api/v1/chat",
@@ -1645,8 +1679,8 @@ def test_avoid_tight_schedule_memory_can_be_disabled(tmp_path):
                     "memories": [
                         {
                             "category": "preference",
-                            "key": "avoid_tight_schedule",
-                            "label": "避免行程太紧",
+                            "key": "schedule_pace",
+                            "label": "日程节奏",
                             "value": memory_value,
                             "enabled": True,
                         }
@@ -1672,11 +1706,11 @@ def test_avoid_tight_schedule_memory_can_be_disabled(tmp_path):
         )
 
     with TestClient(build_test_app(tmp_path)) as client:
-        relaxed = buffer_after_travel(client, "relaxed_user", False)
-        buffered = buffer_after_travel(client, "buffered_user", True)
+        compact = buffer_after_travel(client, "compact_user", "compact")
+        relaxed = buffer_after_travel(client, "relaxed_user", "relaxed")
 
-    assert relaxed == 0
-    assert buffered >= 10
+    assert compact == 0
+    assert relaxed >= 15
 
 
 def test_browser_timetable_snapshot_is_a_fixed_constraint(tmp_path):

@@ -70,7 +70,6 @@ const timetableClear = $("#timetable-clear");
 const calendarDate = $("#calendar-date");
 const calendarAction = $("#calendar-action");
 const calendarWeekday = $("#calendar-weekday");
-const calendarLabel = $("#calendar-label");
 const calendarSave = $("#calendar-save");
 const calendarList = $("#calendar-list");
 const campusName = $("#campus-name");
@@ -185,6 +184,8 @@ const reminderSettingsSnapshotKey = "yicheng_reminder_settings_snapshot";
 let currentReminderSettings = null;
 let reminderPollTimer = null;
 let serverConversationThreads = [];
+let loadedMemories = [];
+let editingMemoryKey = null;
 
 function readLocalSnapshot(key, fallback) {
   try {
@@ -1426,19 +1427,14 @@ const memoryDefinitions = {
     placeholder: "是或否",
     category: "preference",
   },
-  avoid_rain: {
-    label: "避雨偏好",
-    placeholder: "是或否",
+  schedule_pace: {
+    label: "日程节奏",
+    placeholder: "宽松、适中或紧凑",
     category: "preference",
   },
-  avoid_tight_schedule: {
-    label: "避免行程太紧",
-    placeholder: "是或否",
-    category: "preference",
-  },
-  preferred_locations: {
-    label: "常用地点",
-    placeholder: "例如：图书馆、东操场",
+  activity_location: {
+    label: "事情对应地点",
+    placeholder: "例如：乐团排练 → 学活A区；导师碰头 → 10教408",
     category: "preference",
   },
   preferred_study_period: {
@@ -1476,12 +1472,13 @@ const memoryDefinitions = {
     placeholder: "例如：7.5小时",
     category: "preference",
   },
-  weekly_daily_focus_limit_min: {
-    label: "每日自主安排上限",
-    placeholder: "例如：180分钟",
-    category: "preference",
-  },
 };
+const retiredMemoryKeys = new Set([
+  "avoid_rain",
+  "avoid_tight_schedule",
+  "preferred_locations",
+  "weekly_daily_focus_limit_min",
+]);
 
 function behaviorTopic(title) {
   const definitions = [
@@ -3255,13 +3252,36 @@ function parseMemoryValue(key, rawValue) {
     }
     return normalized;
   }
-  if (["avoid_rain", "avoid_tight_schedule", "avoid_congestion"].includes(key)) {
+  if (key === "avoid_congestion") {
     if (["是", "需要", "开启", "true"].includes(value.toLowerCase())) return true;
     if (["否", "不需要", "关闭", "false"].includes(value.toLowerCase())) return false;
     throw new Error("这一项请填写“是”或“否”。");
   }
-  if (key === "preferred_locations") {
-    return value.split(/[、,，]/).map((item) => item.trim()).filter(Boolean);
+  if (key === "schedule_pace") {
+    const normalized = {
+      宽松: "relaxed",
+      松: "relaxed",
+      适中: "balanced",
+      正常: "balanced",
+      紧凑: "compact",
+      紧: "compact",
+    }[value];
+    if (!normalized) throw new Error("日程节奏请填写：宽松、适中或紧凑。");
+    return normalized;
+  }
+  if (key === "activity_location") {
+    const entries = value.split(/[；;\n]+/).map((item) => item.trim()).filter(Boolean);
+    const mappings = entries.map((entry) => {
+      const matched = entry.match(/^(.+?)\s*(?:→|->|：|:)\s*(.+)$/);
+      if (!matched) {
+        throw new Error("请按“事情 → 地点”填写，例如：乐团排练 → 学活A区。");
+      }
+      return { activity: matched[1].trim(), location: matched[2].trim() };
+    });
+    if (mappings.some((item) => !item.activity || !item.location)) {
+      throw new Error("事情和地点都不能留空。");
+    }
+    return mappings;
   }
   if (key === "preferred_study_period") {
     const normalized = {
@@ -3273,13 +3293,6 @@ function parseMemoryValue(key, rawValue) {
     }[value];
     if (!normalized) throw new Error("高效学习时段请填写：上午、下午或晚上。");
     return normalized;
-  }
-  if (key === "weekly_daily_focus_limit_min") {
-    const minutes = Number(value.match(/\d+/)?.[0]);
-    if (!Number.isFinite(minutes) || minutes < 30 || minutes > 720) {
-      throw new Error("每日自主安排上限请填写30到720分钟。");
-    }
-    return minutes;
   }
   if ([
     "usual_bedtime",
@@ -3315,8 +3328,19 @@ function displayMemoryValue(key, value) {
       electrobike: "电瓶车",
     }[value] || value;
   }
-  if (["avoid_rain", "avoid_tight_schedule", "avoid_congestion"].includes(key)) {
+  if (key === "avoid_congestion") {
     return value ? "是" : "否";
+  }
+  if (key === "schedule_pace") {
+    return {
+      relaxed: "宽松",
+      balanced: "适中",
+      compact: "紧凑",
+    }[value] || value;
+  }
+  if (key === "activity_location") {
+    const mappings = normalizeActivityLocations(value);
+    return mappings.map((item) => `${item.activity} → ${item.location}`).join("；");
   }
   if (key === "preferred_study_period") {
     return {
@@ -3325,7 +3349,6 @@ function displayMemoryValue(key, value) {
       evening: "晚上",
     }[value] || value;
   }
-  if (key === "weekly_daily_focus_limit_min") return `${value}分钟`;
   if ([
     "usual_bedtime",
     "usual_wake_time",
@@ -3335,6 +3358,32 @@ function displayMemoryValue(key, value) {
   if (key === "sleep_goal_hours") return `${value}小时`;
   if (Array.isArray(value)) return value.join("、");
   return String(value);
+}
+
+function normalizeActivityLocations(value) {
+  if (Array.isArray(value)) {
+    return value.filter((item) => (
+      item && typeof item.activity === "string" && typeof item.location === "string"
+    )).map((item) => ({
+      activity: item.activity.trim(),
+      location: item.location.trim(),
+    })).filter((item) => item.activity && item.location);
+  }
+  if (value && typeof value === "object") {
+    return Object.entries(value).map(([activity, location]) => ({
+      activity: String(activity).trim(),
+      location: String(location).trim(),
+    })).filter((item) => item.activity && item.location);
+  }
+  return [];
+}
+
+function mergeActivityLocations(existing, additions) {
+  const merged = new Map(
+    normalizeActivityLocations(existing).map((item) => [item.activity, item]),
+  );
+  additions.forEach((item) => merged.set(item.activity, item));
+  return [...merged.values()];
 }
 
 function updateMemoryPlaceholder() {
@@ -3347,12 +3396,15 @@ async function loadMemories() {
   const data = await response.json();
   if (!response.ok) throw data;
   let items = data.items || [];
-  const localItems = readLocalSnapshot(memorySnapshotKey, []);
+  const localItems = readLocalSnapshot(memorySnapshotKey, [])
+    .filter((item) => !retiredMemoryKeys.has(item.key));
+  items = items.filter((item) => !retiredMemoryKeys.has(item.key));
   if (items.length) {
     writeLocalSnapshot(memorySnapshotKey, items);
   } else if (localItems.length) {
     items = localItems;
   }
+  loadedMemories = items;
   memoryList.classList.toggle("muted", items.length === 0);
   memoryList.innerHTML = items.length
     ? items.map((item) => `
@@ -3379,6 +3431,7 @@ async function loadMemories() {
       if (!item) return;
       memoryType.value = item.key in memoryDefinitions ? item.key : "custom_note";
       memoryValue.value = displayMemoryValue(item.key, item.value);
+      editingMemoryKey = item.key;
       updateMemoryPlaceholder();
       memoryValue.focus();
     });
@@ -3418,11 +3471,19 @@ async function loadMemories() {
   });
 }
 
-memoryType.addEventListener("change", updateMemoryPlaceholder);
+memoryType.addEventListener("change", () => {
+  editingMemoryKey = null;
+  memoryValue.value = "";
+  updateMemoryPlaceholder();
+});
 memorySave.addEventListener("click", async () => {
   const definition = memoryDefinitions[memoryType.value];
   try {
-    const parsedValue = parseMemoryValue(memoryType.value, memoryValue.value);
+    let parsedValue = parseMemoryValue(memoryType.value, memoryValue.value);
+    if (memoryType.value === "activity_location" && editingMemoryKey !== "activity_location") {
+      const existing = loadedMemories.find((item) => item.key === "activity_location");
+      parsedValue = mergeActivityLocations(existing?.value, parsedValue);
+    }
     const response = await fetch(`/api/v1/users/${consoleUserId}/memories`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -3445,6 +3506,7 @@ memorySave.addEventListener("click", async () => {
       ],
     );
     memoryValue.value = "";
+    editingMemoryKey = null;
     await loadMemories();
     await loadAgenda(agendaDate.value || shanghaiDateString());
   } catch (error) {
@@ -3729,7 +3791,9 @@ calendarSave.addEventListener("click", async () => {
     replacement_weekday: calendarAction.value === "makeup"
       ? Number(calendarWeekday.value)
       : null,
-    label: calendarLabel.value.trim() || "学校校历调整",
+    label: calendarAction.value === "makeup"
+      ? `补周${"一二三四五六日"[Number(calendarWeekday.value) - 1]}课程`
+      : calendarActionLabels[calendarAction.value],
   };
   calendarSave.disabled = true;
   try {
@@ -3750,7 +3814,6 @@ calendarSave.addEventListener("click", async () => {
     ].sort((left, right) => left.date.localeCompare(right.date));
     writeLocalSnapshot(calendarSnapshotKey, items);
     renderCalendarOverrides(items);
-    calendarLabel.value = "";
     answer.textContent = (
       `已记下 ${data.date} 的校历安排。之后规划这一天时，`
       + "我会先按这条学校通知处理课程，再安排其他活动。"

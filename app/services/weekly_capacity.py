@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Iterable
 from zoneinfo import ZoneInfo
 
 from app.repositories.academic_calendar import AcademicCalendarRepository
@@ -66,9 +66,6 @@ class WeeklyCapacityBuilder:
         memory_labels: list[str] = []
         preferred_period = memory_values.get("preferred_study_period")
         preferred_location = memory_values.get("preferred_study_location")
-        global_limit = self._positive_int(
-            memory_values.get("weekly_daily_focus_limit_min")
-        )
         avoided_weekdays = {
             int(value)
             for value in (
@@ -82,8 +79,6 @@ class WeeklyCapacityBuilder:
             memory_labels.append("常用学习时段")
         if isinstance(preferred_location, str) and preferred_location.strip():
             memory_labels.append("常用学习地点")
-        if global_limit:
-            memory_labels.append("每日自主安排上限")
         if avoided_weekdays:
             memory_labels.append("避开日期偏好")
 
@@ -175,7 +170,7 @@ class WeeklyCapacityBuilder:
                             ),
                         )
                     )
-            limit = day_profile.max_focus_min or global_limit
+            limit = day_profile.max_focus_min
             if limit:
                 windows = self._limit_windows(windows, limit)
             day_notes = list(day_profile.notes)
@@ -288,13 +283,3 @@ class WeeklyCapacityBuilder:
             )
             remaining -= duration
         return sorted(result, key=lambda item: item.start_at)
-
-    @staticmethod
-    def _positive_int(value: object) -> int | None:
-        if isinstance(value, bool):
-            return None
-        try:
-            result = int(value)
-        except (TypeError, ValueError):
-            return None
-        return result if 30 <= result <= 720 else None
