@@ -8,9 +8,9 @@
       content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
     <title>易程智策 · 我的校园日程</title>
-    <link rel="stylesheet" href="/styles.css?v=20260818-4" />
+    <link rel="stylesheet" href="/styles.css?v=20260818-5" />
   </head>
-  <body class="has-plan-result">
+  <body>
     <section id="access-gate" class="access-gate" hidden>
       <form id="login-form" class="access-card">
         <div class="brand-mark" aria-hidden="true">易</div>
@@ -56,15 +56,15 @@
       <div class="header-status">
         <span id="clock" class="status subtle">正在获取北京时间…</span>
         <span id="health" class="status">正在检查服务…</span>
-        <span id="save-state" class="status subtle">尚未生成当前计划</span>
+        <span id="save-state" class="status subtle" hidden></span>
         <button id="logout" class="status subtle" hidden>退出测试</button>
       </div>
       <div class="mobile-header-actions" aria-label="工作区菜单">
         <button id="history-toggle" class="icon-button" type="button" aria-controls="history-sidebar" aria-expanded="false">
           历史
         </button>
-        <button id="tools-toggle" class="icon-button" type="button" aria-controls="tools-sidebar" aria-expanded="false">
-          工具
+        <button id="tools-toggle" class="icon-button" type="button" aria-controls="tools-sidebar" aria-expanded="false" hidden>
+          定位
         </button>
       </div>
     </header>
@@ -89,7 +89,6 @@
               <h2>对话历史</h2>
             </div>
             <div class="history-heading-actions">
-              <button id="new-conversation" class="icon-button" type="button" title="清空当前输入">＋</button>
               <button id="history-close" class="icon-button mobile-only" type="button" aria-label="关闭历史">×</button>
             </div>
           </div>
@@ -115,13 +114,8 @@
               <span class="nav-icon">⇩</span><span>备份</span><small>换设备也不丢数据</small>
             </button>
           </nav>
-          <div class="history-section-label">最近使用</div>
           <div id="history-list" class="history-list"></div>
           <p id="history-empty" class="history-empty">还没有对话。先告诉我今天要完成什么。</p>
-          <div class="history-footer">
-            <span class="history-dot"></span>
-            <span>对话与分支已保存</span>
-          </div>
         </aside>
 
         <div class="workspace-main">
@@ -158,21 +152,7 @@
         </section>
 
         <aside id="tools-sidebar" class="column controls-column tools-sidebar" aria-label="工作区工具">
-          <div class="tools-heading">
-            <div>
-              <p class="step">Workspace</p>
-              <h2>工作区导航</h2>
-            </div>
-            <button id="tools-close" class="icon-button mobile-only" type="button" aria-label="关闭工具">×</button>
-          </div>
-          <nav class="tools-nav" aria-label="工作区导航选项">
-            <button type="button" class="tool-nav-button" data-view="schedule" data-schedule-mode="day"><span>▣</span>今日计划</button>
-            <button type="button" class="tool-nav-button" data-view="schedule" data-schedule-mode="week"><span>◷</span>本周安排</button>
-            <button type="button" class="tool-nav-button" data-view="timetable"><span>▤</span>我的课表</button>
-            <button type="button" class="tool-nav-button" data-view="preferences"><span>♡</span>偏好与习惯</button>
-            <button type="button" class="tool-nav-button" data-view="backup"><span>⇩</span>数据备份</button>
-          </nav>
-          <div class="tools-hint">需要时展开一项，重点始终留在中间对话区。</div>
+          <button id="tools-close" class="icon-button mobile-only" type="button" aria-label="关闭定位">×</button>
 
           <article class="panel campus-panel" hidden>
             <div class="panel-heading compact">
@@ -612,7 +592,7 @@
             <div id="weekly-risks" class="weekly-risks"></div>
           </article>
 
-          <section class="visual-grid">
+          <section class="visual-grid" hidden>
             <article class="panel plan-panel">
               <div class="panel-heading">
                 <div>
@@ -648,7 +628,7 @@
                   </div>
                   <div id="result-change-summary" class="result-change-summary" hidden></div>
                   <div id="timeline" class="timeline empty">
-                    正在加载默认规划，请稍候…
+                    生成计划后，这里会显示时间轴。
                   </div>
                   <p class="result-quick-actions-label">快速调整方案</p>
                   <nav id="result-quick-actions" class="result-quick-actions" aria-label="快速调整计划">
@@ -749,6 +729,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260818-8" defer></script>
+    <script src="/app.js?v=20260818-11" defer></script>
   </body>
 </html>

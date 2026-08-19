@@ -118,7 +118,6 @@ const historyList = $("#history-list");
 const historyEmpty = $("#history-empty");
 const historyToggle = $("#history-toggle");
 const historyClose = $("#history-close");
-const newConversation = $("#new-conversation");
 const toolsSidebar = $("#tools-sidebar");
 const toolsToggle = $("#tools-toggle");
 const toolsClose = $("#tools-close");
@@ -181,7 +180,6 @@ const campusSnapshotKey = "yicheng_campus_snapshot";
 const behaviorHistoryKey = "yicheng_behavior_history";
 const suggestionFeedbackKey = "yicheng_suggestion_feedback";
 const personalizationEnabledKey = "yicheng_personalization_enabled";
-const conversationHistoryKey = "yicheng_conversation_history";
 const shownReminderKey = "yicheng_shown_reminders";
 const reminderSettingsSnapshotKey = "yicheng_reminder_settings_snapshot";
 let currentReminderSettings = null;
@@ -224,9 +222,8 @@ function dashboardIcon(name, className = "") {
 
 function renderConversationHistory() {
   if (!historyList || !historyEmpty) return;
-  if (serverConversationThreads.length) {
-    historyEmpty.hidden = true;
-    historyList.innerHTML = serverConversationThreads.map((item) => `
+  historyEmpty.hidden = serverConversationThreads.length > 0;
+  historyList.innerHTML = serverConversationThreads.map((item) => `
       <div class="history-entry ${item.parent_thread_id ? "history-branch" : ""}">
         <a class="history-item ${item.id === consoleThreadId ? "active" : ""}" href="/?thread_id=${encodeURIComponent(item.id)}" data-thread-id="${escapeHtml(item.id)}" aria-label="打开对话：${escapeHtml(item.title || "未命名对话")}">
           <strong>${escapeHtml(item.title || "未命名对话")}</strong>
@@ -238,39 +235,7 @@ function renderConversationHistory() {
           <button type="button" role="menuitem" data-thread-delete="${escapeHtml(item.id)}" data-thread-title="${escapeHtml(item.title || "未命名对话")}">删除</button>
         </div>
       </div>
-    `).join("");
-    return;
-  }
-  const items = readLocalSnapshot(conversationHistoryKey, [])
-    .filter((item) => item && item.query)
-    .slice(0, 24);
-  historyEmpty.hidden = items.length > 0;
-  historyList.innerHTML = items.map((item, index) => `
-    <button class="history-item" type="button" data-history-index="${index}" aria-label="打开历史对话：${escapeHtml(item.query)}">
-      <strong>${escapeHtml(item.query)}</strong>
-      <small>${escapeHtml(item.answer || "已生成计划")}</small>
-    </button>
   `).join("");
-}
-
-function recordConversationHistory(query, answerText, responseData = null) {
-  const normalized = String(query || "").trim();
-  if (!normalized) return;
-  const current = readLocalSnapshot(conversationHistoryKey, [])
-    .filter((item) => item && item.query && !(
-      item.query === normalized && item.thread_id === consoleThreadId
-    ));
-  current.unshift({
-    thread_id: responseData?.thread_id || consoleThreadId,
-    user_message_id: responseData?.user_message_id || null,
-    assistant_message_id: responseData?.assistant_message_id || null,
-    query: normalized,
-    answer: String(answerText || "").replace(/\s+/g, " ").slice(0, 120),
-    response: responseData || null,
-    created_at: new Date().toISOString(),
-  });
-  writeLocalSnapshot(conversationHistoryKey, current.slice(0, 24));
-  renderConversationHistory();
 }
 
 function appendConversationMessage(role, text, { messageId = "" } = {}) {
@@ -313,6 +278,7 @@ async function loadConversationThreads() {
   const data = await response.json();
   if (!response.ok) throw data;
   serverConversationThreads = data;
+  localStorage.removeItem("yicheng_conversation_history");
   renderConversationHistory();
 }
 
@@ -391,7 +357,7 @@ function beginConversationTurn(query, { keepResultMode = false } = {}) {
   activeConversationQuery = String(query || "").trim();
   lastResultQuery = activeConversationQuery;
   activeConversationAnswer = "";
-  if (!keepResultMode) document.body.classList.remove("has-plan-result");
+  if (!keepResultMode) setResultMode(false);
   answer.textContent = "正在结合你的课表、时间和地点认真规划…";
   answer.classList.add("muted");
   assistantActions.innerHTML = "";
@@ -400,13 +366,6 @@ function beginConversationTurn(query, { keepResultMode = false } = {}) {
 
 function completeConversationTurn(answerText) {
   if (!activeConversationQuery) return;
-  activeConversationAnswer = String(answerText || "").trim();
-}
-
-function restoreConversationSnapshot(query, answerText) {
-  clearConversationStream();
-  appendConversationMessage("user", query);
-  activeConversationQuery = String(query || "").trim();
   activeConversationAnswer = String(answerText || "").trim();
 }
 
@@ -438,6 +397,7 @@ function setActiveWorkspaceView(view = "chat") {
   });
 
   const isChat = activeWorkspaceView === "chat";
+  const hasPlanResult = document.body.classList.contains("has-plan-result");
   const isSchedule = activeWorkspaceView === "schedule";
   const isWeeklyPlanner = activeWorkspaceView === "weekly-planner";
   const isToolPage = ["timetable", "preferences", "backup"].includes(activeWorkspaceView);
@@ -449,8 +409,8 @@ function setActiveWorkspaceView(view = "chat") {
   setPanelHidden(quickAccess, !isChat);
   setPanelHidden(conversationStream, !isChat);
   setPanelHidden(assistantPanel, !isChat);
-  setPanelHidden(visualGrid, !isChat);
-  setPanelHidden(document.querySelector(".adjustment-panel"), !isChat);
+  setPanelHidden(visualGrid, !isChat || !hasPlanResult);
+  setPanelHidden(document.querySelector(".adjustment-panel"), !isChat || !hasPlanResult);
   setPanelHidden(schedulePanel, !isSchedule);
   setPanelHidden(agendaPanel, true);
   setPanelHidden(weeklyPanel, !isWeeklyPlanner);
@@ -512,8 +472,7 @@ conversationOutline.className = "conversation-outline";
 conversationOutline.hidden = true;
 conversationOutline.innerHTML = `
   <div class="conversation-outline-heading">
-    <div><span>本次对话</span><strong>快速定位</strong></div>
-    <small id="conversation-outline-count">0 轮</small>
+    <strong>快速定位</strong>
   </div>
   <nav id="conversation-outline-list" aria-label="本次对话快速定位"></nav>`;
 const conversationOutlineHost = document.querySelector(
@@ -522,13 +481,12 @@ const conversationOutlineHost = document.querySelector(
 (conversationOutlineHost || document.body).append(conversationOutline);
 if (conversationOutlineHost) conversationOutline.classList.add("is-embedded");
 const conversationOutlineList = conversationOutline.querySelector("#conversation-outline-list");
-const conversationOutlineCount = conversationOutline.querySelector("#conversation-outline-count");
 let conversationOutlineObserver;
 
-function conversationMessageLabel(message, index) {
+function conversationMessageLabel(message) {
   const body = message.querySelector(".message-body, .message-bubble") || message;
   const text = body.textContent.replace(/\s+/g, " ").trim();
-  return text.length > 34 ? `${text.slice(0, 34)}…` : text || `第 ${index + 1} 轮提问`;
+  return text.length > 34 ? `${text.slice(0, 34)}…` : text || "未命名提问";
 }
 
 function setActiveConversationOutline(messageId) {
@@ -544,11 +502,14 @@ function syncConversationOutline() {
   if (!conversationStream || !conversationOutlineList) return;
   const messages = [...conversationStream.querySelectorAll(".conversation-message.user-message")];
   conversationOutline.hidden = messages.length === 0;
-  conversationOutlineCount.textContent = `${messages.length} 轮`;
+  if (toolsToggle) toolsToggle.hidden = messages.length === 0;
+  if (messages.length === 0 && toolsSidebar?.classList.contains("mobile-open")) {
+    closeDrawers();
+  }
   conversationOutlineList.innerHTML = messages.map((message, index) => {
     const id = message.id || `conversation-turn-${index + 1}`;
     message.id = id;
-    return `<button type="button" data-message-target="${escapeHtml(id)}"><span>${index + 1}</span><strong>${escapeHtml(conversationMessageLabel(message, index))}</strong></button>`;
+    return `<button type="button" data-message-target="${escapeHtml(id)}"><strong>${escapeHtml(conversationMessageLabel(message))}</strong></button>`;
   }).join("");
   conversationOutlineList.querySelectorAll("button").forEach((button) => {
     button.addEventListener("click", () => {
@@ -713,26 +674,6 @@ function initializeWorkspaceNavigation() {
   toolsClose?.addEventListener("click", closeDrawers);
   drawerBackdrop?.addEventListener("click", closeDrawers);
 
-  newConversation?.addEventListener("click", () => {
-    setConsoleThreadId(`thread_${crypto.randomUUID().replaceAll("-", "")}`);
-    history.replaceState(null, "", "/");
-    activePlanningNowOverride = null;
-    lastResultData = null;
-    lastResultQuery = "";
-    localStorage.removeItem(planSnapshotKey);
-    localStorage.removeItem(planPublishedKey);
-    setActiveWorkspaceView("chat");
-    setResultMode(false);
-    clearConversationStream();
-    queryInput.value = "";
-    answer.textContent = "把课程、自习、取快递、吃饭或运动告诉我，我会先判断能否全部完成；如果时间不够，也会说明原因并给你可选方案。";
-    answer.classList.add("muted");
-    assistantActions.innerHTML = "";
-    freshness.innerHTML = "";
-    closeDrawers();
-    queryInput.focus();
-  });
-
   function closeHistoryMenus(exceptEntry = null) {
     historyList?.querySelectorAll(".history-entry").forEach((entry) => {
       if (entry === exceptEntry) return;
@@ -776,34 +717,6 @@ function initializeWorkspaceNavigation() {
       action.catch((error) => renderError(error));
       return;
     }
-    if (event.target.closest("[data-thread-id]")) return;
-    const button = event.target.closest("[data-history-index]");
-    if (!button) return;
-    const items = readLocalSnapshot(conversationHistoryKey, [])
-      .filter((item) => item && item.query)
-      .slice(0, 24);
-    const item = items[Number(button.dataset.historyIndex)];
-    if (!item) return;
-    setActiveWorkspaceView("chat");
-    if (item.thread_id) setConsoleThreadId(item.thread_id);
-    queryInput.value = item.query;
-    restoreConversationSnapshot(item.query, item.answer);
-    lastResultQuery = item.query;
-    historyList.querySelectorAll(".history-item").forEach((historyButton) => {
-      historyButton.classList.toggle("active", historyButton === button);
-    });
-    if (item.response?.plan) {
-      renderResponse(item.response);
-      closeDrawers();
-      return;
-    }
-    setResultMode(false);
-    answer.textContent = item.answer || "这条历史对话没有保存回答摘要。";
-    answer.classList.toggle("muted", !item.answer);
-    assistantActions.innerHTML = "";
-    freshness.innerHTML = '<span class="source-tag">本机历史摘要</span>';
-    closeDrawers();
-    assistantPanel?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
 
   document.addEventListener("click", (event) => {
@@ -876,7 +789,6 @@ function initializeWorkspaceNavigation() {
       const data = await response.json();
       if (!response.ok) throw data;
       setConsoleThreadId(data.branch.id);
-      recordConversationHistory(query, data.response.answer, data.response);
       await loadConversationThreads();
       await openConversationThread(data.branch.id);
       renderResponse(data.response);
@@ -1868,8 +1780,9 @@ function renderTimeline(data) {
 function setResultMode(active) {
   const wasActive = document.body.classList.contains("has-plan-result");
   document.body.classList.toggle("has-plan-result", active);
+  setActiveWorkspaceView(activeWorkspaceView);
   if (!active) return;
-  setActiveWorkspaceView("chat");
+  if (activeWorkspaceView !== "chat") setActiveWorkspaceView("chat");
   if (wasActive) return;
   requestAnimationFrame(() => {
     globalThis.scrollTo({ top: 0, behavior: "smooth" });
@@ -2787,7 +2700,6 @@ async function submitQuery(rawQuery, { keepResultMode = false } = {}) {
   }).catch(() => null);
   if (data) {
     attachMessageIdsToCurrentTurn(data);
-    recordConversationHistory(query, data.answer, data);
     loadConversationThreads().catch(() => {});
   }
   return data;
@@ -3000,7 +2912,7 @@ resetButton.addEventListener("click", async () => {
   }
 });
 
-async function loadDemos({ autoRun = false } = {}) {
+async function loadDemos() {
   const response = await fetch("/api/v1/demos");
   const demos = await response.json();
   const demoMarkup = demos.map((demo, index) => `
@@ -3043,7 +2955,7 @@ async function loadDemos({ autoRun = false } = {}) {
     ).catch(() => {});
     if (data) {
       activePlanningNowOverride = data.time_context?.now || null;
-      recordConversationHistory(demo.query, data.answer, data);
+      loadConversationThreads().catch(() => {});
     }
   };
   const buttons = [
@@ -3056,9 +2968,6 @@ async function loadDemos({ autoRun = false } = {}) {
       await runDemo(button, demo);
     });
   });
-  if (autoRun && demos.length) {
-    await runDemo(demoButtons.querySelector("button"), demos[0]);
-  }
 }
 
 function parseWeeklyDate(rawDate) {
@@ -3917,9 +3826,7 @@ async function initializeApp() {
       renderError(error);
     });
   }
-  await loadDemos({
-    autoRun: !requestedThreadId && serverConversationThreads.length === 0,
-  }).catch(() => {
+  await loadDemos().catch(() => {
     demoButtons.textContent = "案例加载失败";
   });
   agendaDate.value = shanghaiDateString();

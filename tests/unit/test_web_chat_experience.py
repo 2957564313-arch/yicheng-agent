@@ -17,22 +17,19 @@ def test_chat_stream_is_part_of_the_latest_workspace() -> None:
     assert "setPanelHidden(conversationStream, !isChat);" in javascript
 
 
-def test_history_restore_and_keyboard_send_are_available() -> None:
+def test_server_history_and_keyboard_send_are_available() -> None:
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
 
-    assert 'data-history-index="${index}"' in javascript
-    assert (
-        "restoreConversationSnapshot(item.query, item.answer);" in javascript
-    )
-    assert "本机历史摘要" in javascript
+    assert 'data-thread-id="${escapeHtml(item.id)}"' in javascript
+    assert "async function openConversationThread(threadId)" in javascript
+    assert "服务端对话记录" in javascript
+    assert 'localStorage.removeItem("yicheng_conversation_history")' in javascript
+    assert "data-history-index" not in javascript
     assert 'queryInput.addEventListener("keydown"' in javascript
     assert (
         'event.key !== "Enter" || event.shiftKey || event.isComposing'
         in javascript
     )
-    assert "response: responseData || null" in javascript
-    assert "if (item.response?.plan)" in javascript
-    assert "renderResponse(item.response);" in javascript
 
 
 def test_mobile_overflow_guards_and_compact_result_summary_are_present() -> (
@@ -71,19 +68,27 @@ def test_result_first_dashboard_keeps_key_plan_information_together() -> None:
     assert "const items = [...(data.plan?.items || [])].sort(" in javascript
 
 
-def test_fresh_homepage_opens_with_a_result_showcase() -> None:
+def test_fresh_homepage_stays_clean_until_the_user_runs_a_plan() -> None:
     html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
 
-    assert '<body class="has-plan-result">' in html
-    assert "正在加载默认规划，请稍候…" in html
-    assert "async function loadDemos({ autoRun = false } = {})" in javascript
-    assert "if (autoRun && demos.length)" in javascript
-    assert (
-        'await runDemo(demoButtons.querySelector("button"), demos[0]);'
-        in javascript
-    )
-    assert "autoRun: !requestedThreadId && serverConversationThreads.length === 0" in javascript
+    assert '<body class="has-plan-result">' not in html
+    assert '<section class="visual-grid" hidden>' in html
+    assert "正在加载默认规划，请稍候…" not in html
+    assert 'id="new-conversation"' not in html
+    assert "最近使用" not in html
+    assert "对话与分支已保存" not in html
+    assert "工作区导航" not in html
+    assert "需要时展开一项，重点始终留在中间对话区。" not in html
+    assert 'id="tools-toggle"' in html and '定位' in html
+    assert 'data-schedule-mode="day"' not in html
+    assert 'data-schedule-mode="week"' not in html
+    assert 'id="save-state" class="status subtle" hidden' in html
+    assert "async function loadDemos()" in javascript
+    assert "if (autoRun && demos.length)" not in javascript
+    assert "await loadDemos().catch" in javascript
+    assert 'setPanelHidden(visualGrid, !isChat || !hasPlanResult);' in javascript
+    assert "if (!keepResultMode) setResultMode(false);" in javascript
     assert "homepageModeKey" not in javascript
 
 
@@ -98,7 +103,7 @@ def test_result_request_can_be_edited_without_leaving_dashboard() -> None:
         'resultRequest.classList.toggle("is-editing", active);' in javascript
     )
     assert "submitQuery(query, { keepResultMode: true })" in javascript
-    assert "if (!keepResultMode) document.body.classList.remove" in javascript
+    assert "if (!keepResultMode) setResultMode(false);" in javascript
     assert ".result-request.is-editing" in styles
 
 
@@ -197,6 +202,10 @@ def test_current_conversation_has_a_right_side_quick_outline() -> None:
     assert "new MutationObserver(syncConversationOutline)" in javascript
     assert ".conversation-outline.is-embedded" in styles
     assert "body.has-plan-result .tools-sidebar:has(" in styles
+    assert 'id="conversation-outline-count"' not in javascript
+    assert '<span>${index + 1}</span>' not in javascript
+    assert "conversationMessageLabel(message)" in javascript
+    assert "if (toolsToggle) toolsToggle.hidden = messages.length === 0;" in javascript
     assert "data-thread-rename" in javascript
     assert "data-thread-delete" in javascript
     assert "data-thread-menu-toggle" in javascript
