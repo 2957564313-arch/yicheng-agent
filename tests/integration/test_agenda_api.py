@@ -4,7 +4,6 @@ from fastapi.testclient import TestClient
 
 from tests.integration.test_api_demos import build_test_app
 
-
 CSV_CONTENT = """课程名称,星期,开始节次,结束节次,地点,周次
 高等数学,星期五,1,2,第六教学楼,1-16
 大学英语,星期五,3,4,第七教学楼,1-16
@@ -66,15 +65,16 @@ def test_generated_plan_requires_explicit_agenda_publication(tmp_path):
             item["source"] == "plan" for item in before.json()["items"]
         )
 
-        profile = client.get(
-            "/api/v1/users/publish_user/profile",
-            params={"thread_id": "publish_thread"},
-        ).json()
-        profile["current_plan_published"] = True
+        context = {
+            "schema_version": "1.0",
+            "thread_id": "publish_thread",
+            "current_plan": generated.json()["plan"],
+            "current_plan_published": True,
+        }
         published = client.post(
             "/api/v1/users/publish_user/agenda/contextual",
             params={"start_date": "2026-07-25", "end_date": "2026-07-25"},
-            json=profile,
+            json=context,
         )
         assert published.status_code == 200, published.text
         assert any(
@@ -133,7 +133,7 @@ def test_contextual_agenda_reminders_and_ical_hydrate_browser_snapshot(
     tmp_path,
 ):
     with TestClient(build_test_app(tmp_path)) as client:
-        assert client.post(
+        imported = client.post(
             "/api/v1/users/context_source/timetable/import",
             json={
                 "name": "浏览器快照课表",
@@ -142,8 +142,9 @@ def test_contextual_agenda_reminders_and_ical_hydrate_browser_snapshot(
                 "term_start": "2026-07-20",
                 "term_end": "2026-11-30",
             },
-        ).status_code == 201
-        assert client.post(
+        )
+        assert imported.status_code == 201
+        saved_memory = client.post(
             "/api/v1/users/context_source/memories",
             json={
                 "category": "habit",
@@ -152,7 +153,8 @@ def test_contextual_agenda_reminders_and_ical_hydrate_browser_snapshot(
                 "value": "23:00",
                 "enabled": True,
             },
-        ).status_code == 201
+        )
+        assert saved_memory.status_code == 201
         generated = client.post(
             "/api/v1/chat",
             json={
@@ -166,12 +168,35 @@ def test_contextual_agenda_reminders_and_ical_hydrate_browser_snapshot(
             },
         )
         assert generated.status_code == 200, generated.text
-        backup = client.get(
-            "/api/v1/users/context_source/profile",
-            params={"thread_id": "context_source_thread"},
-        ).json()
-        backup["current_plan_published"] = True
-        backup["thread_id"] = "context_target_thread"
+        imported_data = imported.json()
+        memory_data = saved_memory.json()
+        context = {
+            "schema_version": "1.0",
+            "thread_id": "context_target_thread",
+            "memories": [{
+                "category": memory_data["category"],
+                "key": memory_data["key"],
+                "label": memory_data["label"],
+                "value": memory_data["value"],
+                "enabled": memory_data["enabled"],
+            }],
+            "timetable": {
+                "name": imported_data["timetable"]["name"],
+                "term_start": imported_data["timetable"]["term_start"],
+                "term_end": imported_data["timetable"]["term_end"],
+                "enabled": imported_data["timetable"]["enabled"],
+                "entries": [{
+                    "course_name": item["course_name"],
+                    "weekday": item["weekday"],
+                    "start_period": item["start_period"],
+                    "end_period": item["end_period"],
+                    "location": item["location"],
+                    "weeks": item["weeks"],
+                } for item in imported_data["entries"]],
+            },
+            "current_plan": generated.json()["plan"],
+            "current_plan_published": True,
+        }
 
         agenda = client.post(
             "/api/v1/users/context_target/agenda/contextual",
@@ -179,7 +204,7 @@ def test_contextual_agenda_reminders_and_ical_hydrate_browser_snapshot(
                 "start_date": "2026-07-24",
                 "end_date": "2026-07-25",
             },
-            json=backup,
+            json=context,
         )
         assert agenda.status_code == 200, agenda.text
         payload = agenda.json()
@@ -199,7 +224,7 @@ def test_contextual_agenda_reminders_and_ical_hydrate_browser_snapshot(
                 "start_date": "2026-07-24",
                 "end_date": "2026-07-25",
             },
-            json=backup,
+            json=context,
         )
         assert repeated.status_code == 200, repeated.text
         assert len(repeated.json()["items"]) == len(payload["items"])
@@ -210,7 +235,7 @@ def test_contextual_agenda_reminders_and_ical_hydrate_browser_snapshot(
                 "now": "2026-07-24T22:30:00+08:00",
                 "window_min": 1,
             },
-            json=backup,
+            json=context,
         )
         assert due.status_code == 200, due.text
         assert any(
@@ -224,7 +249,7 @@ def test_contextual_agenda_reminders_and_ical_hydrate_browser_snapshot(
                 "start_date": "2026-07-24",
                 "end_date": "2026-07-25",
             },
-            json=backup,
+            json=context,
         )
         assert exported.status_code == 200, exported.text
         assert "text/calendar" in exported.headers["content-type"]

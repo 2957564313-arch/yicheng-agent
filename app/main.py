@@ -20,7 +20,6 @@ from app.api import (
     hduhelp,
     health,
     memories,
-    profiles,
     timetables,
     weeks,
 )
@@ -184,7 +183,6 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
     application.include_router(conversations.router)
     application.include_router(demos.router)
     application.include_router(memories.router)
-    application.include_router(profiles.router)
     application.include_router(agenda.router)
     application.include_router(timetables.router)
     application.include_router(academic_calendar.router)

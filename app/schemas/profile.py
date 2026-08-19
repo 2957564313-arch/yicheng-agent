@@ -23,7 +23,7 @@ class TimetableBackup(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_term(self) -> "TimetableBackup":
+    def validate_term(self) -> TimetableBackup:
         if (
             self.term_start is not None
             and self.term_end is not None
@@ -48,12 +48,6 @@ class PersonalDataRestoreRequest(BaseModel):
     reminder_settings: ReminderSettings | None = None
     current_plan: Plan | None = None
     current_plan_published: bool = False
-
-
-class PersonalDataBackup(PersonalDataRestoreRequest):
-    product: Literal["yicheng-agent"] = "yicheng-agent"
-    user_id: str = Field(min_length=1, max_length=64)
-    exported_at: datetime
 
 
 class PersonalDataRestoreResponse(BaseModel):
