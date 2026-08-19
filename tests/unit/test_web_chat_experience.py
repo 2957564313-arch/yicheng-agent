@@ -223,19 +223,28 @@ def test_current_conversation_has_a_right_side_quick_outline() -> None:
 
 
 def test_schedule_marks_verified_holidays_and_pending_makeup_days() -> None:
+    html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
     styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
 
+    assert 'data-schedule-view="day" role="tab" aria-selected="true">日</button>' in html
+    assert 'data-schedule-view="week" role="tab" aria-selected="false">周</button>' in html
+    assert 'data-schedule-view="month" role="tab" aria-selected="false">月</button>' in html
     assert "calendar-context`" in javascript
+    assert 'class="schedule-calendar-badge-mark"' in javascript
     assert 'holiday ? "休" : "补"' in javascript
     assert "实际补课课程以杭助同步结果为准" in javascript
     assert "2025年法定节假日数据尚未核验" not in javascript
     assert 'id="timetable-term-view"' in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
-    assert 'app.js?v=20260819-6' in (WEB_ROOT / "index.html").read_text(
+    assert 'app.js?v=20260819-7' in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
+    assert "styles.css?v=20260819-4" in (WEB_ROOT / "index.html").read_text(
+        encoding="utf-8"
+    )
+    assert 'term.current ? "（当前）"' not in javascript
     assert 'timetableTermView?.addEventListener("change"' in javascript
     assert "function renderTimetableTerms" in javascript
     assert "item.start_at))}—${escapeHtml(timePart(item.end_at))" in javascript

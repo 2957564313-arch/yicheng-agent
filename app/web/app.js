@@ -589,7 +589,7 @@ function scheduleCalendarBadge(date, includeName = false) {
   if (!context || !["holiday", "adjusted_workday"].includes(context.day_type)) return "";
   const holiday = context.day_type === "holiday";
   const label = context.label || (holiday ? "法定节假日" : "待确认补课安排");
-  return `<span class="schedule-calendar-badge ${holiday ? "holiday" : "workday"}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${holiday ? "休" : "补"}${includeName ? `<small>${escapeHtml(label)}</small>` : ""}</span>`;
+  return `<span class="schedule-calendar-badge ${holiday ? "holiday" : "workday"}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"><span class="schedule-calendar-badge-mark">${holiday ? "休" : "补"}</span>${includeName ? `<small>${escapeHtml(label)}</small>` : ""}</span>`;
 }
 
 function scheduleCalendarNotice(date) {
@@ -3684,7 +3684,7 @@ function renderTimetableTerms(terms, preferredKey = "") {
   }
   timetableTermView.innerHTML = syncedTimetableTerms.map((term) => `
     <option value="${escapeHtml(timetableTermKey(term))}">
-      ${escapeHtml(hduhelpTermLabel(term))}${term.current ? "（当前）" : ""}
+      ${escapeHtml(hduhelpTermLabel(term))}
     </option>
   `).join("");
   const selected = syncedTimetableTerms.find(

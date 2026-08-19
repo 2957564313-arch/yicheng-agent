@@ -8,7 +8,7 @@
       content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
     <title>易程智策 · 我的校园日程</title>
-    <link rel="stylesheet" href="/styles.css?v=20260819-3" />
+    <link rel="stylesheet" href="/styles.css?v=20260819-4" />
   </head>
   <body>
     <section id="access-gate" class="access-gate" hidden>
@@ -375,9 +375,9 @@
             </div>
             <div class="schedule-toolbar">
               <div class="schedule-tabs" role="tablist" aria-label="日程视图">
-                <button type="button" class="schedule-tab active" data-schedule-view="day" role="tab" aria-selected="true">今天</button>
-                <button type="button" class="schedule-tab" data-schedule-view="week" role="tab" aria-selected="false">本周</button>
-                <button type="button" class="schedule-tab" data-schedule-view="month" role="tab" aria-selected="false">本月</button>
+                <button type="button" class="schedule-tab active" data-schedule-view="day" role="tab" aria-selected="true">日</button>
+                <button type="button" class="schedule-tab" data-schedule-view="week" role="tab" aria-selected="false">周</button>
+                <button type="button" class="schedule-tab" data-schedule-view="month" role="tab" aria-selected="false">月</button>
               </div>
               <div class="schedule-date-actions">
                 <button id="schedule-prev" type="button" class="icon-button" aria-label="上一个时间段">‹</button>
@@ -387,8 +387,8 @@
             </div>
             <div id="schedule-period-label" class="schedule-period-label"></div>
             <section id="schedule-day-view" class="schedule-view-content" aria-label="今日时间轴"></section>
-            <section id="schedule-week-view" class="schedule-view-content" aria-label="本周安排" hidden></section>
-            <section id="schedule-month-view" class="schedule-view-content" aria-label="本月安排" hidden></section>
+            <section id="schedule-week-view" class="schedule-view-content" aria-label="周视图" hidden></section>
+            <section id="schedule-month-view" class="schedule-view-content" aria-label="月视图" hidden></section>
           </article>
 
           <article class="panel agenda-panel">
@@ -664,6 +664,6 @@
       </p>
       <pre id="debug-content">尚无运行数据。</pre>
     </details>
-    <script src="/app.js?v=20260819-6" defer></script>
+    <script src="/app.js?v=20260819-7" defer></script>
   </body>
 </html>
