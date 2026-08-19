@@ -2210,16 +2210,17 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
 .schedule-day-timeline .schedule-event.schedule-event time { font-size: 11px; }
 .schedule-day-timeline .schedule-event.schedule-event strong { font-size: 13px; white-space: normal; }
 .schedule-event-more {
+  display: grid;
   width: 34px;
   height: 30px;
   padding: 0;
+  place-items: center;
   border: 0;
   border-radius: 9px;
   color: #70778a;
   background: transparent;
-  font-weight: 800;
-  letter-spacing: 1px;
 }
+.schedule-event-more svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .schedule-event-more:hover,
 .schedule-event-more:focus-visible { color: #4338ca; background: #eef2ff; }
 .schedule-event-lock {

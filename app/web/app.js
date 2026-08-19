@@ -622,14 +622,14 @@ function scheduleCalendarNotice(date) {
 
 function scheduleItemMarkup(item, compact = false) {
   const immutable = item.source === "course" || item.source === "external";
-  const lockLabel = item.source === "course" ? "课表锁定" : "杭助锁定";
+  const lockLabel = "锁定";
   return `
     <article class="schedule-event ${escapeHtml(item.kind || "task")}" title="${escapeHtml(item.title || "日程")}${item.location_name ? ` · ${escapeHtml(item.location_name)}` : ""}">
       <time>${escapeHtml(timePart(item.start_at))}—${escapeHtml(timePart(item.end_at))}</time>
       <div><strong>${escapeHtml(item.title || "未命名安排")}</strong>${compact ? "" : `<small>${escapeHtml(item.location_name || (item.kind === "travel" ? "通勤时间" : "个人安排"))}</small>`}</div>
       ${compact ? "" : immutable
-        ? `<span class="schedule-event-lock" title="${lockLabel}，请到数据来源处修改">${lockLabel}</span>`
-        : `<button type="button" class="schedule-event-more" data-schedule-edit="${escapeHtml(item.id)}" aria-label="编辑${escapeHtml(item.title || "事件")}" title="调整时间或删除">•••</button>`}
+        ? `<span class="schedule-event-lock" title="锁定安排，请到数据来源处修改">${lockLabel}</span>`
+        : `<button type="button" class="schedule-event-more" data-schedule-edit="${escapeHtml(item.id)}" aria-label="编辑${escapeHtml(item.title || "事件")}" title="调整时间或删除"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-4L4 16v4Z"></path><path d="m13.5 6.5 4 4"></path></svg></button>`}
     </article>`;
 }
 

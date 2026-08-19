@@ -638,6 +638,9 @@ class RuleBasedRequirementParser:
             word in fixed_text for word in ("自习", "学习")
         ):
             study_keyword = "自习" if "自习" in query else "学习"
+            study_period = self._period_from_clause(
+                self._clause_around_keyword(query, study_keyword)
+            )
             study_deadline = self._task_deadline(
                 query,
                 target_date,
@@ -658,16 +661,15 @@ class RuleBasedRequirementParser:
                     location_raw=self._study_location(query),
                     earliest=(
                         overall_start
-                        or (time(13, 0) if "下午" in query else time(8, 0))
+                        or self._period_start(study_period)
+                        or time(8, 0)
                     ),
                     latest=(
                         study_limit.time() if study_limit else time(22, 30)
                     ),
                     deadline=(study_limit.time() if study_limit else None),
                     preferred_period=(
-                        "afternoon"
-                        if "下午" in query and overall_start is None
-                        else None
+                        study_period if overall_start is None else None
                     ),
                     importance=5,
                 )
@@ -1862,6 +1864,9 @@ class RuleBasedRequirementParser:
     ) -> tuple[list[Task], UserPreferences]:
         tasks = []
         locked_ids = []
+        is_addition = (
+            intent == Intent.REPLAN and self._is_addition_request(query)
+        )
         old_task_items = [
             item
             for item in sorted(
@@ -1899,6 +1904,14 @@ class RuleBasedRequirementParser:
             elif "实验课" in title and "延迟一小时" in query:
                 start_at = item.start_at + timedelta(hours=1)
                 end_at = item.end_at + timedelta(hours=1)
+                flexibility = TaskFlexibility.FIXED
+            elif is_addition:
+                # “加个 / 再加 / 另外” means append to the current day.
+                # Preserve every existing item at its current time; otherwise
+                # a new morning task can silently reshuffle or replace the
+                # schedule the user already approved.
+                start_at = item.start_at
+                end_at = item.end_at
                 flexibility = TaskFlexibility.FIXED
             elif (
                 item.locked
@@ -1967,7 +1980,7 @@ class RuleBasedRequirementParser:
                     ),
                 )
             )
-        if intent == Intent.REPLAN and self._is_addition_request(query):
+        if is_addition:
             added_tasks, _ = self._extract_plan_tasks(
                 query=query,
                 target_date=old_plan.date,
@@ -1989,7 +2002,7 @@ class RuleBasedRequirementParser:
                 tasks.append(added_task)
                 existing_ids.add(unique_id)
                 existing_signatures.add(signature)
-        if intent == Intent.REPLAN:
+        if intent == Intent.REPLAN and not is_addition:
             for index in range(1, len(tasks)):
                 if tasks[index].flexibility == TaskFlexibility.MOVABLE:
                     tasks[index] = tasks[index].model_copy(
@@ -2013,6 +2026,7 @@ class RuleBasedRequirementParser:
             for keyword in (
                 "新增",
                 "再加",
+                "加个",
                 "加一个",
                 "加入",
                 "补充",

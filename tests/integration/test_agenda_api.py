@@ -674,6 +674,68 @@ def test_conversational_addition_keeps_existing_daily_agenda(tmp_path):
         assert "开会" in titles
 
 
+def test_colloquial_addition_keeps_the_day_and_explicit_period_wins(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        memory = client.post(
+            "/api/v1/users/colloquial_user/memories",
+            json={
+                "category": "preference",
+                "key": "preferred_study_period",
+                "label": "偏好自习时段",
+                "value": "evening",
+                "enabled": True,
+            },
+        )
+        assert memory.status_code == 201, memory.text
+
+        first = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "colloquial_user",
+                "thread_id": "colloquial_thread",
+                "query": (
+                    "2026年7月26日14点到14点30分取快递，"
+                    "16点到16点30分跑步。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-25T10:00:00+08:00"
+                },
+            },
+        )
+        assert first.status_code == 200, first.text
+
+        second = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "colloquial_user",
+                "thread_id": "colloquial_thread",
+                "query": "2026年7月26日早上加个自习安排。",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-25T10:05:00+08:00"
+                },
+            },
+        )
+        assert second.status_code == 200, second.text
+        payload = second.json()
+        assert payload["previous_plan"] is not None
+
+        items = [
+            item
+            for item in payload["plan"]["items"]
+            if item["item_type"] != "travel"
+        ]
+        titles = {item["title"] for item in items}
+        assert any("快递" in title for title in titles)
+        assert any("跑步" in title for title in titles)
+
+        study = next(item for item in items if "自习" in item["title"])
+        assert study["start_at"].startswith("2026-07-26T")
+        assert int(study["start_at"][11:13]) < 12
+        assert int(study["end_at"][11:13]) <= 12
+
+
 def test_conversational_removal_keeps_unaffected_daily_agenda(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         first = client.post(
