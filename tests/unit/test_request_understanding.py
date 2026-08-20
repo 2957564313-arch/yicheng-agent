@@ -115,3 +115,61 @@ def test_a_named_course_keeps_its_name(parser, now):
     tasks = _tasks(parser, "明天第1-2节有高等数学", now)
     (course,) = [task for task in tasks if task.id.startswith("course_")]
     assert course.title == "高等数学"
+
+
+def test_named_task_is_scheduled_between_the_sittings(parser, now):
+    """“分两段，中间吃个午饭” puts the meal between, not after, the sittings."""
+    tasks = _by_id(_tasks(parser, "明天自习4小时分两段，中间吃个午饭", now))
+    assert tasks["lunch"].depends_on == ["study_seg1"]
+    assert tasks["study_seg2"].depends_on == ["lunch"]
+
+
+def test_middle_task_removes_the_sitting_gap(parser, now):
+    """The meal already separates the sittings, so no extra dead time."""
+    from app.services.scheduler import Scheduler
+
+    tasks = _by_id(_tasks(parser, "明天自习4小时分两段，中间吃个午饭", now))
+    assert Scheduler._required_dependency_gap(tasks["study_seg2"]) == 0
+    plain = _by_id(_tasks(parser, "明天自习4小时分两段", now))
+    assert (
+        Scheduler._required_dependency_gap(plain["study_seg2"])
+        == Scheduler.split_segment_gap_min
+    )
+
+
+def test_returning_to_the_dormitory_is_a_task(parser, now):
+    tasks = _by_id(_tasks(parser, "明天自习两小时，最后回宿舍", now))
+    assert tasks["return_dorm"].location_raw == "学生公寓"
+    assert tasks["return_dorm"].depends_on == ["study"]
+
+
+def test_narrated_order_is_kept_for_every_task_kind(parser, now):
+    """A task id missing from TASK_KEYWORDS used to sort silently to the end."""
+    tasks = _tasks(parser, "明天自习两小时，然后去食堂吃饭，最后回宿舍", now)
+    assert [task.id for task in tasks] == ["study", "meal", "return_dorm"]
+
+
+@pytest.mark.parametrize(
+    "query,expected_id",
+    [
+        ("明天回宿舍洗澡", "bath"),
+        ("明天回宿舍洗衣服", "laundry"),
+        ("明天下午回宿舍休息", "rest"),
+    ],
+)
+def test_going_back_to_the_dorm_to_do_something_is_one_task(
+    parser,
+    now,
+    query,
+    expected_id,
+):
+    tasks = _by_id(_tasks(parser, query, now))
+    assert "return_dorm" not in tasks
+    assert expected_id in tasks
+
+
+def test_every_built_task_id_is_known_to_the_ordering_map():
+    """Ordering scores an unknown id as “not mentioned”; keep the map complete."""
+    from app.services.requirement_parser import COMMON_TASK_SPECS, TASK_KEYWORDS
+
+    assert {spec.id for spec in COMMON_TASK_SPECS} <= set(TASK_KEYWORDS)

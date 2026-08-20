@@ -876,12 +876,28 @@ class Scheduler:
 
         Sittings of a split task depend on the previous sitting, so without a
         gap the planner puts them back to back and rebuilds the single long
-        block the user asked to break up.
+        block the user asked to break up.  The gap belongs between two
+        sittings only: when the user named something to do in between, that
+        task already separates them and a further gap would just add dead time.
         """
 
+        group = next(
+            (
+                tag.removeprefix("split_of:")
+                for tag in task.tags
+                if tag.startswith("split_of:")
+            ),
+            None,
+        )
+        if group is None:
+            return 0
+        sibling_prefix = f"{group}_seg"
         return (
             Scheduler.split_segment_gap_min
-            if "split_segment" in task.tags
+            if any(
+                dependency.startswith(sibling_prefix)
+                for dependency in task.depends_on
+            )
             else 0
         )
 

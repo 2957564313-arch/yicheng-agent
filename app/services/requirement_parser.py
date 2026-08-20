@@ -56,6 +56,10 @@ class CommonTaskSpec:
     importance: int
     tags: tuple[str, ...]
     preferred_period: str | None = None
+    # Skip this spec when another task already takes the user to this place.
+    # “回宿舍洗澡” and “回宿舍洗衣服” are each one task, not a trip back to the
+    # dormitory plus a separate thing to do once there.
+    redundant_with_location: str | None = None
 
 
 COMMON_TASK_SPECS = (
@@ -214,6 +218,18 @@ COMMON_TASK_SPECS = (
         ("rest", "wellbeing"),
     ),
     CommonTaskSpec(
+        "return_dorm",
+        "回宿舍",
+        ("回宿舍", "回寝室", "回公寓", "回到宿舍", "返回宿舍", "回住处"),
+        20,
+        "学生公寓",
+        time(6, 0),
+        time(23, 30),
+        2,
+        ("daily_life", "dormitory"),
+        redundant_with_location="学生公寓",
+    ),
+    CommonTaskSpec(
         "call",
         "处理电话",
         ("视频通话", "回电话", "打电话"),
@@ -249,14 +265,34 @@ COMMON_TASK_KEYWORDS = tuple(
     )
 )
 
-# Used to tell which task a “分两段” phrase refers to when the request holds
-# several tasks.  The catalog ids come from the specs above; the rest are the
-# tasks built by hand in ``_extract_plan_tasks``.
-_SPLIT_TASK_KEYWORDS: dict[str, tuple[str, ...]] = {
+# Where each task id can be found in the user's sentence.  Used to order tasks
+# by the order they were narrated, and to tell which task a phrase like
+# “分两段” or “中间吃个午饭” refers to.  Every task id built in
+# ``_extract_plan_tasks`` must appear here: an id that is missing scores as
+# “not mentioned” and is silently sorted to the end of the day.
+TASK_KEYWORDS: dict[str, tuple[str, ...]] = {
     **{spec.id: spec.keywords for spec in COMMON_TASK_SPECS},
-    "study": ("自习", "学习", "看书", "复习"),
+    "study": ("自习", "学习"),
+    "parcel": (
+        "取顺丰",
+        "拿顺丰",
+        "顺丰快递",
+        "取京东",
+        "拿京东",
+        "京东快递",
+        "取快递",
+        "拿快递",
+        "快递",
+        "取件",
+        "驿站",
+    ),
+    "meal": ("吃饭", "用餐"),
+    "dinner": ("吃晚饭", "晚饭", "晚餐", "吃饭"),
+    "clinic": ("校医院", "看医生", "就诊", "医务室"),
+    "bath": ("洗澡", "洗漱", "用热水", "打热水"),
+    "badminton": ("羽毛球",),
+    "table_tennis": ("乒乓球",),
     "run": ("阳光长跑", "长跑", "跑步", "运动"),
-    "parcel": ("快递", "取件", "驿站", "顺丰", "京东"),
 }
 
 COMMON_LOCATION_ALIASES = (
@@ -1077,6 +1113,11 @@ class RuleBasedRequirementParser:
         for spec in COMMON_TASK_SPECS:
             if spec.id in existing_ids:
                 continue
+            if spec.redundant_with_location and any(
+                task.location_raw == spec.redundant_with_location
+                for task in (*existing_tasks, *tasks)
+            ):
+                continue
             matches = [
                 keyword for keyword in spec.keywords if keyword in query
             ]
@@ -1291,33 +1332,8 @@ class RuleBasedRequirementParser:
         if not fixed_tasks or not movable_tasks:
             return movable_tasks
 
-        known_keywords = {
-            "study": ("自习", "学习"),
-            "parcel": (
-                "取顺丰",
-                "拿顺丰",
-                "顺丰快递",
-                "取京东",
-                "拿京东",
-                "京东快递",
-                "取快递",
-                "拿快递",
-                "快递",
-                "取件",
-            ),
-            "dinner": ("吃晚饭", "晚饭", "吃饭"),
-            "clinic": ("校医院", "看医生", "就诊", "医务室"),
-            "bath": ("洗澡", "洗漱", "用热水", "打热水"),
-            "badminton": ("羽毛球",),
-            "table_tennis": ("乒乓球",),
-            "run": ("阳光长跑", "长跑", "跑步", "运动"),
-        }
-        known_keywords.update(
-            {spec.id: spec.keywords for spec in COMMON_TASK_SPECS}
-        )
-
         def position(task: Task) -> int:
-            candidates = list(known_keywords.get(task.id, ()))
+            candidates = list(TASK_KEYWORDS.get(task.id, ()))
             compact_title = re.sub(
                 r"^(?:参加|进行|前往|去)",
                 "",
@@ -2667,26 +2683,63 @@ class RuleBasedRequirementParser:
             replacement.append(target.model_copy(update=update))
             previous_id = update["id"]
 
+        # “自习4小时分两段，中间吃个午饭” names what goes between the sittings.
+        # Chaining the sittings straight to each other pushes that task past
+        # both of them, which is the opposite of what was asked.
+        middle_id = self._middle_task_id(query, tasks, target)
+        if middle_id is not None and len(replacement) >= 2:
+            replacement[1] = replacement[1].model_copy(
+                update={"depends_on": [middle_id]}
+            )
+
         result: list[Task] = []
         for task in tasks:
             if task.id == target.id:
                 result.extend(replacement)
-            else:
+                continue
+            if task.id == middle_id:
                 result.append(
                     task.model_copy(
-                        update={
-                            "depends_on": [
-                                previous_id
-                                if dependency == target.id
-                                else dependency
-                                for dependency in task.depends_on
-                            ]
-                        }
+                        update={"depends_on": [replacement[0].id]}
                     )
-                    if target.id in task.depends_on
-                    else task
                 )
+                continue
+            result.append(
+                task.model_copy(
+                    update={
+                        "depends_on": [
+                            previous_id
+                            if dependency == target.id
+                            else dependency
+                            for dependency in task.depends_on
+                        ]
+                    }
+                )
+                if target.id in task.depends_on
+                else task
+            )
         return result
+
+    @staticmethod
+    def _middle_task_id(
+        query: str,
+        tasks: list[Task],
+        target: Task,
+    ) -> str | None:
+        """The task the user wants to happen between two sittings, if any."""
+        marker = re.search(r"中间|中途|当中|间隙|之间", query)
+        if marker is None:
+            return None
+        clause = query[marker.start() : marker.start() + 18]
+        for task in tasks:
+            if task.id == target.id:
+                continue
+            if task.flexibility != TaskFlexibility.MOVABLE:
+                continue
+            keywords = TASK_KEYWORDS.get(task.id, ())
+            if any(keyword in clause for keyword in keywords):
+                return task.id
+        return None
 
     def _combine_or_none(
         self,
@@ -2775,7 +2828,7 @@ class RuleBasedRequirementParser:
             return None
         clause = query[max(0, match.start() - 20) : match.end() + 10]
         for task in movable:
-            keywords = _SPLIT_TASK_KEYWORDS.get(task.id, ())
+            keywords = TASK_KEYWORDS.get(task.id, ())
             if any(keyword in clause for keyword in keywords):
                 return task
         return None
@@ -3102,33 +3155,10 @@ class RuleBasedRequirementParser:
         query: str,
         tasks: list[Task],
     ) -> list[Task]:
-        keywords = {
-            "study": ("自习", "学习"),
-            "parcel": (
-                "取顺丰",
-                "拿顺丰",
-                "顺丰快递",
-                "取京东",
-                "拿京东",
-                "京东快递",
-                "取快递",
-                "拿快递",
-                "快递",
-                "取件",
-            ),
-            "dinner": ("吃晚饭", "晚饭", "吃饭"),
-            "clinic": ("校医院", "看医生", "就诊", "医务室"),
-            "bath": ("洗澡", "洗漱", "用热水", "打热水"),
-            "badminton": ("羽毛球",),
-            "table_tennis": ("乒乓球",),
-            "run": ("阳光长跑", "长跑", "跑步", "运动"),
-        }
-        keywords.update({spec.id: spec.keywords for spec in COMMON_TASK_SPECS})
-
         def position(task: Task) -> int:
             positions = [
                 query.find(keyword)
-                for keyword in keywords.get(task.id, ())
+                for keyword in TASK_KEYWORDS.get(task.id, ())
                 if query.find(keyword) >= 0
             ]
             return min(positions) if positions else len(query)
