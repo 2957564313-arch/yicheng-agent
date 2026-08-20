@@ -507,7 +507,10 @@ def test_scheduler_uses_activity_specific_window_for_sunshine_run(tz):
         item for item in result.plan.items if item.task_id == "sun_run"
     )
 
-    assert item.start_at == datetime(2026, 7, 24, 18, 30, tzinfo=tz)
+    # The point of this test is the activity window, not one exact minute:
+    # the run may start later inside it to keep the dinner gap clear.
+    assert datetime(2026, 7, 24, 18, 30, tzinfo=tz) <= item.start_at
+    assert item.end_at <= datetime(2026, 7, 24, 21, 0, tzinfo=tz)
     plan, issues = PlanValidator().validate(
         plan=result.plan,
         tasks=[task],

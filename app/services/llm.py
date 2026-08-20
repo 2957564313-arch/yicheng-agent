@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from app.errors import AppError
 from app.schemas.context import RetrievedFact
 from app.schemas.plan import Plan
+from app.schemas.plan_edit import PlanEdit
 from app.schemas.understand import UnderstandResult
 from app.schemas.weekly import WeeklyTextInterpretation
 
@@ -142,6 +143,88 @@ class OpenAICompatibleLLM:
                     temperature=0,
                 )
                 return UnderstandResult.model_validate_json(payload)
+            except (ValidationError, json.JSONDecodeError, KeyError) as exc:
+                last_error = exc
+        raise AppError(
+            "LLM_OUTPUT_INVALID",
+            "模型连续两次未返回合法结构",
+            status_code=502,
+            retryable=True,
+            details=[{"reason": str(last_error)}],
+        )
+
+    async def parse_plan_edit(
+        self,
+        *,
+        query: str,
+        now_iso: str,
+        plan_summary: str,
+        history: list[dict[str, str]] | None = None,
+    ) -> PlanEdit:
+        """Read a follow-up as a change to the plan the student already has.
+
+        The model is given the day and the conversation so it can resolve
+        “把这个挪到下午”, and it answers with the change rather than a new
+        day — re-emitting the whole plan is how the arrangements nobody
+        mentioned get lost.
+        """
+
+        if not self.configured:
+            raise AppError(
+                "LLM_NOT_CONFIGURED",
+                "大模型尚未配置",
+                status_code=503,
+                retryable=False,
+            )
+        prompt = (self.prompt_dir / "plan_edit.md").read_text(
+            encoding="utf-8"
+        )
+        schema = PlanEdit.model_json_schema()
+        transcript = "".join(
+            f"{turn.get('role', 'user')}: {turn.get('content', '')}" + chr(10)
+            for turn in (history or [])
+        )
+        messages = [
+            {"role": "system", "content": prompt},
+            {
+                "role": "user",
+                "content": (
+                    "<json_schema>\n"
+                    f"{json.dumps(schema, ensure_ascii=False)}\n"
+                    "</json_schema>\n"
+                    "<current_plan>\n"
+                    f"{plan_summary}\n"
+                    "</current_plan>\n"
+                    "<conversation>\n"
+                    f"{transcript}"
+                    "</conversation>\n"
+                    f"<now>{now_iso}</now>\n"
+                    "<request>\n"
+                    f"{query}\n"
+                    "</request>\n"
+                    "只输出被点名的改动。没被提到的安排不要出现在 operations 里。"
+                ),
+            },
+        ]
+        last_error: Exception | None = None
+        for attempt in range(2):
+            if attempt and last_error:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "上一次输出未通过校验。只返回修正后的 JSON。"
+                            f"错误：{last_error}"
+                        ),
+                    }
+                )
+            try:
+                payload = await self._chat(
+                    messages,
+                    response_format={"type": "json_object"},
+                    temperature=0,
+                )
+                return PlanEdit.model_validate_json(payload)
             except (ValidationError, json.JSONDecodeError, KeyError) as exc:
                 last_error = exc
         raise AppError(

@@ -42,6 +42,11 @@ class PlanningContext:
     # the scheduler must not silently impose an older 22:00 product cutoff.
     day_end: time = time(0, 0)
     old_plan: Plan | None = None
+    # Quick-adjustment buttons steer the objective from here. They must never
+    # reach into the task list: rewriting depends_on and importance invented
+    # an order the student never asked for and destroyed the one they did.
+    objective_bias: str | None = None
+    avoid_starts: dict[str, datetime] = field(default_factory=dict)
     initial_location_id: str | None = None
     initial_departure_at: datetime | None = None
     soft_meal_windows: list[TimeWindow] = field(default_factory=list)
@@ -108,17 +113,42 @@ class SchedulerResult:
 
 
 @dataclass(slots=True)
+class _Candidate:
+    """One placement a task could take, with what it would cost to take it."""
+
+    start_at: datetime
+    end_at: datetime
+    travel_minutes: int
+    preference_penalty: int
+    shortfall_minutes: int
+    breaks_weather: bool
+
+
+@dataclass(slots=True)
 class _BeamState:
     task_items: list[PlanItem]
     unscheduled_task_ids: list[str]
     missing_route_pairs: set[tuple[str, str]]
     soft_cost: float = 0
+    weather_breaches: int = 0
 
 
 class Scheduler:
     replan_beam_width = 48
     replan_candidates_per_task = 36
     split_segment_gap_min = 30
+    # Priced so that any dry slot beats every wet one, while a day with no dry
+    # slot left still produces a plan the student can act on.
+    wet_slot_penalty = 5
+    # Reserved by default so an all-movable day still leaves time to eat.
+    default_meal_windows = (
+        TimeWindow(start=time(12, 0), end=time(12, 45)),
+        TimeWindow(start=time(18, 0), end=time(18, 45)),
+    )
+    # Conservative campus crossing used when no route is known for a pair.
+    # Larger than the real walk between any two points on the Xiasha campus,
+    # so a plan built on it stays executable.
+    unknown_route_minutes = 20
 
     def schedule(
         self,
@@ -133,6 +163,12 @@ class Scheduler:
         task_items: list[PlanItem] = []
         unscheduled: list[str] = []
         missing_route_pairs: set[tuple[str, str]] = set()
+
+        # Keeping the usual eating times clear is planning policy, not
+        # something each caller should remember to pass in. Without it a day
+        # of movable tasks is packed straight through lunch and dinner.
+        if not context.soft_meal_windows and not preferences.meal_windows:
+            context.soft_meal_windows = list(self.default_meal_windows)
 
         for task in tasks:
             if task.flexibility not in {
@@ -167,8 +203,14 @@ class Scheduler:
         )
 
         old_starts = self._old_task_starts(context.old_plan)
-        if context.old_plan is not None and old_starts:
-            beam_result = self._schedule_minimum_disruption(
+        # A first plan gets the same global search as a replan.  Placing tasks
+        # one at a time in priority order means the order decides the outcome:
+        # a flexible task would take the only slot a narrow one could use, and
+        # the narrow task was then reported as impossible even though a
+        # complete solution existed.  With no old plan the shift terms of the
+        # objective are zero, so it reduces to coverage first, then cost.
+        if movable:
+            beam_result = self._solve_with_escalating_compression(
                 initial_items=task_items,
                 tasks=movable,
                 preferences=preferences,
@@ -178,60 +220,6 @@ class Scheduler:
             task_items = beam_result.task_items
             unscheduled = beam_result.unscheduled_task_ids
             missing_route_pairs = beam_result.missing_route_pairs
-        else:
-            for task in movable:
-                has_dependents = any(
-                    task.id in candidate.depends_on
-                    for candidate in movable
-                )
-                candidates = list(
-                    self._candidate_intervals(
-                        task=task,
-                        scheduled=task_items,
-                        preferences=preferences,
-                        context=context,
-                        missing_route_pairs=missing_route_pairs,
-                    )
-                )
-                if not candidates:
-                    unscheduled.append(task.id)
-                    continue
-
-                scored = [
-                    (
-                        self._candidate_soft_cost(
-                            task=task,
-                            start_at=start_at,
-                            travel_minutes=travel_minutes,
-                            preference_penalty=preference_penalty,
-                            old_start=old_starts.get(task.id),
-                            has_dependents=has_dependents,
-                            context=context,
-                        ),
-                        start_at,
-                        end_at,
-                    )
-                    for (
-                        start_at,
-                        end_at,
-                        travel_minutes,
-                        preference_penalty,
-                    ) in candidates
-                ]
-                _, start_at, end_at = min(
-                    scored,
-                    key=lambda item: (item[0], item[1]),
-                )
-                task_items.append(
-                    self._task_item(
-                        task,
-                        start_at,
-                        end_at,
-                        reason="依据优先级、通勤和可用时间窗安排",
-                    )
-                )
-                task_items.sort(key=lambda item: item.start_at)
-
         plan_items = self._insert_travel_items(
             task_items,
             context,
@@ -263,6 +251,60 @@ class Scheduler:
             unscheduled_task_ids=unscheduled,
             missing_route_pairs=sorted(missing_route_pairs),
         )
+
+    # Fractions of the way from a task's shortest acceptable length to its
+    # ideal one.  The first pass asks for everything; later passes ask for
+    # less, so a crowded day ends with shorter tasks rather than missing ones.
+    compression_levels = (1.0, 0.6, 0.0)
+
+    def _solve_with_escalating_compression(
+        self,
+        *,
+        initial_items: list[PlanItem],
+        tasks: list[Task],
+        preferences: UserPreferences,
+        context: PlanningContext,
+        old_starts: dict[str, datetime],
+    ) -> _BeamState:
+        """Solve, and if anything is left over, ask for less and solve again.
+
+        The search keeps only its most promising states, and a full-length
+        placement always scores better than a shortened one.  So the states
+        that would have left room for the last task are pruned long before the
+        search discovers that the day does not fit — three two-hour sittings
+        are placed as two, and the third is reported impossible.  Re-solving
+        with a lower ceiling gives every task the shorter form up front.
+        """
+
+        best: _BeamState | None = None
+        for level in self.compression_levels:
+            attempt = self._schedule_minimum_disruption(
+                initial_items=initial_items,
+                tasks=[self._compressed(task, level) for task in tasks],
+                preferences=preferences,
+                context=context,
+                old_starts=old_starts,
+            )
+            if best is None or len(attempt.unscheduled_task_ids) < len(
+                best.unscheduled_task_ids
+            ):
+                best = attempt
+            if not best.unscheduled_task_ids:
+                break
+        assert best is not None
+        return best
+
+    @staticmethod
+    def _compressed(task: Task, level: float) -> Task:
+        """The same task asked for at ``level`` of its flexible length."""
+        shortest = task.shortest_acceptable_min()
+        if shortest >= task.duration_min or level >= 1:
+            return task
+        target = shortest + (task.duration_min - shortest) * level
+        minutes = max(shortest, int(target) - int(target) % 5)
+        if minutes == task.duration_min:
+            return task
+        return task.model_copy(update={"duration_min": minutes})
 
     def _schedule_minimum_disruption(
         self,
@@ -305,21 +347,30 @@ class Scheduler:
                         missing_route_pairs=candidate_missing_pairs,
                     )
                 )
-                ranked = sorted(
-                    candidates,
-                    key=lambda item: (
+                def rank_key(
+                    candidate: _Candidate,
+                    task: Task = task,
+                    has_dependents: bool = has_dependents,
+                ):
+                    return (
                         self._candidate_soft_cost(
                             task=task,
-                            start_at=item[0],
-                            travel_minutes=item[2],
-                            preference_penalty=item[3],
+                            start_at=candidate.start_at,
+                            travel_minutes=candidate.travel_minutes,
+                            preference_penalty=candidate.preference_penalty,
+                            shortfall_minutes=candidate.shortfall_minutes,
                             old_start=old_starts.get(task.id),
                             has_dependents=has_dependents,
                             context=context,
                         ),
-                        item[0],
-                    ),
-                )[: self.replan_candidates_per_task]
+                        candidate.start_at,
+                    )
+
+                ranked = self._best_per_length(
+                    candidates,
+                    key=rank_key,
+                    limit=self.replan_candidates_per_task,
+                )
                 if not ranked:
                     expanded.append(
                         _BeamState(
@@ -330,23 +381,22 @@ class Scheduler:
                             ],
                             missing_route_pairs=candidate_missing_pairs,
                             soft_cost=state.soft_cost,
+                            weather_breaches=state.weather_breaches,
                         )
                     )
                     continue
 
-                for (
-                    start_at,
-                    end_at,
-                    travel_minutes,
-                    preference_penalty,
-                ) in ranked:
+                for candidate in ranked:
                     item = self._task_item(
                         task,
-                        start_at,
-                        end_at,
+                        candidate.start_at,
+                        candidate.end_at,
                         reason=(
                             "按全局最小扰动目标保留原计划，并同时满足"
                             "通勤和可用时间窗"
+                            if old_starts
+                            else "按全局目标安排：先尽量排下更多任务，"
+                            "再优化通勤与偏好"
                         ),
                     )
                     child_items = sorted(
@@ -366,13 +416,22 @@ class Scheduler:
                                 state.soft_cost
                                 + self._candidate_soft_cost(
                                     task=task,
-                                    start_at=start_at,
-                                    travel_minutes=travel_minutes,
-                                    preference_penalty=preference_penalty,
+                                    start_at=candidate.start_at,
+                                    travel_minutes=candidate.travel_minutes,
+                                    preference_penalty=(
+                                        candidate.preference_penalty
+                                    ),
+                                    shortfall_minutes=(
+                                        candidate.shortfall_minutes
+                                    ),
                                     old_start=old_starts.get(task.id),
                                     has_dependents=has_dependents,
                                     context=context,
                                 )
+                            ),
+                            weather_breaches=(
+                                state.weather_breaches
+                                + int(candidate.breaks_weather)
                             ),
                         )
                     )
@@ -421,8 +480,15 @@ class Scheduler:
             for item in state.task_items
             if item.task_id in old_starts
         ]
+        # The order these are compared in is the product's priority order:
+        # cover the tasks, then keep the plan safe to follow, then disturb the
+        # existing day as little as possible, then optimise comfort and
+        # travel. Weather sits above disruption deliberately — ranking it
+        # below meant a replan left a run in the rain because moving it
+        # counted as more expensive than getting wet.
         return (
             len(state.unscheduled_task_ids),
+            state.weather_breaches,
             sum(shift > 0 for shift in shifts),
             sum(shifts),
             round(state.soft_cost, 6),
@@ -443,6 +509,7 @@ class Scheduler:
         old_start: datetime | None,
         has_dependents: bool,
         context: PlanningContext,
+        shortfall_minutes: int = 0,
     ) -> float:
         shift_minutes = (
             int(abs((start_at - old_start).total_seconds()) // 60)
@@ -472,12 +539,23 @@ class Scheduler:
             0,
             int((start_at - baseline).total_seconds() // 60),
         )
-        return candidate_cost(
+        bias_penalty = 0.0
+        if context.objective_bias == "alternative":
+            # Ask for a genuinely different arrangement by making the slots the
+            # previous plan used unattractive — without forbidding them, so a
+            # task with only one feasible slot keeps it.
+            if context.avoid_starts.get(task.id) == start_at:
+                bias_penalty += 45.0
+        elif context.objective_bias == "reverse_order":
+            # Turn "sooner is better" around instead of chaining the tasks up.
+            scheduling_delay_minutes = -scheduling_delay_minutes
+        return bias_penalty + candidate_cost(
             travel_minutes=travel_minutes,
             preference_penalty=preference_penalty,
             shift_minutes=shift_minutes,
             scheduling_delay_minutes=scheduling_delay_minutes,
             has_dependents=has_dependents,
+            shortfall_minutes=shortfall_minutes,
         )
 
     @staticmethod
@@ -519,6 +597,50 @@ class Scheduler:
             remaining.remove(chosen)
         return ordered
 
+    @staticmethod
+    def _best_per_length(candidates, *, key, limit: int) -> list:
+        """Keep the best slots for every length, not just the best overall.
+
+        Full-length slots always score better, so a plain cut at ``limit``
+        threw away every shortened option before the search could see it — and
+        a day that only fits three shorter sittings then lost one of them.
+        """
+
+        by_length: dict[int, list] = {}
+        for candidate in candidates:
+            by_length.setdefault(candidate.shortfall_minutes, []).append(
+                candidate
+            )
+        if not by_length:
+            return []
+        share = max(1, limit // len(by_length))
+        ranked: list = []
+        for shortfall in sorted(by_length):
+            ranked.extend(sorted(by_length[shortfall], key=key)[:share])
+        return sorted(ranked, key=key)[:limit]
+
+    @staticmethod
+    def _duration_options(task: Task) -> list[int]:
+        """Lengths to try for one task, longest first.
+
+        A task the student did not put a length on is a wish, not a
+        measurement: two hours of self-study is the aim, one hour still counts.
+        Offering the shorter lengths lets a crowded day keep the task instead
+        of reporting it as impossible.
+        """
+
+        shortest = task.shortest_acceptable_min()
+        if shortest >= task.duration_min:
+            return [task.duration_min]
+        options = [task.duration_min]
+        step = max(15, (task.duration_min - shortest) // 3)
+        value = task.duration_min - step
+        while value > shortest:
+            options.append(value - value % 5)
+            value -= step
+        options.append(shortest)
+        return list(dict.fromkeys(options))
+
     def _candidate_intervals(
         self,
         *,
@@ -557,15 +679,49 @@ class Scheduler:
             context.target_date,
             context.timezone,
         )
+        # A period only narrows the day when the user actually said it.
+        # Inferred periods — the model's guess, a saved habit — are preferences:
+        # enforcing them as hard windows deleted tasks that had a perfectly good
+        # slot an hour later, which is how “three sittings” became “two”.
         soft_period_preference = (
-            "memory_period_preference" in task.tags
+            task.constraint_source != "user"
+            or "memory_period_preference" in task.tags
         )
         if period_window and not soft_period_preference:
             search_start = max(search_start, period_window[0])
             search_end = min(search_end, period_window[1])
 
+        for option_minutes in self._duration_options(task):
+            yield from self._intervals_for_duration(
+                task=task,
+                minutes=option_minutes,
+                search_start=search_start,
+                search_end=search_end,
+                period_window=period_window,
+                soft_period_preference=soft_period_preference,
+                scheduled=scheduled,
+                preferences=preferences,
+                context=context,
+                missing_route_pairs=missing_route_pairs,
+            )
+
+    def _intervals_for_duration(
+        self,
+        *,
+        task: Task,
+        minutes: int,
+        search_start: datetime,
+        search_end: datetime,
+        period_window: tuple[datetime, datetime] | None,
+        soft_period_preference: bool,
+        scheduled: list[PlanItem],
+        preferences: UserPreferences,
+        context: PlanningContext,
+        missing_route_pairs: set[tuple[str, str]],
+    ) -> Iterable[_Candidate]:
+        shortfall = task.duration_min - minutes
         cursor = self._ceil_five_minutes(search_start)
-        duration = timedelta(minutes=task.duration_min)
+        duration = timedelta(minutes=minutes)
         while cursor + duration <= search_end:
             end_at = cursor + duration
             if not self._inside_opening_hours(
@@ -577,9 +733,15 @@ class Scheduler:
             ):
                 cursor += timedelta(minutes=5)
                 continue
-            if self._violates_weather(task, cursor, end_at, context):
-                cursor += timedelta(minutes=5)
-                continue
+            # Rain is a strong reason to go earlier, not a reason to give up
+            # exercising. Refusing every wet slot deleted the task outright
+            # whenever the forecast was bad all day, which is exactly when the
+            # student most needs to be told about it.
+            weather_penalty = (
+                self.wet_slot_penalty
+                if self._violates_weather(task, cursor, end_at, context)
+                else 0
+            )
             if self._overlaps_meal_window(
                 task,
                 cursor,
@@ -667,6 +829,10 @@ class Scheduler:
                 cursor += timedelta(minutes=5)
                 continue
 
+            if self._too_close_to_a_sibling(task, cursor, end_at, scheduled):
+                cursor += timedelta(minutes=5)
+                continue
+
             dependency_end = self._dependency_end(task, scheduled)
             if dependency_end and cursor < dependency_end + timedelta(
                 minutes=self._required_dependency_gap(task)
@@ -688,11 +854,18 @@ class Scheduler:
                     )
                 )
             )
-            yield (
-                cursor,
-                end_at,
-                before_travel + after_travel,
-                congestion_penalty + period_penalty + meal_penalty,
+            yield _Candidate(
+                start_at=cursor,
+                end_at=end_at,
+                travel_minutes=before_travel + after_travel,
+                preference_penalty=(
+                    congestion_penalty
+                    + period_penalty
+                    + meal_penalty
+                    + weather_penalty
+                ),
+                shortfall_minutes=shortfall,
+                breaks_weather=bool(weather_penalty),
             )
             cursor += timedelta(minutes=5)
 
@@ -802,6 +975,13 @@ class Scheduler:
         )
         if duration is None and origin_id and destination_id:
             missing_route_pairs.add((origin_id, destination_id))
+            # An unknown route is a gap in the map, not a reason to refuse to
+            # plan.  Returning None here rejected every candidate slot and the
+            # task then vanished from the day with nothing said about it — the
+            # single largest source of "5 tasks requested, 2 scheduled".  Book
+            # a deliberately generous crossing instead; the pair is recorded
+            # above so the answer can say the estimate is unverified.
+            return Scheduler.unknown_route_minutes, 0
         return duration, delay
 
     @staticmethod
@@ -869,6 +1049,47 @@ class Scheduler:
             if remainder == 0
             else value + timedelta(minutes=5 - remainder)
         )
+
+    @staticmethod
+    def _occurrence_group(task: Task) -> str | None:
+        return next(
+            (
+                tag.removeprefix("occurrence_of:")
+                for tag in task.tags
+                if tag.startswith("occurrence_of:")
+            ),
+            None,
+        )
+
+    @staticmethod
+    def _too_close_to_a_sibling(
+        task: Task,
+        start_at: datetime,
+        end_at: datetime,
+        scheduled: list[PlanItem],
+    ) -> bool:
+        """Keep separate sittings of one request genuinely apart.
+
+        Without this the planner satisfies “自习3次” by running three blocks
+        end to end, which is the six-hour session the student was breaking up
+        in the first place.
+        """
+
+        if task.min_gap_min <= 0:
+            return False
+        group = Scheduler._occurrence_group(task)
+        if group is None:
+            return False
+        gap = timedelta(minutes=task.min_gap_min)
+        prefix = f"{group}_"
+        for item in scheduled:
+            if not item.task_id or item.task_id == task.id:
+                continue
+            if not item.task_id.startswith(prefix):
+                continue
+            if start_at < item.end_at + gap and item.start_at < end_at + gap:
+                return True
+        return False
 
     @staticmethod
     def _required_dependency_gap(task: Task) -> int:

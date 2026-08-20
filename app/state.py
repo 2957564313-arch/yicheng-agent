@@ -21,6 +21,9 @@ class CampusAgentState(TypedDict, total=False):
     tasks: list[dict[str, Any]]
     preferences: dict[str, Any]
     client_memories: list[dict[str, Any]]
+    # Recent turns of this thread, oldest first. Needed to resolve
+    # “把这个挪到下午” — the plan alone does not say what “这个” is.
+    conversation_history: list[dict[str, Any]]
     client_timetable: dict[str, Any] | None
     client_calendar_overrides: list[dict[str, Any]]
     active_campus: dict[str, Any] | None

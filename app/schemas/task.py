@@ -1,17 +1,78 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.common import TaskFlexibility, TimeWindow, TransportMode
 
 
 class Task(BaseModel):
+    # Reject unknown fields. A misspelled or not-yet-supported constraint used
+    # to be dropped in silence, so a request the model had understood
+    # correctly reached the planner with the constraint missing.
+    model_config = ConfigDict(extra="forbid")
+
     id: str = Field(min_length=1, max_length=64)
     title: str = Field(min_length=1, max_length=120)
     date: date
-    duration_min: int = Field(ge=5, le=720)
+    # The length to aim for. ``min_duration_min`` says how far it may be cut
+    # when the day cannot hold every task at full length; without it a task
+    # that does not fit is simply dropped, which is never what a student wants.
+    duration_min: int = Field(
+        ge=5,
+        le=720,
+        description="这次任务的理想时长（分钟）。",
+    )
+    min_duration_min: int | None = Field(
+        default=None,
+        ge=5,
+        le=720,
+        description=(
+            "排不下时可以压缩到的最短时长；不填表示时长不可压缩。"
+            "例如“自习”理想120分钟、最短60分钟。"
+        ),
+    )
+    max_duration_min: int | None = Field(
+        default=None,
+        ge=5,
+        le=720,
+        description="时间充裕时可以延长到的最长时长。",
+    )
+    occurrence_count: int = Field(
+        default=1,
+        ge=1,
+        le=12,
+        description=(
+            "用户要求这件事今天做几次。“自习3次”写 3，"
+            "规划器会生成 3 个独立任务。"
+        ),
+    )
+    splittable: bool = Field(
+        default=False,
+        description="这次任务本身可否再拆成几段完成。",
+    )
+    min_gap_min: int = Field(
+        default=0,
+        ge=0,
+        le=720,
+        description="与同类任务之间至少间隔的分钟数。",
+    )
+    duration_source: Literal["explicit", "default"] = Field(
+        default="default",
+        description=(
+            "explicit=用户明确说了时长，不可压缩；"
+            "default=系统按常识填的默认值，可压缩。"
+        ),
+    )
+    constraint_source: Literal["user", "model", "memory", "rule"] = Field(
+        default="model",
+        description=(
+            "时段等约束的来源。user=用户本轮明确说的，是硬约束；"
+            "model/memory=推断出来的，只作为偏好，不能因此丢任务。"
+        ),
+    )
 
     location_id: str | None = Field(default=None, max_length=100)
     location_raw: str | None = Field(
@@ -56,8 +117,31 @@ class Task(BaseModel):
     tags: list[str] = Field(default_factory=list)
     notes: str | None = Field(default=None, max_length=500)
 
+    @property
+    def preferred_duration_min(self) -> int:
+        """The length to aim for. Kept as a name, not a second copy of it."""
+        return self.duration_min
+
+    def shortest_acceptable_min(self) -> int:
+        """How short this task may be cut before it stops being worth doing."""
+        if self.duration_source == "explicit":
+            return self.duration_min
+        return min(self.min_duration_min or self.duration_min, self.duration_min)
+
     @model_validator(mode="after")
-    def validate_time_constraints(self) -> "Task":
+    def validate_duration_band(self) -> Task:
+        if self.min_duration_min and self.min_duration_min > self.duration_min:
+            raise ValueError(
+                "min_duration_min must not exceed duration_min"
+            )
+        if self.max_duration_min and self.max_duration_min < self.duration_min:
+            raise ValueError(
+                "max_duration_min must not be below duration_min"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_time_constraints(self) -> Task:
         if self.flexibility in {
             TaskFlexibility.FIXED,
             TaskFlexibility.LOCKED,

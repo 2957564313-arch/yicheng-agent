@@ -56,6 +56,9 @@ class CommonTaskSpec:
     importance: int
     tags: tuple[str, ...]
     preferred_period: str | None = None
+    # Titles that keep the student's own words. “和导师碰头” answered with
+    # “参加会议” loses the one detail that made it that appointment.
+    title_overrides: tuple[tuple[str, str], ...] = ()
     # Skip this spec when another task already takes the user to this place.
     # “回宿舍洗澡” and “回宿舍洗衣服” are each one task, not a trip back to the
     # dormitory plus a separate thing to do once there.
@@ -134,13 +137,34 @@ COMMON_TASK_SPECS = (
     CommonTaskSpec(
         "meeting",
         "参加会议",
-        ("小组讨论", "项目讨论", "社团例会", "组会", "班会", "开会", "会议"),
+        (
+            "小组讨论",
+            "项目讨论",
+            "社团例会",
+            "组会",
+            "班会",
+            "开会",
+            "会议",
+            "碰头",
+            "见导师",
+            "找导师",
+            "和导师",
+            "面谈",
+        ),
         60,
         None,
         time(8, 0),
         time(22, 0),
         4,
         ("meeting", "collaboration"),
+        # Only where the generic title drops something the student said.
+        # “小组讨论” is fairly called a meeting; “和导师碰头” is not — the
+        # person is the whole point of that appointment.
+        title_overrides=(
+            ("和导师", "和导师碰头"),
+            ("见导师", "和导师碰头"),
+            ("找导师", "和导师碰头"),
+        ),
     ),
     CommonTaskSpec(
         "admin",
@@ -292,7 +316,7 @@ TASK_KEYWORDS: dict[str, tuple[str, ...]] = {
     "bath": ("洗澡", "洗漱", "用热水", "打热水"),
     "badminton": ("羽毛球",),
     "table_tennis": ("乒乓球",),
-    "run": ("阳光长跑", "长跑", "跑步", "运动"),
+    "run": ("阳光长跑", "长跑", "跑步", "运动", "锻炼", "健身"),
 }
 
 COMMON_LOCATION_ALIASES = (
@@ -394,6 +418,7 @@ class RuleBasedRequirementParser:
                 target_date=target_date,
             )
             tasks = self._split_requested_tasks(query, tasks)
+            tasks = self._apply_occurrence_counts(query, tasks)
 
         clarifications = []
         if (
@@ -727,6 +752,18 @@ class RuleBasedRequirementParser:
             # An explicit clock anchor in the request outranks the period
             # phrase, so the period only applies when the user gave none.
             effective_period = study_period if overall_start is None else None
+            study_min, study_source = self._flexible_duration(
+                duration,
+                bool(
+                    re.search(
+                        rf"{re.escape(study_keyword)}[^，。；、]{{0,8}}?"
+                        rf"(?:\d+\s*分钟|\d+(?:\.\d+)?\s*个?小时"
+                        rf"|(?:{'|'.join(map(re.escape, CHINESE_NUMBER_HOURS))})"
+                        rf"\s*个?小时)",
+                        query,
+                    )
+                ),
+            )
             tasks.append(
                 self._movable_task(
                     task_id="study",
@@ -749,6 +786,9 @@ class RuleBasedRequirementParser:
                     ),
                     deadline=(study_limit.time() if study_limit else None),
                     preferred_period=effective_period,
+                    period_source="user",
+                    min_duration_min=study_min,
+                    duration_source=study_source,
                     importance=5,
                 )
             )
@@ -853,6 +893,7 @@ class RuleBasedRequirementParser:
                     earliest=meal_earliest,
                     latest=meal_latest,
                     preferred_period=meal_period,
+                    period_source="user",
                     importance=3,
                 )
             )
@@ -949,6 +990,7 @@ class RuleBasedRequirementParser:
                     latest=(bath_limit.time() if bath_limit else time(23, 59)),
                     deadline=(bath_limit.time() if bath_limit else None),
                     preferred_period="evening" if "晚上" in query else None,
+                    period_source="user",
                     importance=3,
                 )
             )
@@ -1003,6 +1045,7 @@ class RuleBasedRequirementParser:
                     ),
                     deadline=(sport_limit.time() if sport_limit else None),
                     preferred_period="evening" if "晚上" in query else None,
+                    period_source="user",
                     importance=3,
                 )
             )
@@ -1021,27 +1064,32 @@ class RuleBasedRequirementParser:
                 }
             )
         if not any(
-            word in fixed_text for word in ("跑步", "长跑", "阳光长跑", "运动")
+            word in fixed_text
+            for word in ("跑步", "长跑", "阳光长跑", "运动", "锻炼", "健身")
         ) and any(
             keyword in query
-            for keyword in ("阳光长跑", "长跑", "跑步", "运动")
+            for keyword in ("阳光长跑", "长跑", "跑步", "运动", "锻炼", "健身")
         ):
             run_keyword = next(
                 keyword
-                for keyword in ("阳光长跑", "长跑", "跑步", "运动")
+                for keyword in ("阳光长跑", "长跑", "跑步", "运动", "锻炼", "健身")
                 if keyword in query
             )
             is_sunshine_run = "阳光长跑" in query
             run_deadline = self._task_deadline(
                 query,
                 target_date,
-                ("阳光长跑", "长跑", "跑步", "运动"),
+                ("阳光长跑", "长跑", "跑步", "运动", "锻炼", "健身"),
             )
             run_limit = run_deadline or overall_deadline
             tasks.append(
                 self._movable_task(
                     task_id="run",
-                    title="阳光长跑" if is_sunshine_run else "跑步",
+                    title=(
+                        "阳光长跑"
+                        if is_sunshine_run
+                        else ("锻炼" if run_keyword in ("锻炼", "健身") else "跑步")
+                    ),
                     target_date=target_date,
                     duration=self._duration_near(
                         query,
@@ -1056,6 +1104,7 @@ class RuleBasedRequirementParser:
                     latest=(run_limit.time() if run_limit else time(22, 0)),
                     deadline=(run_limit.time() if run_limit else None),
                     preferred_period="evening" if "晚上" in query else None,
+                    period_source="user",
                     importance=3,
                 )
             )
@@ -1155,9 +1204,17 @@ class RuleBasedRequirementParser:
                     query,
                 )
             )
+            spec_title = next(
+                (
+                    title
+                    for marker, title in spec.title_overrides
+                    if marker in query
+                ),
+                spec.title,
+            )
             task = self._movable_task(
                 task_id=spec.id,
-                title=spec.title,
+                title=spec_title,
                 target_date=target_date,
                 duration=duration,
                 location_raw=location,
@@ -1176,6 +1233,13 @@ class RuleBasedRequirementParser:
                 ),
                 deadline=(task_limit.time() if task_limit else None),
                 preferred_period=preferred_period or spec.preferred_period,
+                period_source="user" if preferred_period else "rule",
+                **dict(
+                    zip(
+                        ("min_duration_min", "duration_source"),
+                        self._flexible_duration(duration, duration_was_explicit),
+                    )
+                ),
                 importance=spec.importance,
             )
             tasks.append(
@@ -2720,6 +2784,53 @@ class RuleBasedRequirementParser:
             )
         return result
 
+    def _apply_occurrence_counts(
+        self,
+        query: str,
+        tasks: list[Task],
+    ) -> list[Task]:
+        """Record “自习3次”, “跑两趟” as how many separate sittings are wanted.
+
+        Counting words used to be dropped entirely, so “自习3次” planned one
+        two-hour block and the other two sittings were never mentioned again.
+        The count is recorded here and expanded into separate tasks once the
+        rule and model readings have been merged, so both paths agree.
+        """
+
+        numbers = {
+            "一": 1, "两": 2, "二": 2, "三": 3, "四": 4,
+            "五": 5, "六": 6, "七": 7, "八": 8,
+        }
+        pattern = re.compile(
+            r"(?P<count>[1-9]|一|两|二|三|四|五|六|七|八)\s*(?:次|趟|回|场)"
+        )
+        adjusted: list[Task] = []
+        for task in tasks:
+            keywords = TASK_KEYWORDS.get(task.id, ())
+            positions = [
+                query.find(keyword)
+                for keyword in keywords
+                if query.find(keyword) >= 0
+            ]
+            count = 1
+            if positions:
+                keyword = min(keywords, key=lambda value: (
+                    query.find(value) if query.find(value) >= 0 else len(query)
+                ))
+                # Only the clause the action sits in. A wider window let
+                # “自习3次，锻炼1小时” give the exercise three sittings too.
+                clause = self._clause_around_keyword(query, keyword)
+                match = pattern.search(clause)
+                if match:
+                    raw = match.group("count")
+                    count = numbers.get(raw) or int(raw)
+            adjusted.append(
+                task.model_copy(update={"occurrence_count": max(1, count)})
+                if count > 1
+                else task
+            )
+        return adjusted
+
     @staticmethod
     def _middle_task_id(
         query: str,
@@ -2833,6 +2944,24 @@ class RuleBasedRequirementParser:
                 return task
         return None
 
+    @staticmethod
+    def _flexible_duration(duration: int, explicit: bool) -> tuple[int | None, str]:
+        """The compressible band for a length the user did or did not state.
+
+        “自习两小时” is a measurement and stays exactly that.  A length the
+        system filled in from habit is only an aim: half of it, floored at
+        half an hour, is still a useful sitting and keeps the task in the day
+        when the day is full.
+        """
+
+        if explicit:
+            return None, "explicit"
+        floor = max(30, (duration // 2) - (duration // 2) % 5)
+        if floor >= duration:
+            # Already at or under the floor; there is nothing left to give up.
+            return None, "default"
+        return floor, "default"
+
     def _movable_task(
         self,
         *,
@@ -2846,6 +2975,9 @@ class RuleBasedRequirementParser:
         importance: int,
         deadline: time | None = None,
         preferred_period: str | None = None,
+        period_source: str = "rule",
+        min_duration_min: int | None = None,
+        duration_source: str = "default",
     ) -> Task:
         return Task(
             id=task_id or f"task_{uuid4().hex}",
@@ -2869,6 +3001,12 @@ class RuleBasedRequirementParser:
                 else None
             ),
             preferred_period=preferred_period,
+            # Only a period the student actually typed may narrow the day.
+            constraint_source=("user" if preferred_period else "rule")
+            if period_source == "user"
+            else "rule",
+            min_duration_min=min_duration_min,
+            duration_source=duration_source,
             importance=importance,
         )
 

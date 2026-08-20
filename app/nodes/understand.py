@@ -12,6 +12,7 @@ from app.schemas.plan import Plan
 from app.schemas.task import Task, UserPreferences
 from app.schemas.timetable import CourseSessionCreate
 from app.schemas.understand import UnderstandResult
+from app.services.plan_editor import apply_plan_edit
 from app.state import CampusAgentState
 
 
@@ -41,12 +42,56 @@ def make_understand_node(container: AppContainer):
             now=datetime.fromisoformat(state["now_iso"]),
             old_plan=old_plan,
         )
-        should_use_llm = (
-            container.llm.configured
-            and old_plan is None
-            and state.get("mode") != "offline"
+        use_llm = (
+            container.llm.configured and state.get("mode") != "offline"
         )
-        if should_use_llm:
+        # Changing an existing day is a conversation, so the model reads it —
+        # with the plan and the recent turns in hand. It answers with the
+        # change rather than a new day: asked to re-emit the whole plan it
+        # drops the arrangements the student did not happen to mention.
+        if use_llm and old_plan is not None:
+            try:
+                edit = await container.llm.parse_plan_edit(
+                    query=state["query"],
+                    now_iso=state["now_iso"],
+                    plan_summary=_describe_plan(old_plan),
+                    history=[
+                        {
+                            "role": str(turn.get("role", "user")),
+                            "content": str(turn.get("content", "")),
+                        }
+                        for turn in state.get("conversation_history", [])
+                    ],
+                )
+                edited, unresolved = apply_plan_edit(
+                    tasks=rule_result.tasks,
+                    edit=edit,
+                    timezone=container.parser.timezone,
+                )
+                result = rule_result.model_copy(
+                    update={
+                        "tasks": edited,
+                        "clarifications": list(
+                            dict.fromkeys(
+                                [*edit.clarifications, *unresolved]
+                            )
+                        ),
+                    }
+                )
+                parser_name = "llm_plan_edit"
+            except Exception as exc:
+                result = rule_result
+                parser_name = "deterministic_rules_fallback"
+                warnings.append(
+                    Issue(
+                        code="LLM_DEGRADED",
+                        severity=IssueSeverity.WARNING,
+                        message=("大模型暂时不可用，已使用确定性约束层继续完成规划"),
+                        details=_safe_llm_warning_details(exc),
+                        recoverable=True,
+                    ).model_dump(mode="json")
+                )
+        elif use_llm:
             try:
                 llm_result = await container.llm.parse_requirement(
                     query=state["query"],
@@ -98,6 +143,11 @@ def make_understand_node(container: AppContainer):
             query=state["query"],
             result=result,
             rule_result=rule_result,
+        )
+        # Both readings converge here, so “三次自习” becomes three real tasks
+        # whichever path recognised the count.
+        result = result.model_copy(
+            update={"tasks": _expand_occurrences(result.tasks)}
         )
 
         initial_location_raw = (
@@ -901,6 +951,80 @@ _TASK_KIND_KEYWORDS = (
         ("阳光长跑", "长跑", "跑步", "运动", "操场", "田径场", "跑道"),
     ),
 )
+
+
+def _describe_plan(plan: Plan) -> str:
+    """The current day in the plainest form the model can point back at."""
+    lines = [f"日期：{plan.date:%Y-%m-%d}"]
+    for item in sorted(plan.items, key=lambda value: value.start_at):
+        if item.item_type != "task":
+            continue
+        lines.append(
+            f"- id={item.task_id} 标题={item.title} "
+            f"{item.start_at:%H:%M}-{item.end_at:%H:%M}"
+            + (f" 地点={item.location_raw}" if item.location_raw else "")
+            + (" 【锁定，不可移动】" if item.locked else "")
+        )
+    if len(lines) == 1:
+        lines.append("（当前没有已安排的任务）")
+    return chr(10).join(lines)
+
+
+def _expand_occurrences(tasks: list[Task]) -> list[Task]:
+    """Turn “do this N times” into N tasks the planner can actually place.
+
+    A count left on a single task is invisible to the planner: it schedules one
+    block and the remaining sittings quietly never happen.  Each sitting gets
+    its own id so it can be moved, shortened or dropped on its own, and they
+    are kept apart the way split sittings are.
+    """
+
+    expanded: list[Task] = []
+    for task in tasks:
+        count = max(1, task.occurrence_count)
+        if count == 1:
+            expanded.append(task)
+            continue
+        for index in range(count):
+            expanded.append(
+                task.model_copy(
+                    update={
+                        "id": f"{task.id}_{index + 1}",
+                        "title": f"{task.title}（第{index + 1}次）",
+                        "occurrence_count": 1,
+                        # Three sittings asked for separately are three
+                        # sittings, not one long block broken by coffee: keep
+                        # real distance between them.
+                        "min_gap_min": max(task.min_gap_min, 90),
+                        # Separate sittings, not one block chopped up: they are
+                        # deliberately left unchained so the planner can spread
+                        # them across whatever gaps the day actually has.
+                        "tags": list(
+                            dict.fromkeys(
+                                [*task.tags, f"occurrence_of:{task.id}"]
+                            )
+                        ),
+                    }
+                )
+            )
+    if len(expanded) == len(tasks):
+        return tasks
+    known = {task.id for task in tasks}
+    renamed = {
+        task.id: f"{task.id}_1" for task in tasks if task.occurrence_count > 1
+    }
+    return [
+        task.model_copy(
+            update={
+                "depends_on": [
+                    renamed.get(dependency, dependency)
+                    for dependency in task.depends_on
+                    if dependency in known or dependency in renamed
+                ]
+            }
+        )
+        for task in expanded
+    ]
 
 
 def _merge_llm_with_rule_constraints(

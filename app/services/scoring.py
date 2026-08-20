@@ -54,6 +54,7 @@ def candidate_cost(
     shift_minutes: int,
     scheduling_delay_minutes: int = 0,
     has_dependents: bool = False,
+    shortfall_minutes: int = 0,
 ) -> float:
     # A task that gates other tasks is pulled forward harder.  The weight for
     # an ordinary task is deliberately mild: one extra minute of walking is
@@ -62,9 +63,14 @@ def candidate_cost(
     # single leg of a round trip.  A stated preference (20 per penalty point)
     # outranks both.
     delay_weight = 0.08 if has_dependents else 0.05
+    # Cutting a task short is worse than any routing or preference cost, so a
+    # full-length slot always wins when one exists.  It stays far cheaper than
+    # dropping the task, which the objective rejects outright before cost is
+    # even compared.
     return (
         0.5 * travel_minutes
         + 20 * preference_penalty
         + shift_minutes
         + delay_weight * scheduling_delay_minutes
+        + 0.6 * shortfall_minutes
     )

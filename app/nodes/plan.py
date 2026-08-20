@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from itertools import permutations
 from zoneinfo import ZoneInfo
 
 from app.container import AppContainer
 from app.nodes.common import append_trace
-from app.schemas.common import TaskFlexibility, TimeWindow
+from app.schemas.common import TaskFlexibility
 from app.schemas.context import CongestionWindow, TravelEstimate, WeatherContext
 from app.schemas.plan import Plan
 from app.schemas.task import Task, UserPreferences
@@ -24,76 +24,6 @@ def _quick_adjustment_strategy(query: str) -> str | None:
     if "减少行程中的等待时间" in query:
         return "waiting"
     return None
-
-
-def _apply_quick_adjustment_strategy(
-    tasks: list[Task],
-    strategy: str | None,
-) -> list[Task]:
-    if strategy is None or strategy in {"travel", "waiting"}:
-        return tasks
-    movable_indexes = [
-        index
-        for index, task in enumerate(tasks)
-        if task.flexibility == TaskFlexibility.MOVABLE
-    ]
-    movable = [tasks[index] for index in movable_indexes]
-    if len(movable) < 2:
-        return tasks
-    if strategy == "alternative":
-        movable = [*movable[1:], movable[0]]
-    elif strategy == "reverse_order":
-        movable.reverse()
-    previous_id: str | None = None
-    for rank, task in enumerate(movable):
-        movable[rank] = task.model_copy(
-            update={
-                "depends_on": [previous_id] if previous_id else [],
-                "importance": max(1, 5 - rank),
-            }
-        )
-        previous_id = task.id
-    adjusted = list(tasks)
-    for index, task in zip(movable_indexes, movable, strict=True):
-        adjusted[index] = task
-    return adjusted
-
-
-def _soft_default_meal_windows(
-    tasks: list[Task],
-    preferences: UserPreferences,
-) -> list[TimeWindow]:
-    """Reserve a normal meal gap after nearby fixed classes when possible.
-
-    These defaults are deliberately soft: they improve ordinary student plans
-    without making a tight but otherwise valid request infeasible.  Once the
-    user saves lunch or dinner times, ``preferences.meal_windows`` replaces
-    this hint with a hard personal constraint.
-    """
-
-    if preferences.meal_windows:
-        return []
-    fixed_intervals = [
-        (task.fixed_start, task.fixed_end)
-        for task in tasks
-        if task.flexibility in {TaskFlexibility.FIXED, TaskFlexibility.LOCKED}
-        and task.fixed_start
-        and task.fixed_end
-    ]
-    windows: list[TimeWindow] = []
-    if any(
-        time(11, 30) <= end.time() <= time(13, 15)
-        or start.time() < time(13, 15) <= end.time()
-        for start, end in fixed_intervals
-    ):
-        windows.append(TimeWindow(start=time(12, 25), end=time(13, 15)))
-    if any(
-        time(17, 15) <= end.time() <= time(19, 30)
-        or start.time() < time(18, 45) <= end.time()
-        for start, end in fixed_intervals
-    ):
-        windows.append(TimeWindow(start=time(18, 0), end=time(18, 45)))
-    return windows
 
 
 def _tasks_with_movable_order(
@@ -161,7 +91,6 @@ def make_plan_node(container: AppContainer):
             if state["intent"] == "replan"
             else None
         )
-        tasks = _apply_quick_adjustment_strategy(tasks, quick_strategy)
         preferences = UserPreferences.model_validate(state["preferences"])
         if quick_strategy == "travel":
             preferences = preferences.model_copy(
@@ -257,13 +186,25 @@ def make_plan_node(container: AppContainer):
             },
             enforce_weather=enforce_weather,
             old_plan=(None if quick_strategy else old_plan),
+            # A quick adjustment changes what the search optimises for; the
+            # tasks, their order and their importance stay exactly as the
+            # student stated them.
+            objective_bias=quick_strategy,
+            avoid_starts=(
+                {
+                    item.task_id: item.start_at
+                    for item in old_plan.items
+                    if item.item_type == "task" and item.task_id
+                }
+                if old_plan and quick_strategy in {"alternative", "reverse_order"}
+                else {}
+            ),
             initial_location_id=state.get("initial_location_id"),
             initial_departure_at=(
                 datetime.fromisoformat(state["initial_departure_at"])
                 if state.get("initial_departure_at")
                 else None
             ),
-            soft_meal_windows=_soft_default_meal_windows(tasks, preferences),
         )
 
         if (

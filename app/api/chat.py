@@ -23,7 +23,6 @@ from app.schemas.common import DataSource, Issue, PlanStatus
 from app.schemas.plan import DataFreshness, Plan
 from app.services.plan_diff import compare_plans
 
-
 router = APIRouter(prefix="/api/v1", tags=["chat"])
 
 
@@ -55,8 +54,69 @@ _CURRENT_PLAN_KEYWORDS = (
 )
 
 
+# A follow-up asks to change the day that already exists. Recognising these
+# by verb rather than by a fixed list of phrases matters: “把自习换到下午，
+# 其他照旧” and “跑步换到明天” carry none of the original keywords, so the
+# existing plan was never loaded and everything else in the day disappeared.
+_PLAN_EDIT_PATTERN = re.compile(
+    r"(?:换|挪|移|调|改)(?:到|去|成|为|至|一下|下)"
+    r"|(?:提前|推迟|延后|延长|缩短|取消|删掉|去掉|加上|加个)"
+    r"|(?:放|排|挪)(?:到|去|在|后面|前面|最后|最前)"
+    r"|别动|先不动|不用动"
+    r"|其他照旧|其余照旧|其他不变|其余不变|保持原样|照原样|别的不动"
+)
+# Demonstratives only mean something when there is a plan to point at.
+_PLAN_REFERENCE_PATTERN = re.compile(r"这个|那个|这项|那项|这件|那件|这条|那条")
+
+
+def _requests_a_fresh_plan(query: str) -> bool:
+    """The user explicitly wants to start over rather than edit today's plan."""
+    return bool(
+        re.search(
+            r"重新(?:建立|制定|做一份|来一份|安排一天|规划一天)"
+            r"|新建(?:一个)?计划|另建|从头(?:再)?来|清空重来"
+            r"|不用管(?:之前|前面)|忽略(?:之前|前面)",
+            query,
+        )
+    )
+
+
+def _recent_turns(
+    *,
+    container,
+    user_id: str,
+    thread_id: str,
+    limit: int = 8,
+) -> list[dict[str, str]]:
+    """The last few turns of this thread, oldest first.
+
+    A follow-up like “把这个放到上午” cannot be read without them: the plan
+    says what exists, only the conversation says which one “这个” is.
+    """
+
+    try:
+        detail = container.conversations.get_detail(
+            user_id=user_id,
+            thread_id=thread_id,
+        )
+    except Exception:
+        return []
+    if detail is None:
+        return []
+    return [
+        {"role": message.role, "content": message.content}
+        for message in detail.messages[-limit:]
+    ]
+
+
 def _requires_current_plan(query: str) -> bool:
+    if _requests_a_fresh_plan(query):
+        return False
     if any(keyword in query for keyword in _CURRENT_PLAN_KEYWORDS):
+        return True
+    if _PLAN_EDIT_PATTERN.search(query) or _PLAN_REFERENCE_PATTERN.search(
+        query
+    ):
         return True
     weather_words = ("天气", "下雨", "降雨", "有雨")
     weather_adjustment_words = (
@@ -831,6 +891,11 @@ async def execute_chat(
         ),
         "tasks": [],
         "preferences": {},
+        "conversation_history": _recent_turns(
+            container=container,
+            user_id=payload.user_id,
+            thread_id=thread_id,
+        ),
         "client_memories": [
             item.model_dump(mode="json")
             for item in (

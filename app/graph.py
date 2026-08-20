@@ -14,7 +14,21 @@ from app.state import CampusAgentState
 
 
 def route_after_understand(state: CampusAgentState) -> str:
-    return "respond" if state.get("clarifications") else "enrich"
+    """Ask the question — but never by wiping a day that already exists.
+
+    One unclear follow-up (“把那个删掉” when several things could be “那个”)
+    used to come back with no plan at all, so the day the student already had
+    looked like it had been deleted. When there is an existing plan, keep it
+    and ask alongside it. A fresh request whose premise is broken — a date
+    that has already passed — still gets the question on its own, because
+    there is no day to preserve and planning it would be useless.
+    """
+
+    if state.get("clarifications") and not (
+        state.get("tasks") and state.get("old_plan")
+    ):
+        return "respond"
+    return "enrich"
 
 
 def route_after_enrich(state: CampusAgentState) -> str:

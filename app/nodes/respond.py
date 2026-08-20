@@ -14,7 +14,12 @@ from app.state import CampusAgentState
 
 def make_respond_node(container: AppContainer):
     async def respond(state: CampusAgentState) -> dict:
-        if state.get("clarifications"):
+        # A question about one task is not a reason to withhold the day the
+        # student already had. On a fresh request there is nothing to keep,
+        # so the question stands on its own.
+        if state.get("clarifications") and not (
+            state.get("candidate_plan") and state.get("old_plan")
+        ):
             answer = _clarification_answer(
                 query=state.get("query", ""),
                 clarifications=state["clarifications"],
