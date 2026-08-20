@@ -9,7 +9,6 @@
 - 代码仓库：https://github.com/2957564313-arch/yicheng-agent（`main`）
 - 生产环境：阿里云 ECS + Cloudflare Tunnel
 - 主工作区：`D:\APP\Dev\repos\yicheng-agent`
-- Vercel：已停用
 
 ## 当前使用的技术
 

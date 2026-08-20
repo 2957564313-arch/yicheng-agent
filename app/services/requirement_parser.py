@@ -85,7 +85,7 @@ COMMON_TASK_SPECS = (
     CommonTaskSpec(
         "review",
         "课程复习",
-        ("复习", "备考", "刷题", "背单词", "预习"),
+        ("复习", "备考", "刷题", "背单词", "预习", "把书看完"),
         90,
         "图书馆",
         time(8, 0),
@@ -96,7 +96,19 @@ COMMON_TASK_SPECS = (
     CommonTaskSpec(
         "assignment",
         "完成作业",
-        ("写实验报告", "完成作业", "写作业", "做作业", "赶作业", "写报告"),
+        (
+            "写实验报告",
+            "完成作业",
+            "写作业",
+            "做作业",
+            "赶作业",
+            "写报告",
+            "把作业写完",
+            "把作业做完",
+            "作业写完",
+            "作业做完",
+            "作业赶完",
+        ),
         90,
         "图书馆",
         time(8, 0),
@@ -149,7 +161,7 @@ COMMON_TASK_SPECS = (
     CommonTaskSpec(
         "laundry",
         "洗衣服",
-        ("洗衣服", "洗衣", "晾衣服", "取衣服"),
+        ("洗衣服", "洗衣", "晾衣服", "取衣服", "把衣服洗了", "衣服洗了"),
         45,
         "学生公寓",
         time(8, 0),
@@ -160,7 +172,7 @@ COMMON_TASK_SPECS = (
     CommonTaskSpec(
         "shopping",
         "采购生活用品",
-        ("买日用品", "采购", "买东西", "去超市"),
+        ("买日用品", "采购", "买东西", "去超市", "把东西买了"),
         45,
         None,
         time(8, 0),
@@ -214,11 +226,38 @@ COMMON_TASK_SPECS = (
     ),
 )
 
+PARCEL_NOUNS = "快递|包裹|顺丰|京东|菜鸟|驿站"
+PARCEL_VERBS = "取|拿|领"
+# Matching a fixed list of phrasings missed the ordinary ways a student writes
+# this — “把快递取了”, “快递要拿一下”, “领个包裹” — and the task was dropped
+# from the plan without a word.  Match the verb and the noun in either order.
+PARCEL_PICKUP_PATTERN = re.compile(
+    rf"(?:(?:{PARCEL_VERBS})[^，。；、]{{0,4}}?(?:{PARCEL_NOUNS}))"
+    rf"|(?:(?:{PARCEL_NOUNS})[^，。；、]{{0,4}}?(?:{PARCEL_VERBS}))"
+    rf"|取件"
+    rf"|去[^，。；、]{{0,3}}(?:快递站|快递点|驿站|菜鸟)"
+)
+
+
+def _mentions_parcel_pickup(query: str) -> bool:
+    return bool(PARCEL_PICKUP_PATTERN.search(query))
+
+
 COMMON_TASK_KEYWORDS = tuple(
     dict.fromkeys(
         keyword for spec in COMMON_TASK_SPECS for keyword in spec.keywords
     )
 )
+
+# Used to tell which task a “分两段” phrase refers to when the request holds
+# several tasks.  The catalog ids come from the specs above; the rest are the
+# tasks built by hand in ``_extract_plan_tasks``.
+_SPLIT_TASK_KEYWORDS: dict[str, tuple[str, ...]] = {
+    **{spec.id: spec.keywords for spec in COMMON_TASK_SPECS},
+    "study": ("自习", "学习", "看书", "复习"),
+    "run": ("阳光长跑", "长跑", "跑步", "运动"),
+    "parcel": ("快递", "取件", "驿站", "顺丰", "京东"),
+}
 
 COMMON_LOCATION_ALIASES = (
     ("图书馆十二层", "图书馆十二层"),
@@ -318,6 +357,7 @@ class RuleBasedRequirementParser:
                 query=query,
                 target_date=target_date,
             )
+            tasks = self._split_requested_tasks(query, tasks)
 
         clarifications = []
         if (
@@ -593,13 +633,9 @@ class RuleBasedRequirementParser:
         fixed_text = " ".join(task.title for task in fixed_tasks)
         tasks: list[Task] = []
         overall_start = self._overall_start(query)
-        if course_tasks and any(
-            keyword in query for keyword in ("下课后", "课后")
-        ):
-            last_course_end = max(
-                task.fixed_end for task in course_tasks if task.fixed_end
-            )
-            overall_start = last_course_end.time()
+        course_anchor = self._course_anchor_end(query, course_tasks)
+        if course_anchor is not None:
+            overall_start = course_anchor
         overall_deadline = self._overall_deadline(query, target_date)
         if any(
             word in query
@@ -652,6 +688,9 @@ class RuleBasedRequirementParser:
                 study_keyword,
                 default=120,
             )
+            # An explicit clock anchor in the request outranks the period
+            # phrase, so the period only applies when the user gave none.
+            effective_period = study_period if overall_start is None else None
             tasks.append(
                 self._movable_task(
                     task_id="study",
@@ -665,30 +704,21 @@ class RuleBasedRequirementParser:
                         or time(8, 0)
                     ),
                     latest=(
-                        study_limit.time() if study_limit else time(22, 30)
+                        study_limit.time()
+                        if study_limit
+                        else (
+                            self._period_end(effective_period)
+                            or time(22, 30)
+                        )
                     ),
                     deadline=(study_limit.time() if study_limit else None),
-                    preferred_period=(
-                        study_period if overall_start is None else None
-                    ),
+                    preferred_period=effective_period,
                     importance=5,
                 )
             )
-        if not any(word in fixed_text for word in ("快递", "驿站")) and any(
-            keyword in query
-            for keyword in (
-                "取快递",
-                "拿快递",
-                "去快递站",
-                "取件",
-                "取顺丰",
-                "拿顺丰",
-                "顺丰快递",
-                "取京东",
-                "拿京东",
-                "京东快递",
-            )
-        ):
+        if not any(
+            word in fixed_text for word in ("快递", "驿站")
+        ) and _mentions_parcel_pickup(query):
             (
                 parcel_title,
                 parcel_location,
@@ -762,16 +792,31 @@ class RuleBasedRequirementParser:
         if not any(
             word in fixed_text for word in ("晚饭", "吃饭", "食堂")
         ) and any(keyword in query for keyword in ("吃晚饭", "晚饭", "吃饭")):
+            meal_keyword = next(
+                keyword
+                for keyword in ("吃晚饭", "晚饭", "吃饭")
+                if keyword in query
+            )
+            (
+                meal_id,
+                meal_title,
+                meal_earliest,
+                meal_latest,
+                meal_period,
+            ) = self._meal_profile(
+                self._clause_around_keyword(query, meal_keyword),
+                meal_keyword,
+            )
             tasks.append(
                 self._movable_task(
-                    task_id="dinner",
-                    title="吃晚饭",
+                    task_id=meal_id,
+                    title=meal_title,
                     target_date=target_date,
                     duration=45,
                     location_raw="食堂",
-                    earliest=time(17, 0),
-                    latest=time(20, 0),
-                    preferred_period="evening",
+                    earliest=meal_earliest,
+                    latest=meal_latest,
+                    preferred_period=meal_period,
                     importance=3,
                 )
             )
@@ -1080,7 +1125,14 @@ class RuleBasedRequirementParser:
                     or self._period_start(preferred_period)
                     or spec.earliest
                 ),
-                latest=(task_limit.time() if task_limit else spec.latest),
+                latest=(
+                    task_limit.time()
+                    if task_limit
+                    else min(
+                        spec.latest,
+                        self._period_end(preferred_period) or spec.latest,
+                    )
+                ),
                 deadline=(task_limit.time() if task_limit else None),
                 preferred_period=preferred_period or spec.preferred_period,
                 importance=spec.importance,
@@ -1165,14 +1217,46 @@ class RuleBasedRequirementParser:
         )
 
     @staticmethod
+    def _meal_profile(
+        clause: str,
+        keyword: str,
+    ) -> tuple[str, str, time, time, str | None]:
+        """Work out which meal “吃饭” means from what the user said around it.
+
+        Treating every bare “吃饭” as dinner pinned to 17:00 broke two ordinary
+        requests: “中午要留时间吃饭” was moved to the evening, and “自习两小时
+        然后去食堂吃饭” put the meal eight hours after the task it was supposed
+        to follow.  When the user did not say which meal it is, keep the window
+        wide and let the stated order decide.
+        """
+
+        if "晚" in keyword or any(
+            marker in clause for marker in ("晚上", "傍晚", "晚饭", "晚餐")
+        ):
+            return "dinner", "吃晚饭", time(17, 0), time(20, 0), "evening"
+        if any(marker in clause for marker in ("中午", "午饭", "午餐", "正午")):
+            return "lunch", "吃午饭", time(11, 0), time(14, 0), None
+        if any(marker in clause for marker in ("早上", "早饭", "早餐", "上午")):
+            return "breakfast", "吃早餐", time(6, 30), time(10, 0), "morning"
+        return "meal", "吃饭", time(11, 0), time(20, 0), None
+
+    @staticmethod
     def _period_from_clause(clause: str) -> str | None:
+        # A half-day phrase is more specific than “白天”, so it is matched
+        # first: “白天上午” means the morning, not the whole daytime.
         for marker, period in (
             ("早上", "morning"),
+            ("早晨", "morning"),
             ("上午", "morning"),
             ("中午", "afternoon"),
             ("下午", "afternoon"),
             ("傍晚", "evening"),
             ("晚上", "evening"),
+            ("晚间", "evening"),
+            ("夜里", "evening"),
+            ("夜间", "evening"),
+            ("白天", "day"),
+            ("日间", "day"),
         ):
             if marker in clause:
                 return period
@@ -1182,8 +1266,19 @@ class RuleBasedRequirementParser:
     def _period_start(period: str | None) -> time | None:
         return {
             "morning": time(8, 0),
+            "day": time(8, 0),
             "afternoon": time(13, 0),
             "evening": time(18, 0),
+        }.get(period)
+
+    @staticmethod
+    def _period_end(period: str | None) -> time | None:
+        """Upper bound implied by a period, used as a hard ``latest_end``."""
+        return {
+            "morning": time(12, 0),
+            "day": time(18, 0),
+            "afternoon": time(18, 0),
+            "evening": time(22, 0),
         }.get(period)
 
     @staticmethod
@@ -1673,6 +1768,39 @@ class RuleBasedRequirementParser:
             return int(value)
         return CHINESE_PERIOD_NUMBERS.get(value)
 
+    def _course_anchor_end(
+        self,
+        query: str,
+        course_tasks: list[Task],
+    ) -> time | None:
+        """When the day starts, if the user anchored it to a class ending.
+
+        “第三节课后去自习” fixes the start of everything that follows without
+        asking for the class itself to be planned, so the anchor has to be
+        read from the class-period table directly rather than from a course
+        block that deliberately was not created.
+        """
+
+        if course_tasks and any(
+            keyword in query for keyword in ("下课后", "课后")
+        ):
+            ends = [task.fixed_end for task in course_tasks if task.fixed_end]
+            if ends:
+                return max(ends).time()
+        if not self.class_periods:
+            return None
+        number = r"(?:1[0-3]|[1-9]|十三|十二|十一|十|[一二三四五六七八九])"
+        latest: time | None = None
+        for match in re.finditer(
+            rf"第?\s*({number})\s*节\s*课?\s*(?:以后|之后|结束后|后)",
+            query,
+        ):
+            period = self._period_number(match.group(1))
+            window = self.class_periods.get(period) if period else None
+            if window and (latest is None or window[1] > latest):
+                latest = window[1]
+        return latest
+
     def _course_tasks(
         self,
         query: str,
@@ -1721,8 +1849,8 @@ class RuleBasedRequirementParser:
                 continue
             clause = self._course_clause(query, match)
             tail = query[match.end() : match.end() + 6]
-            if re.match(r"\s*(?:以后|之后|后)", tail) and not any(
-                marker in clause for marker in ("有课", "上课", "下课", "课程")
+            if re.match(r"\s*课?\s*(?:以后|之后|结束后|后)", tail) and not any(
+                marker in clause for marker in ("有课", "上课", "课程")
             ):
                 # “第四节以后去自习” uses the period as a time anchor;
                 # it does not assert that the user has a fourth-period class.
@@ -1838,6 +1966,14 @@ class RuleBasedRequirementParser:
             None,
         )
         title = clause.replace(matched_periods, "", 1)
+        # “第三节课后去图书馆自习两小时” names when the class ends, not what the
+        # class is called.  Everything from the anchor onwards belongs to the
+        # task the user actually asked for, so it must not become the title.
+        title = re.split(
+            r"课后|下课后|上完课|以后|之后|结束后|然后|接着|随后",
+            title,
+            maxsplit=1,
+        )[0]
         title = re.sub(
             r"^(?:今天|明天|后天)?\s*(?:我)?\s*"
             r"(?:有|要上|上|需要上)?\s*",
@@ -1851,7 +1987,21 @@ class RuleBasedRequirementParser:
                 title,
             )
         title = title.strip(" ，。；、")
-        if title in {"", "课", "课程", "有课", "上课"}:
+        # A leftover that is only a time-of-day word is not a course name.
+        if title in {
+            "",
+            "课",
+            "课程",
+            "有课",
+            "上课",
+            "早上",
+            "上午",
+            "中午",
+            "下午",
+            "傍晚",
+            "晚上",
+            "白天",
+        }:
             title = None
         return title[:120] if title else None, location
 
@@ -2438,6 +2588,197 @@ class RuleBasedRequirementParser:
             keyword in query
             for keyword in ("避开高峰", "避开拥堵", "错峰", "不要赶高峰")
         )
+
+    # A segment shorter than this is not worth a separate trip, so a split
+    # that would produce one is refused rather than silently reshaped.
+    minimum_segment_min = 30
+    # Two segments of the same task must be separated, otherwise the planner
+    # places them back to back and the split has no effect.
+    split_gap_min = 30
+
+    def _split_requested_tasks(
+        self,
+        query: str,
+        tasks: list[Task],
+    ) -> list[Task]:
+        """Break one task into several sittings on request.
+
+        “自习4小时分两段”, “上午下午各自习两小时” and similar phrasings ask for
+        the same work spread over the day.  Modelling that as one long block
+        loses the request outright: the block only fits where a long free gap
+        exists, which is usually the evening.
+        """
+
+        segments = self._requested_segment_count(query)
+        if segments < 2:
+            return tasks
+        target = self._split_target(query, tasks)
+        if target is None:
+            return tasks
+        if not self._duration_is_per_segment(query) and (
+            target.duration_min < self.minimum_segment_min * segments
+        ):
+            # Honour the request as far as it fits instead of dropping it.
+            segments = target.duration_min // self.minimum_segment_min
+            if segments < 2:
+                return tasks
+
+        periods = self._segment_periods(query, segments)
+        if self._duration_is_per_segment(query):
+            # “上午下午各自习两小时” states the length of one sitting, not the
+            # total, so each segment keeps the parsed duration.
+            base_minutes = target.duration_min
+            remainder = 0
+        else:
+            base_minutes = target.duration_min // segments
+            base_minutes -= base_minutes % 5
+            base_minutes = max(base_minutes, self.minimum_segment_min)
+            remainder = target.duration_min - base_minutes * segments
+
+        replacement: list[Task] = []
+        previous_id: str | None = None
+        for index in range(segments):
+            minutes = base_minutes + (remainder if index == 0 else 0)
+            period = periods[index] if periods else target.preferred_period
+            update: dict = {
+                "id": f"{target.id}_seg{index + 1}",
+                "title": f"{target.title}（第{index + 1}段）",
+                "duration_min": minutes,
+                "preferred_period": period,
+                "depends_on": (
+                    [previous_id] if previous_id else list(target.depends_on)
+                ),
+                "tags": list(
+                    dict.fromkeys(
+                        [*target.tags, "split_segment", f"split_of:{target.id}"]
+                    )
+                ),
+            }
+            if periods:
+                # Explicit per-segment periods replace the whole-task window.
+                update["earliest_start"] = self._combine_or_none(
+                    target.date,
+                    self._period_start(period),
+                )
+                update["latest_end"] = self._combine_or_none(
+                    target.date,
+                    self._period_end(period),
+                )
+            replacement.append(target.model_copy(update=update))
+            previous_id = update["id"]
+
+        result: list[Task] = []
+        for task in tasks:
+            if task.id == target.id:
+                result.extend(replacement)
+            else:
+                result.append(
+                    task.model_copy(
+                        update={
+                            "depends_on": [
+                                previous_id
+                                if dependency == target.id
+                                else dependency
+                                for dependency in task.depends_on
+                            ]
+                        }
+                    )
+                    if target.id in task.depends_on
+                    else task
+                )
+        return result
+
+    def _combine_or_none(
+        self,
+        target_date: date,
+        value: time | None,
+    ) -> datetime | None:
+        if value is None:
+            return None
+        return datetime.combine(target_date, value, self.timezone)
+
+    @staticmethod
+    def _duration_is_per_segment(query: str) -> bool:
+        """True when “各” marks the stated duration as per sitting."""
+        return bool(
+            re.search(
+                r"各[^，。；、]{0,6}?"
+                r"(?:\d+(?:\.\d+)?|[一二两三四五六半])\s*"
+                r"(?:个?小时|分钟|节)",
+                re.sub(r"\s+", "", query),
+            )
+        )
+
+    @staticmethod
+    def _requested_segment_count(query: str) -> int:
+        compact = re.sub(r"\s+", "", query)
+        match = re.search(
+            r"(?:分|拆)(?:成|开|为)?\s*"
+            r"(?P<count>[2-6]|两|二|三|四|五|六)\s*(?:段|次|部分|块|个时间段)",
+            compact,
+        )
+        if match:
+            return {"两": 2, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6}.get(
+                match.group("count"),
+                0,
+            ) or int(match.group("count"))
+        if re.search(r"(?:分|拆)(?:成|开|为)?(?:段|次|两次|开来)", compact):
+            return 2
+        # “上午下午各两小时” names the segments without counting them.
+        if re.search(r"(?:上午|早上).{0,4}(?:下午|晚上).{0,4}各", compact):
+            return 2
+        return 0
+
+    @staticmethod
+    def _segment_periods(query: str, segments: int) -> list[str] | None:
+        """Periods named for each segment, in the order the user said them."""
+        markers = (
+            ("早上", "morning"),
+            ("上午", "morning"),
+            ("中午", "afternoon"),
+            ("下午", "afternoon"),
+            ("傍晚", "evening"),
+            ("晚上", "evening"),
+        )
+        found: list[tuple[int, str]] = []
+        for marker, period in markers:
+            for match in re.finditer(re.escape(marker), query):
+                found.append((match.start(), period))
+        ordered = [
+            period
+            for _, period in sorted(found, key=lambda item: item[0])
+        ]
+        deduplicated = list(dict.fromkeys(ordered))
+        if len(deduplicated) != segments:
+            return None
+        return deduplicated
+
+    def _split_target(
+        self,
+        query: str,
+        tasks: list[Task],
+    ) -> Task | None:
+        movable = [
+            task
+            for task in tasks
+            if task.flexibility == TaskFlexibility.MOVABLE
+            and "split_segment" not in task.tags
+        ]
+        if not movable:
+            return None
+        if len(movable) == 1:
+            return movable[0]
+        # With several tasks in the request, split the one the user named
+        # next to the split phrase; a guess here would reshape the wrong task.
+        match = re.search(r"(?:分|拆)(?:成|开|为)?", query)
+        if match is None:
+            return None
+        clause = query[max(0, match.start() - 20) : match.end() + 10]
+        for task in movable:
+            keywords = _SPLIT_TASK_KEYWORDS.get(task.id, ())
+            if any(keyword in clause for keyword in keywords):
+                return task
+        return None
 
     def _movable_task(
         self,

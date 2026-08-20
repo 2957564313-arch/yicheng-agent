@@ -1135,8 +1135,13 @@ def _merge_task_constraints(
         "fixed_start": rule_task.fixed_start,
         "fixed_end": rule_task.fixed_end,
         "flexibility": rule_task.flexibility,
+        # A split sitting carries the share of the total the rule parser
+        # computed. Taking the model's duration here would give every sitting
+        # the length of the whole task and multiply the requested work.
         "duration_min": (
-            rule_task.duration_min if fixed_by_rule else model_task.duration_min
+            rule_task.duration_min
+            if fixed_by_rule or "split_segment" in rule_task.tags
+            else model_task.duration_min
         ),
         "location_id": (
             rule_task.location_id if use_rule_location else model_task.location_id

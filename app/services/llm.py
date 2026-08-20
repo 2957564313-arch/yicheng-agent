@@ -97,16 +97,29 @@ class OpenAICompatibleLLM:
                 encoding="utf-8"
             )
         schema = UnderstandResult.model_json_schema()
+        # Reference material first, the request last.  The schema alone
+        # runs to thousands of tokens; with the request in front of it the
+        # model reliably dropped stated constraints such as “白天”.
         messages = [
             {"role": "system", "content": prompt},
             {
                 "role": "user",
                 "content": (
-                    f"now={now_iso}\nquery={query}\n"
-                    f"campus_time_context={campus_context}\n"
-                    "user_memory_context="
-                    f"{json.dumps(memory_context or [], ensure_ascii=False)}\n"
-                    f"JSON Schema={json.dumps(schema, ensure_ascii=False)}"
+                    "<json_schema>\n"
+                    f"{json.dumps(schema, ensure_ascii=False)}\n"
+                    "</json_schema>\n"
+                    "<campus_time_context>\n"
+                    f"{campus_context}\n"
+                    "</campus_time_context>\n"
+                    "<user_memory_context>\n"
+                    f"{json.dumps(memory_context or [], ensure_ascii=False)}"
+                    "\n</user_memory_context>\n"
+                    f"<now>{now_iso}</now>\n"
+                    "<request>\n"
+                    f"{query}\n"
+                    "</request>\n"
+                    "先逐条对照 <request> 中出现的时段词、时长、次数和"
+                    "顺序词，确认每一条都落到了对应字段上，再输出 JSON。"
                 ),
             },
         ]

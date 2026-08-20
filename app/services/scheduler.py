@@ -118,6 +118,7 @@ class _BeamState:
 class Scheduler:
     replan_beam_width = 48
     replan_candidates_per_task = 36
+    split_segment_gap_min = 30
 
     def schedule(
         self,
@@ -448,32 +449,35 @@ class Scheduler:
             if old_start
             else 0
         )
-        scheduling_delay_minutes = (
-            max(
-                0,
-                int(
-                    (
-                        start_at
-                        - (
-                            task.earliest_start
-                            or datetime.combine(
-                                context.target_date,
-                                context.day_start,
-                                context.timezone,
-                            )
-                        )
-                    ).total_seconds()
-                    // 60
-                ),
-            )
-            if has_dependents
-            else 0
+        # Every movable task pays for being pushed back, not just the ones
+        # that block another task.  Without this a task drifts to whatever
+        # slot happens to save a few minutes of walking: a three-hour study
+        # block would skip a free morning to save one leg of a round trip.
+        # The baseline is the earliest moment the task was ever allowed to
+        # start, so a task the user deliberately anchored late (dinner at
+        # 17:00, an evening run) is not penalised for honouring that anchor.
+        baseline = task.earliest_start or datetime.combine(
+            context.target_date,
+            context.day_start,
+            context.timezone,
+        )
+        period_window = Scheduler._preferred_window(
+            task.preferred_period,
+            context.target_date,
+            context.timezone,
+        )
+        if period_window:
+            baseline = max(baseline, period_window[0])
+        scheduling_delay_minutes = max(
+            0,
+            int((start_at - baseline).total_seconds() // 60),
         )
         return candidate_cost(
             travel_minutes=travel_minutes,
             preference_penalty=preference_penalty,
             shift_minutes=shift_minutes,
             scheduling_delay_minutes=scheduling_delay_minutes,
+            has_dependents=has_dependents,
         )
 
     @staticmethod
@@ -664,7 +668,9 @@ class Scheduler:
                 continue
 
             dependency_end = self._dependency_end(task, scheduled)
-            if dependency_end and cursor < dependency_end:
+            if dependency_end and cursor < dependency_end + timedelta(
+                minutes=self._required_dependency_gap(task)
+            ):
                 cursor += timedelta(minutes=5)
                 continue
 
@@ -828,11 +834,23 @@ class Scheduler:
     ) -> tuple[datetime, datetime] | None:
         periods = {
             "morning": (time(8, 0), time(12, 0)),
+            "早上": (time(8, 0), time(12, 0)),
+            "早晨": (time(8, 0), time(12, 0)),
             "上午": (time(8, 0), time(12, 0)),
+            "noon": (time(11, 30), time(13, 30)),
+            "中午": (time(11, 30), time(13, 30)),
             "afternoon": (time(13, 0), time(18, 0)),
             "下午": (time(13, 0), time(18, 0)),
             "evening": (time(18, 0), time(22, 0)),
+            "傍晚": (time(17, 0), time(20, 0)),
             "晚上": (time(18, 0), time(22, 0)),
+            "夜间": (time(18, 0), time(22, 0)),
+            # “白天” spans the whole non-evening day rather than a single
+            # half-day: it rules out an evening slot without forcing the
+            # planner to pick morning or afternoon on the user's behalf.
+            "day": (time(8, 0), time(18, 0)),
+            "白天": (time(8, 0), time(18, 0)),
+            "日间": (time(8, 0), time(18, 0)),
         }
         raw = periods.get(period or "")
         if not raw:
@@ -850,6 +868,21 @@ class Scheduler:
             value
             if remainder == 0
             else value + timedelta(minutes=5 - remainder)
+        )
+
+    @staticmethod
+    def _required_dependency_gap(task: Task) -> int:
+        """Minutes a task must leave after the task it depends on.
+
+        Sittings of a split task depend on the previous sitting, so without a
+        gap the planner puts them back to back and rebuilds the single long
+        block the user asked to break up.
+        """
+
+        return (
+            Scheduler.split_segment_gap_min
+            if "split_segment" in task.tags
+            else 0
         )
 
     @staticmethod

@@ -9,7 +9,6 @@ AGENTS.md
 .venv/
 .vscode/
 .idea/
-.vercel/
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -27,5 +26,5 @@ runtime/publish*.git/
 dist/
 build/
 tmp/
-.vercel
 .env*
+CLAUDE.md

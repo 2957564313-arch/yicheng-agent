@@ -369,11 +369,20 @@ def _success_answer(
             "按这个节奏走，不需要卡着分钟一路赶。"
         ]
         if any("自习" in title or "学习" in title for title in task_titles):
-            thought = (
-                "安排思路：先留出一段完整、连续的学习时间，"
-                "再按你说的先后顺序衔接其他事情，避免把专注时间切得"
-                "太碎。"
-            )
+            if any("（第" in title and "段）" in title for title in task_titles):
+                # The user asked for the study time to be split, so promising
+                # one unbroken block would describe a different plan.
+                thought = (
+                    "安排思路：按你说的把学习时间分成几段，"
+                    "每段之间留出休息和赶路的时间，"
+                    "并让每一段都落在你指定的时段内。"
+                )
+            else:
+                thought = (
+                    "安排思路：先留出一段完整、连续的学习时间，"
+                    "再按你说的先后顺序衔接其他事情，避免把专注时间切得"
+                    "太碎。"
+                )
             if travel_items:
                 thought += "跨地点之间的通勤时间也已经按你选择的出行方式单独留出。"
             lines.append(thought)

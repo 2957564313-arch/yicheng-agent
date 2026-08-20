@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -11,9 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def _runtime_dir() -> Path:
-    """Return a writable runtime directory for local and Vercel execution."""
-    if os.getenv("VERCEL"):
-        return Path("/tmp") / "yicheng-agent"
+    """Return the writable runtime directory holding the SQLite databases."""
     return BASE_DIR / "runtime"
 
 

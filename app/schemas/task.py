@@ -14,18 +14,45 @@ class Task(BaseModel):
     duration_min: int = Field(ge=5, le=720)
 
     location_id: str | None = Field(default=None, max_length=100)
-    location_raw: str | None = Field(default=None, max_length=120)
+    location_raw: str | None = Field(
+        default=None,
+        max_length=120,
+        description="用户说的地点原文，例如“图书馆”“菜鸟驿站”“东操场”。",
+    )
 
-    earliest_start: datetime | None = None
-    latest_end: datetime | None = None
+    earliest_start: datetime | None = Field(
+        default=None,
+        description=(
+            "最早可以开始的时间。“14点以后”“下课再去”写在这里。"
+        ),
+    )
+    latest_end: datetime | None = Field(
+        default=None,
+        description="必须结束的时间。“18点前结束”写在这里。",
+    )
     fixed_start: datetime | None = None
     fixed_end: datetime | None = None
-    deadline: datetime | None = None
+    deadline: datetime | None = Field(
+        default=None,
+        description="任务的截止时刻，例如“晚上10点前取到快递”。",
+    )
 
     flexibility: TaskFlexibility = TaskFlexibility.MOVABLE
     importance: int = Field(default=3, ge=1, le=5)
-    preferred_period: str | None = Field(default=None, max_length=40)
-    depends_on: list[str] = Field(default_factory=list)
+    preferred_period: str | None = Field(
+        default=None,
+        max_length=40,
+        description=(
+            "用户指定的时段，只能是 morning（上午/早上）、"
+            "afternoon（下午/中午）、evening（晚上/傍晚）、"
+            "day（白天/日间，即不要排到晚上）之一；"
+            "用户没有说时段就留空。这是硬约束，规划器不会排到该时段之外。"
+        ),
+    )
+    depends_on: list[str] = Field(
+        default_factory=list,
+        description="必须先完成的任务 id，用于“先……再……”这类顺序。",
+    )
     tags: list[str] = Field(default_factory=list)
     notes: str | None = Field(default=None, max_length=500)
 

@@ -87,12 +87,12 @@ def hydrate_personal_data(
     now: datetime,
     authoritative: bool = False,
 ) -> PersonalDataRestoreResponse:
-    """Hydrate one execution instance from a browser-owned personal snapshot.
+    """Hydrate the server from a browser-owned personal snapshot.
 
-    The public Vercel build can execute two consecutive requests on different
-    ephemeral instances. Replaying the small, validated personal snapshot at
-    the start of a request makes the result deterministic without treating the
-    instance-local SQLite file as durable storage.
+    The browser keeps its own copy of the small personal set (memories, saved
+    timetable, calendar overrides).  Replaying it at the start of a request
+    lets a client that edited data offline, or one whose local copy is ahead of
+    the server, get a result computed from what the user actually sees.
     """
 
     container.plans.ensure_user_and_thread(
