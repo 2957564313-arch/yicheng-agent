@@ -752,7 +752,6 @@ async function saveScheduleEditor() {
   );
   const data = await response.json();
   if (!response.ok) throw data;
-  recordManualScheduleBehavior(data.item);
   scheduleCursorDate = scheduleEditorDate.value;
   scheduleEditor.close();
   await refreshVisibleSchedule();
@@ -1618,7 +1617,12 @@ function recordBehaviorHistory(data) {
     .filter((item) => item.item_type === "task")
     .flatMap((item) => {
       const topic = behaviorTopic(item.title || "");
-      if (!topic || item.reason === "固定或用户锁定任务") return [];
+      if (
+        !topic
+        || item.locked
+        || item.reason === "固定或用户锁定任务"
+        || ["course", "external"].includes(item.source)
+      ) return [];
       const [, taskTitle] = topic;
       const start = timePart(item.start_at);
       return [{
@@ -1643,29 +1647,6 @@ function recordBehaviorHistory(data) {
     behaviorHistoryKey,
     [...additions, ...existing].slice(0, 80),
   );
-  renderPersonalizationState();
-}
-
-function recordManualScheduleBehavior(item) {
-  if (!item?.id || !item?.title || !item?.location_name) return;
-  const topic = behaviorTopic(item.title);
-  if (!topic) return;
-  const existing = readLocalSnapshot(behaviorHistoryKey, [])
-    .filter((entry) => entry.plan_id !== `agenda:${item.id}`);
-  const addition = {
-    plan_id: `agenda:${item.id}`,
-    date: agendaItemDate(item),
-    campus_id: currentCampusProfile?.campus_id || null,
-    topic: topic[0],
-    task_title: topic[1],
-    start_time: timePart(item.start_at),
-    duration_min: Math.max(
-      5,
-      Math.round((new Date(item.end_at) - new Date(item.start_at)) / 60000),
-    ),
-    location_name: item.location_name,
-  };
-  writeLocalSnapshot(behaviorHistoryKey, [addition, ...existing].slice(0, 80));
   renderPersonalizationState();
 }
 
@@ -1796,7 +1777,7 @@ function renderPreferenceCandidates(enabled) {
     <article class="preference-candidate">
       <div>
         <strong>把“${escapeHtml(candidate.task_title)}”的常用地点设为“${escapeHtml(candidate.location_name)}”吗？</strong>
-        <small>你已在 ${candidate.occurrences} 个不同日期这样安排。确认后才会保存，以后地点未说明时优先使用。</small>
+        <small>同类对话安排已在 ${candidate.occurrences} 个不同日期采用该地点。确认保存后，地点未说明时优先使用。</small>
       </div>
       <div class="preference-candidate-actions">
         <button type="button" data-preference-accept="${index}">设为偏好</button>
@@ -1839,7 +1820,7 @@ function renderPersonalizationState() {
   personalizationState.textContent = enabled
     ? patterns.length || candidates.length
       ? `已开启，发现 ${patterns.length} 个稳定习惯、${candidates.length} 个待确认偏好。`
-      : "已开启；同类行为在不同日期出现至少3次后，才会形成建议。"
+      : "已开启；同类对话安排在不同日期采用相同地点3次后，才会形成建议。"
     : "当前关闭。历史仍保存在本机，开启后才会用于生成建议。";
   renderPreferenceCandidates(enabled);
 }

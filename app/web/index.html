@@ -269,19 +269,19 @@
               </div>
             </div>
             <p class="panel-note">
-              你确认后才会保存，可随时停用、修改或删除。
+              偏好仅在确认后保存，可随时停用、修改或删除。
             </p>
             <div class="personalization-control">
               <label class="toggle-row">
                 <span>
-                  <strong>个性化习惯建议</strong>
-                  <small>从你反复确认的安排中学习，先询问再保存为偏好</small>
+                  <strong>智能偏好推荐</strong>
+                  <small>根据对话中重复采用的安排生成建议，确认后再保存</small>
                 </span>
                 <input
                   id="personalization-toggle"
                   type="checkbox"
                   role="switch"
-                  aria-label="启用个性化习惯建议"
+                  aria-label="启用智能偏好推荐"
                 />
               </label>
               <p id="personalization-state" class="panel-note">
@@ -295,6 +295,10 @@
               >
                 重置建议降频记录
               </button>
+            </div>
+            <div class="memory-section-heading">
+              <strong>手动设置</strong>
+              <small>直接添加需要长期使用的偏好</small>
             </div>
             <div class="memory-form">
               <select id="memory-type" aria-label="记忆类型">
