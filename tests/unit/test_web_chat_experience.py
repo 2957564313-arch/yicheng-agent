@@ -113,7 +113,7 @@ def test_sidebar_prioritizes_workspace_navigation_before_history() -> None:
     assert "margin: 24px 6px 10px" in styles
 
 
-def test_sidebar_merges_hduhelp_timetable_and_calendar_after_preferences() -> None:
+def test_sidebar_merges_hduhelp_and_timetable_after_preferences() -> None:
     html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
 
@@ -124,15 +124,14 @@ def test_sidebar_merges_hduhelp_timetable_and_calendar_after_preferences() -> No
     assert 'data-view="hduhelp"' not in nav
     assert 'data-view="timetable"' not in nav
     assert 'data-view="campus-data"' in nav
-    assert "杭助 · 课表 · 校历" in nav
+    assert "杭助 · 课表" in nav
     assert 'id="campus-data-workspace"' in html
-    assert 'id="academic-calendar-month"' in html
-    assert 'id="academic-calendar-summary"' in html
     assert '"chat", "schedule", "campus-data", "preferences"' in javascript
-    assert "async function loadAcademicCalendar" in javascript
-    assert "function renderAcademicCalendar" in javascript
-    assert "教学进度" in javascript
-    assert "本月校历提醒" in javascript
+    assert 'class="academic-calendar"' not in html
+    assert "function renderAcademicCalendar" not in javascript
+    assert "async function loadAcademicCalendar" not in javascript
+    assert "杭助中的实际安排优先" not in html
+    assert "记录取消后，下次同步会从日程中移除" not in html
 
 
 def test_self_hosted_accounts_replace_external_login_choices() -> None:
@@ -341,10 +340,10 @@ def test_day_schedule_allows_manual_edits_but_locks_authoritative_items() -> Non
     assert '<svg viewBox="0 0 24 24" aria-hidden="true">' in javascript
     assert 'title="调整时间或删除">•••' not in javascript
     assert ".schedule-event-lock" in styles
-    assert 'app.js?v=20260821-6' in (WEB_ROOT / "index.html").read_text(
+    assert 'app.js?v=20260821-7' in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
-    assert "styles.css?v=20260821-6" in (WEB_ROOT / "index.html").read_text(
+    assert "styles.css?v=20260821-7" in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
     assert 'term.current ? "（当前）"' not in javascript

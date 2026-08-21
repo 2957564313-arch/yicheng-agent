@@ -75,9 +75,6 @@ const hduhelpDataSummary = $("#hduhelp-data-summary");
 const timetableTermControls = $("#timetable-term-controls");
 const timetableTermView = $("#timetable-term-view");
 const campusDataWorkspace = $("#campus-data-workspace");
-const academicCalendarMonth = $("#academic-calendar-month");
-const academicCalendarToday = $("#academic-calendar-today");
-const academicCalendarSummary = $("#academic-calendar-summary");
 const campusName = $("#campus-name");
 const campusCity = $("#campus-city");
 const campusDiscover = $("#campus-discover");
@@ -492,9 +489,6 @@ function setActiveWorkspaceView(view = "chat") {
   setPanelHidden(document.querySelector(".memory-panel"), activeWorkspaceView !== "preferences");
   setPanelHidden(document.querySelector(".execution-panel"), true);
   if (isSchedule) renderScheduleViews();
-  if (isCampusData && academicCalendarMonth && !academicCalendarMonth.value) {
-    academicCalendarMonth.value = shanghaiDateString().slice(0, 7);
-  }
   if (isToolPage) closeDrawers();
 }
 
@@ -3962,105 +3956,6 @@ function renderTimetable(data) {
 
 let hduhelpAvailableTerms = [];
 let syncedTimetableTerms = [];
-let academicCalendarItems = [];
-
-function academicCalendarTermForDate(dateValue) {
-  return syncedTimetableTerms.find((term) => (
-    term.term_start && term.term_end
-    && dateValue >= term.term_start
-    && dateValue <= term.term_end
-  ));
-}
-
-function academicCalendarWeek(dateValue) {
-  const term = academicCalendarTermForDate(dateValue);
-  if (!term) return null;
-  const start = scheduleDateValue(term.term_start);
-  const current = scheduleDateValue(dateValue);
-  return Math.floor((current - start) / (7 * 24 * 60 * 60 * 1000)) + 1;
-}
-
-function academicCalendarDayText(item) {
-  if (item.course_action === "makeup") {
-    return item.effective_weekday
-      ? `按周${"一二三四五六日"[Number(item.effective_weekday) - 1]}课表补课`
-      : "按学校通知补课";
-  }
-  if (item.course_action === "no_class" || item.day_type === "holiday") return "全天停课放假";
-  if (item.day_type === "adjusted_workday") return "调休工作日，补课安排以杭助为准";
-  if (item.day_type === "unknown") return "日期规则待核验";
-  return "正常教学日";
-}
-
-function renderAcademicCalendar(items = academicCalendarItems) {
-  if (!academicCalendarSummary || !academicCalendarMonth) return;
-  academicCalendarItems = Array.isArray(items) ? items : [];
-  if (!academicCalendarItems.length) {
-    academicCalendarSummary.textContent = "这个月的校历暂时没有读取成功。";
-    academicCalendarSummary.classList.add("muted");
-    return;
-  }
-  academicCalendarSummary.classList.remove("muted");
-  const today = shanghaiDateString();
-  const anchor = academicCalendarItems.find((item) => item.date === today)
-    || academicCalendarItems[0];
-  const anchorWeek = academicCalendarWeek(anchor.date);
-  const anchorTerm = academicCalendarTermForDate(anchor.date);
-  const adjusted = academicCalendarItems.filter((item) => (
-    item.day_type !== "normal" || item.course_action !== "normal"
-  ));
-  const firstDate = scheduleDateValue(academicCalendarItems[0].date);
-  const leadingBlanks = firstDate.getUTCDay();
-  const monthLabel = `${firstDate.getUTCFullYear()}年${firstDate.getUTCMonth() + 1}月`;
-  academicCalendarSummary.innerHTML = `
-    <div class="academic-calendar-overview">
-      <div><small>查看月份</small><strong>${monthLabel}</strong></div>
-      <div><small>${anchor.date === today ? "今天" : "月初"}</small><strong>${escapeHtml(academicCalendarDayText(anchor))}</strong></div>
-      <div><small>教学进度</small><strong>${anchorWeek ? `第${anchorWeek}教学周` : "假期或学期外"}</strong></div>
-      <div><small>本月特殊日期</small><strong>${adjusted.length}天</strong></div>
-    </div>
-    ${anchorTerm ? `<p class="academic-calendar-term">${escapeHtml(anchorTerm.name || hduhelpTermLabel(anchorTerm))} · ${escapeHtml(anchorTerm.term_start)}—${escapeHtml(anchorTerm.term_end)}</p>` : ""}
-    <div class="academic-calendar-weekdays" aria-hidden="true">
-      ${["日", "一", "二", "三", "四", "五", "六"].map((day) => `<span>周${day}</span>`).join("")}
-    </div>
-    <div class="academic-calendar-grid" aria-label="${monthLabel}校历">
-      ${Array.from({ length: leadingBlanks }, () => '<span class="academic-calendar-blank"></span>').join("")}
-      ${academicCalendarItems.map((item) => {
-        const week = academicCalendarWeek(item.date);
-        const day = Number(item.date.slice(-2));
-        const holiday = item.day_type === "holiday" || item.course_action === "no_class";
-        const adjustedWorkday = item.day_type === "adjusted_workday" || item.course_action === "makeup";
-        const label = item.label || (holiday ? "放假" : adjustedWorkday ? "调休" : "");
-        return `<article class="academic-calendar-day ${holiday ? "is-holiday" : ""} ${adjustedWorkday ? "is-workday" : ""} ${item.date === today ? "is-today" : ""}" title="${escapeHtml(`${item.date} ${academicCalendarDayText(item)}${label ? `：${label}` : ""}`)}">
-          <span>${day}</span>
-          ${label ? `<strong>${escapeHtml(label)}</strong>` : ""}
-          ${week && scheduleDateValue(item.date).getUTCDay() === 1 ? `<small>第${week}周</small>` : ""}
-        </article>`;
-      }).join("")}
-    </div>
-    <div class="academic-calendar-notes">
-      <strong>本月校历提醒</strong>
-      ${adjusted.length ? adjusted.map((item) => `<p><time>${escapeHtml(item.date.slice(5).replace("-", "月"))}日</time><span>${escapeHtml(item.label || "校历调整")}：${escapeHtml(academicCalendarDayText(item))}</span></p>`).join("") : "<p><span>本月没有需要特别标注的放假或调休日期，课程仍按杭助课表执行。</span></p>"}
-    </div>
-  `;
-}
-
-async function loadAcademicCalendar(monthValue = shanghaiDateString().slice(0, 7)) {
-  if (!academicCalendarMonth || !academicCalendarSummary) return;
-  academicCalendarMonth.value = monthValue;
-  academicCalendarSummary.textContent = "正在读取本月校历。";
-  academicCalendarSummary.classList.add("muted");
-  const startDate = `${monthValue}-01`;
-  const endDate = scheduleMonthEnd(startDate);
-  const response = await fetch(
-    `/api/v1/users/${consoleUserId}/calendar-context`
-      + `?start_date=${encodeURIComponent(startDate)}`
-      + `&end_date=${encodeURIComponent(endDate)}`,
-  );
-  const data = await response.json();
-  if (!response.ok) throw data;
-  renderAcademicCalendar(data.items || []);
-}
 
 function timetableTermKey(term) {
   return `${term.school_year}|${term.semester}`;
@@ -4090,7 +3985,6 @@ function renderTimetableTerms(terms, preferredKey = "") {
     },
     entries: selected.entries || [],
   });
-  if (academicCalendarItems.length) renderAcademicCalendar();
 }
 
 timetableTermView?.addEventListener("change", () => {
@@ -4105,22 +3999,6 @@ timetableTermView?.addEventListener("change", () => {
       term_end: selected.term_end,
     },
     entries: selected.entries || [],
-  });
-  if (academicCalendarItems.length) renderAcademicCalendar();
-});
-
-academicCalendarMonth?.addEventListener("change", () => {
-  if (!academicCalendarMonth.value) return;
-  loadAcademicCalendar(academicCalendarMonth.value).catch((error) => {
-    academicCalendarSummary.textContent = "这个月的校历暂时没有读取成功，请稍后再试。";
-    renderDebug(error);
-  });
-});
-
-academicCalendarToday?.addEventListener("click", () => {
-  loadAcademicCalendar(shanghaiDateString().slice(0, 7)).catch((error) => {
-    academicCalendarSummary.textContent = "本月校历暂时没有读取成功，请稍后再试。";
-    renderDebug(error);
   });
 });
 
@@ -4208,12 +4086,6 @@ async function initializeApp() {
   loadMemories().catch((error) => renderDebug(error));
   loadHduHelpConnection().catch((error) => renderDebug(error));
   loadTimetable().catch((error) => renderDebug(error));
-  loadAcademicCalendar(shanghaiDateString().slice(0, 7)).catch((error) => {
-    if (academicCalendarSummary) {
-      academicCalendarSummary.textContent = "本月校历暂时没有读取成功，请稍后再试。";
-    }
-    renderDebug(error);
-  });
 }
 
 initializeApp();

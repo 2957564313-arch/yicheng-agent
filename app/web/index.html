@@ -8,7 +8,7 @@
       content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
     <title>易程智策 · 我的校园日程</title>
-    <link rel="stylesheet" href="/styles.css?v=20260821-6" />
+    <link rel="stylesheet" href="/styles.css?v=20260821-7" />
     <link rel="icon" href="/favicon.ico?v=20260821-1" sizes="any" />
     <link rel="icon" type="image/png" href="/assets/icon-192.png?v=20260821-1" sizes="192x192" />
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=20260821-1" />
@@ -108,7 +108,7 @@
               <span class="nav-icon">♡</span><span>偏好</span><small>让安排越来越懂你</small>
             </button>
             <button type="button" class="workspace-nav-button" data-view="campus-data">
-              <span class="nav-icon">▤</span><span>校园数据</span><small>杭助 · 课表 · 校历</small>
+              <span class="nav-icon">▤</span><span>校园数据</span><small>杭助 · 课表</small>
             </button>
           </nav>
           <div class="history-section-label">
@@ -217,7 +217,6 @@
             </div>
             <p class="panel-note">
               绑定个人访问令牌后同步课程、考试、图书馆预约、二课、志愿活动等校园数据。
-              杭助中的实际安排优先；记录取消后，下次同步会从日程中移除。
             </p>
             <section class="hduhelp-card" aria-labelledby="hduhelp-title">
               <div class="hduhelp-card-heading">
@@ -248,33 +247,17 @@
           <article class="panel timetable-panel tool-collapsible">
             <div class="panel-heading compact">
               <div>
-                <p class="step">课程与校历</p>
-                <h2>按学期查看课程与教学周</h2>
+                <p class="step">个人课表</p>
+                <h2>按学期查看课程</h2>
               </div>
             </div>
             <div id="timetable-term-controls" class="timetable-term-controls" hidden>
-              <label for="timetable-term-view">查看课表与校历</label>
+              <label for="timetable-term-view">查看课表学期</label>
               <select id="timetable-term-view" aria-label="选择要查看的课表学期"></select>
             </div>
             <div id="timetable-summary" class="timetable-summary muted">
               当前还没有同步个人课表。
             </div>
-            <section class="academic-calendar" aria-labelledby="academic-calendar-title">
-              <div class="academic-calendar-heading">
-                <div>
-                  <p class="step">校历</p>
-                  <h3 id="academic-calendar-title">教学周与放假调休</h3>
-                </div>
-                <div class="academic-calendar-controls">
-                  <label for="academic-calendar-month">查看月份</label>
-                  <input id="academic-calendar-month" type="month" />
-                  <button id="academic-calendar-today" type="button" class="ghost">本月</button>
-                </div>
-              </div>
-              <div id="academic-calendar-summary" class="academic-calendar-summary muted">
-                正在读取本月校历。
-              </div>
-            </section>
           </article>
           </section>
 
@@ -723,6 +706,6 @@
       <span>易程智策 · 杭电个性化校园日程助手</span>
       <span>对话负责理解与修改，长期日程、提醒和校园规则负责陪伴执行</span>
     </footer>
-    <script src="/app.js?v=20260821-6" defer></script>
+    <script src="/app.js?v=20260821-7" defer></script>
   </body>
 </html>
