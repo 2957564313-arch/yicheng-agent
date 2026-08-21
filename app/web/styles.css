@@ -190,30 +190,11 @@ h2 { margin: 0; font: 760 19px/1.3 serif; }
 .status.saved { color: var(--green); border-color: #8db6a4; }
 .status.subtle { background: rgba(255, 253, 248, .45); }
 
-.demo-strip,
 .panel {
   border: 1px solid var(--line);
   background: rgba(255, 253, 248, .93);
   box-shadow: var(--shadow);
 }
-
-.demo-strip {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 20px;
-  margin-bottom: 16px;
-  padding: 13px 16px;
-  border-radius: 18px;
-}
-
-.demo-buttons {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.demo-buttons .demo-play,
-.demo-buttons button small { display: none; }
 
 button {
   border: 1px solid var(--line);
@@ -1378,8 +1359,7 @@ textarea:focus {
 
 .weekly-compose > label span,
 .weekly-compose-actions label span,
-.weekly-compose-note,
-.weekly-demo-label {
+.weekly-compose-note {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.55;
@@ -1405,27 +1385,8 @@ textarea:focus {
   width: 100%;
 }
 
-.weekly-compose-note,
-.weekly-demo-label {
+.weekly-compose-note {
   margin: 0;
-}
-
-.weekly-demo-label {
-  margin-bottom: 8px;
-  font-weight: 700;
-}
-
-.weekly-demo-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 13px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.weekly-demo-buttons button {
-  font-size: 11px;
 }
 
 .weekly-summary {
@@ -1632,7 +1593,6 @@ footer {
   .brand-mark { width: 54px; height: 54px; }
   h1 { font-size: 36px; }
   .header-status { justify-content: flex-start; }
-  .demo-strip,
   .workspace { grid-template-columns: 1fr; }
   .assistant-panel { padding: 20px; }
   .assistant-actions { grid-template-columns: 1fr; }
@@ -1990,10 +1950,6 @@ button.primary:disabled,
   .assistant-panel { padding: 0; }
   .assistant-panel .answer { min-height: 88px; padding: 16px; }
   .agenda-panel, .weekly-panel, .plan-panel, .adjustment-panel { padding: 16px; border-radius: 18px; }
-  .demo-strip { grid-template-columns: 1fr; gap: 8px; padding: 10px 12px; }
-  .demo-buttons { flex-wrap: nowrap; overflow-x: auto; }
-  .demo-buttons button { flex: 0 0 auto; white-space: nowrap; }
-
   .history-sidebar,
   .tools-sidebar {
     position: fixed;
@@ -2064,7 +2020,6 @@ h1 { font: 820 34px/1 serif; }
 h2 { font-family: "PingFang SC", "Noto Sans SC", system-ui, sans-serif; }
 .eyebrow, .step { color: var(--orange); letter-spacing: .1em; }
 .status { background: rgba(255,255,255,.8); }
-.demo-strip { border-radius: 14px; box-shadow: 0 8px 24px rgba(30,41,59,.04); }
 .panel { border-radius: 18px; box-shadow: 0 10px 30px rgba(30,41,59,.05); }
 
 .workspace-nav {
@@ -2348,30 +2303,6 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
   gap: 8px;
   margin-bottom: 16px;
 }
-.sidebar-demos { display: none; padding: 3px 2px 13px; border-bottom: 1px solid var(--line); }
-.sidebar-demos h2 { margin: 3px 8px 10px; color: #1f2937; font-size: 14px; }
-.sidebar-demo-buttons { display: grid; gap: 5px; }
-.sidebar-demo-buttons button {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
-  gap: 2px 7px;
-  align-items: center;
-  width: 100%;
-  padding: 9px 8px;
-  border: 0;
-  border-radius: 11px;
-  color: #4b5563;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-.sidebar-demo-buttons button:hover,
-.sidebar-demo-buttons button:focus-visible,
-.sidebar-demo-buttons button.active { color: #4f46e5; background: #eef2ff; }
-.sidebar-demo-buttons button > span:nth-child(2) { overflow: hidden; font-size: 11px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-demo-buttons button small { grid-column: 2; color: #a1a7b1; font-size: 8px; }
-.demo-play { display: grid; grid-row: 1 / span 2; width: 18px; height: 18px; place-items: center; border-radius: 50%; color: #fff; background: #64748b; font-size: 7px; }
-.sidebar-demo-buttons button.active .demo-play { background: #6366f1; box-shadow: 0 0 0 4px #e0e7ff; }
 .result-summary-card {
   display: grid;
   gap: 4px;
@@ -2391,7 +2322,6 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
 @media (max-width: 900px) {
   header, main, footer, .debug-panel { width: min(100% - 20px, 1480px); }
   .masthead { padding: 14px 0 10px; }
-  .demo-strip { margin-bottom: 8px; }
   .workspace { margin-top: 0; }
   .composer-panel { position: static; }
   .schedule-heading { display: block; }
@@ -2425,17 +2355,10 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
   .masthead,
   .brand,
   .brand > div,
-  .demo-strip > *,
-  .demo-buttons,
   .panel-heading > div {
     min-width: 0;
   }
   .mobile-header-actions { flex: 0 0 auto; }
-  .demo-buttons {
-    width: 100%;
-    max-width: 100%;
-    overscroll-behavior-inline: contain;
-  }
   .assistant-panel .answer,
   .message-content { overflow-wrap: anywhere; }
   .result-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2453,7 +2376,6 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
     justify-self: start;
     max-width: 100%;
   }
-  .demo-strip .ghost { width: 100%; }
   .message-branch-editor { min-width: 0; width: 100%; }
 }
 
@@ -2656,13 +2578,11 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
 .result-candidate-actions[hidden] { display: none !important; }
 .result-candidate-actions button { min-width: 112px; }
 
-body.has-plan-result .demo-strip,
 body.has-plan-result .composer-column,
 body.has-plan-result .conversation-stream,
 body.has-plan-result .assistant-panel,
 body.has-plan-result .adjustment-panel { display: none !important; }
 body.has-plan-result .history-heading { display: flex; }
-body.has-plan-result .sidebar-demos { display: block; }
 body.has-plan-result .workspace-nav { margin-top: 10px; }
 body.has-plan-result .workspace-nav-label { color: #273044; font-size: 12px; letter-spacing: 0; text-transform: none; }
 body.has-plan-result .history-section-label { padding-top: 11px; border-top: 1px solid var(--line); color: #273044; font-size: 11px; }
@@ -2708,7 +2628,6 @@ body.has-plan-result .rail::after { top: 19px; }
 }
 
 @media (max-width: 900px) {
-  .history-sidebar .sidebar-demos { display: none !important; }
   .history-sidebar .workspace-nav { display: grid !important; }
   .history-sidebar .history-list {
     flex: 1;

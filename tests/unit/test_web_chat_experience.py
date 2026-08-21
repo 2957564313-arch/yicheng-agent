@@ -77,9 +77,9 @@ def test_fresh_homepage_stays_clean_until_the_user_runs_a_plan() -> None:
     assert 'data-schedule-mode="day"' not in html
     assert 'data-schedule-mode="week"' not in html
     assert 'id="save-state" class="status subtle" hidden' in html
-    assert "async function loadDemos()" in javascript
-    assert "if (autoRun && demos.length)" not in javascript
-    assert "await loadDemos().catch" in javascript
+    assert 'id="demo-buttons"' not in html
+    assert 'id="sidebar-demo-buttons"' not in html
+    assert "async function loadDemos()" not in javascript
     assert "setPanelHidden(visualGrid, !isChat || !hasPlanResult);" in javascript
     assert "if (!keepResultMode) setResultMode(false);" in javascript
     assert "homepageModeKey" not in javascript
@@ -117,36 +117,30 @@ def test_result_request_can_be_edited_without_leaving_dashboard() -> None:
     assert ".result-request.is-editing" in styles
 
 
-def test_demo_scenarios_move_into_result_sidebar() -> None:
+def test_demo_scenarios_are_removed_from_the_product_ui() -> None:
     html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
     styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
 
-    assert 'id="sidebar-demo-buttons"' in html
-    assert "<h2>场景演示</h2>" in html
-    assert "const sidebarDemoButtons" in javascript
-    assert "sidebarDemoButtons.innerHTML = demoMarkup;" in javascript
-    assert 'document.querySelectorAll("[data-demo]")' in javascript
-    assert "body.has-plan-result .sidebar-demos { display: block; }" in styles
-    assert "body.has-plan-result .history-heading" in styles
-    assert "const bindDemoToCurrentVisitor" in javascript
-    assert "user_id: consoleUserId" in javascript
-    assert "thread_id: consoleThreadId" in javascript
+    assert "场景演示" not in html
+    assert "复位演示" not in html
+    assert "data-demo" not in javascript
+    assert "weekly-demo" not in html
+    assert "loadWeeklyDemos" not in javascript
+    assert ".demo-strip" not in styles
+    assert ".sidebar-demos" not in styles
 
 
-def test_switching_demo_keeps_dashboard_visible_without_forced_scroll() -> None:
+def test_result_dashboard_can_return_to_the_main_conversation() -> None:
+    html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
 
-    assert (
-        'const keepResultMode = document.body.classList.contains("has-plan-result");'
-        in javascript
-    )
-    assert "beginConversationTurn(demo.query, { keepResultMode });" in javascript
-    assert (
-        'const wasActive = document.body.classList.contains("has-plan-result");'
-        in javascript
-    )
-    assert "if (wasActive) return;" in javascript
+    assert 'id="result-back-chat"' in html
+    assert "function returnToConversation()" in javascript
+    assert 'resultBackChat?.addEventListener("click", returnToConversation);' in javascript
+    assert 'button.dataset.view === "chat"' in javascript
+    assert "setResultMode(false);" in javascript
+    assert 'queryInput?.focus({ preventScroll: true });' in javascript
 
 
 def test_result_dashboard_has_icons_sources_and_four_quick_actions() -> None:
@@ -265,10 +259,10 @@ def test_day_schedule_allows_manual_edits_but_locks_authoritative_items() -> Non
     assert '<svg viewBox="0 0 24 24" aria-hidden="true">' in javascript
     assert 'title="调整时间或删除">•••' not in javascript
     assert ".schedule-event-lock" in styles
-    assert 'app.js?v=20260819-10' in (WEB_ROOT / "index.html").read_text(
+    assert 'app.js?v=20260821-2' in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
-    assert "styles.css?v=20260819-7" in (WEB_ROOT / "index.html").read_text(
+    assert "styles.css?v=20260821-2" in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
     assert 'term.current ? "（当前）"' not in javascript

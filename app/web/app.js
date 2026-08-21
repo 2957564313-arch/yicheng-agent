@@ -14,7 +14,6 @@ globalThis.fetch = (resource, options = {}) => {
 const $ = (selector) => document.querySelector(selector);
 const queryInput = $("#query");
 const submitButton = $("#submit");
-const resetButton = $("#reset");
 const modeSelect = $("#mode");
 const timeline = $("#timeline");
 const planTitle = $("#plan-title");
@@ -33,6 +32,7 @@ const resultQuickActions = $("#result-quick-actions");
 const resultActionStatus = $("#result-action-status");
 const resultCandidateActions = $("#result-candidate-actions");
 const resultChangeSummary = $("#result-change-summary");
+const resultBackChat = $("#result-back-chat");
 const taskStatuses = $("#task-statuses");
 const answer = $("#answer");
 const conversationStream = $("#conversation-stream");
@@ -41,8 +41,6 @@ const warnings = $("#warnings");
 const freshness = $("#freshness");
 const health = $("#health");
 const saveState = $("#save-state");
-const demoButtons = $("#demo-buttons");
-const sidebarDemoButtons = $("#sidebar-demo-buttons");
 const execution = $("#execution");
 const constraints = $("#constraints");
 const adjustment = $("#adjustment");
@@ -80,7 +78,6 @@ const campusDiscover = $("#campus-discover");
 const campusReset = $("#campus-reset");
 const campusState = $("#campus-state");
 const campusSummary = $("#campus-summary");
-const weeklyDemoButtons = $("#weekly-demo-buttons");
 const weeklyState = $("#weekly-state");
 const weeklySummary = $("#weekly-summary");
 const weeklyGrid = $("#weekly-grid");
@@ -966,6 +963,14 @@ function initializeWorkspaceNavigation() {
 
   viewButtons.forEach((button) => {
     button.addEventListener("click", () => {
+      if (
+        button.dataset.view === "chat"
+        && document.body.classList.contains("has-plan-result")
+      ) {
+        returnToConversation();
+        if (window.matchMedia("(max-width: 900px)").matches) closeDrawers();
+        return;
+      }
       if (button.dataset.scheduleMode) {
         scheduleViewMode = button.dataset.scheduleMode;
         updateScheduleTabs();
@@ -1812,6 +1817,17 @@ function setResultMode(active) {
     globalThis.scrollTo({ top: 0, behavior: "smooth" });
   });
 }
+
+function returnToConversation() {
+  setResultMode(false);
+  setActiveWorkspaceView("chat");
+  requestAnimationFrame(() => {
+    composerPanel?.scrollIntoView({ behavior: "smooth", block: "start" });
+    queryInput?.focus({ preventScroll: true });
+  });
+}
+
+resultBackChat?.addEventListener("click", returnToConversation);
 
 function setInlineRequestEditing(active) {
   resultRequest.classList.toggle("is-editing", active);
@@ -2682,7 +2698,6 @@ function renderError(error) {
 
 function setLoading(active) {
   submitButton.disabled = active;
-  resetButton.disabled = active;
   submitButton.textContent = active ? "正在认真规划…" : "发送给易程智策";
 }
 
@@ -2974,106 +2989,6 @@ queryInput.addEventListener("keydown", async (event) => {
   await submitQuery(queryInput.value);
 });
 
-resetButton.addEventListener("click", async () => {
-  setLoading(true);
-  try {
-    const response = await fetch("/api/v1/demos/reset", { method: "POST" });
-    const data = await response.json();
-    if (!response.ok) throw data;
-    clearConversationStream();
-    queryInput.value = "";
-    timeline.className = "timeline empty";
-    timeline.textContent = "演示已复位，请从案例一开始。";
-    resultSummary.innerHTML = "";
-    resultSummary.hidden = true;
-    resultRequest.hidden = true;
-    resultDetails.hidden = true;
-    setResultMode(false);
-    planTitle.textContent = "日程时间轴";
-    taskStatuses.innerHTML = "";
-    execution.className = "execution-list empty";
-    execution.textContent = "运行后显示五个处理步骤。";
-    constraints.className = "check-list empty";
-    constraints.textContent = "生成后显示检查结果。";
-    diff.innerHTML = "";
-    adjustmentPanel.classList.remove("has-changes");
-    adjustment.textContent = "当前没有计划变更。";
-    answer.textContent = data.message;
-    answer.classList.remove("muted");
-    warnings.textContent = "暂时没有提醒。";
-    warnings.className = "warnings muted";
-    freshness.innerHTML = "";
-    renderSuggestedActions([]);
-    renderInsights([]);
-    renderDebug(null);
-    localStorage.removeItem(planSnapshotKey);
-    saveState.textContent = "尚未生成当前计划";
-    saveState.classList.remove("saved");
-  } catch (error) {
-    renderError(error);
-  } finally {
-    setLoading(false);
-  }
-});
-
-async function loadDemos() {
-  const response = await fetch("/api/v1/demos");
-  const demos = await response.json();
-  const demoMarkup = demos.map((demo, index) => `
-    <button data-demo="${escapeHtml(demo.id)}">
-      <span class="demo-play" aria-hidden="true">▶</span>
-      <span>${escapeHtml(demo.title)}</span>
-      <small>案例${"一二三四"[index] || index + 1}</small>
-    </button>
-  `).join("");
-  demoButtons.innerHTML = demoMarkup;
-  sidebarDemoButtons.innerHTML = demoMarkup;
-  const bindDemoToCurrentVisitor = (data) => {
-    const bindPlan = (plan) => plan ? {
-      ...plan,
-      user_id: consoleUserId,
-      thread_id: consoleThreadId,
-    } : plan;
-    return {
-      ...data,
-      thread_id: consoleThreadId,
-      plan: bindPlan(data.plan),
-      previous_plan: bindPlan(data.previous_plan),
-    };
-  };
-  const runDemo = async (button, demo) => {
-    if (!demo || submitButton.disabled) return;
-    const keepResultMode = document.body.classList.contains("has-plan-result");
-    queryInput.value = demo.query;
-    modeSelect.value = "auto";
-    beginConversationTurn(demo.query, { keepResultMode });
-    document.querySelectorAll("[data-demo]")
-      .forEach((item) => item.classList.toggle(
-        "active",
-        item.dataset.demo === demo.id,
-      ));
-    const data = await runRequest(
-      `/api/v1/demos/${demo.id}/run`,
-      { method: "POST" },
-      bindDemoToCurrentVisitor,
-    ).catch(() => {});
-    if (data) {
-      activePlanningNowOverride = data.time_context?.now || null;
-      loadConversationThreads().catch(() => {});
-    }
-  };
-  const buttons = [
-    ...demoButtons.querySelectorAll("button"),
-    ...sidebarDemoButtons.querySelectorAll("button"),
-  ];
-  buttons.forEach((button) => {
-    button.addEventListener("click", async () => {
-      const demo = demos.find((item) => item.id === button.dataset.demo);
-      await runDemo(button, demo);
-    });
-  });
-}
-
 function parseWeeklyDate(rawDate) {
   const [year, month, day] = String(rawDate).split("-").map(Number);
   return { year, month, day };
@@ -3235,46 +3150,6 @@ function renderWeeklyPlan(data) {
       </div>
     `;
   renderDebug(data);
-}
-
-async function loadWeeklyDemos() {
-  const response = await fetch("/api/v1/weeks/demos/catalog");
-  const demos = await response.json();
-  if (!response.ok) throw demos;
-  weeklyDemoButtons.innerHTML = demos.map((demo) => `
-    <button
-      class="ghost"
-      data-weekly-demo="${escapeHtml(demo.id)}"
-      title="${escapeHtml(demo.description)}"
-    >${escapeHtml(demo.title)}</button>
-  `).join("");
-  weeklyDemoButtons.querySelectorAll("button").forEach((button) => {
-    button.addEventListener("click", async () => {
-      weeklyDemoButtons.querySelectorAll("button").forEach((item) =>
-        item.classList.toggle("active", item === button),
-      );
-      button.disabled = true;
-      weeklyState.textContent = "正在分配…";
-      try {
-        const response = await fetch(
-          `/api/v1/weeks/demos/${button.dataset.weeklyDemo}/run`
-            + `?user_id=${encodeURIComponent(consoleUserId)}`,
-          { method: "POST" },
-        );
-        const data = await response.json();
-        if (!response.ok) throw data;
-        renderWeeklyPlan(data);
-      } catch (error) {
-        weeklyState.textContent = "生成失败";
-        weeklySummary.textContent = error?.error?.message
-          || "周计划暂时没有生成成功，请稍后重试。";
-        weeklySummary.classList.remove("muted");
-        renderDebug(error);
-      } finally {
-        button.disabled = false;
-      }
-    });
-  });
 }
 
 weeklyGenerate.addEventListener("click", async () => {
@@ -4004,9 +3879,6 @@ async function initializeApp() {
       renderError(error);
     });
   }
-  await loadDemos().catch(() => {
-    demoButtons.textContent = "案例加载失败";
-  });
   agendaDate.value = shanghaiDateString();
   scheduleCursorDate = agendaDate.value;
   weeklyStart.value = nextWeeklyMonday();
@@ -4018,10 +3890,6 @@ async function initializeApp() {
   loadAgenda(agendaDate.value).catch((error) => {
     agendaState.textContent = "读取失败";
     agendaList.textContent = "个人日程暂时没有加载成功，请稍后刷新。";
-    renderDebug(error);
-  });
-  loadWeeklyDemos().catch((error) => {
-    weeklyDemoButtons.textContent = "复杂周场景暂时无法读取";
     renderDebug(error);
   });
   loadMemories().catch((error) => renderDebug(error));
