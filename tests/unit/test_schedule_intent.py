@@ -105,8 +105,7 @@ async def _context(tz: ZoneInfo, now: datetime) -> PlanningContext:
         now=now,
         travel=travel,
         opening_windows={
-            location: rules.opening_windows(location, TARGET)
-            for location in ids
+            location: rules.opening_windows(location, TARGET) for location in ids
         },
     )
 
@@ -157,6 +156,9 @@ async def test_free_morning_beats_a_shorter_walk_in_the_afternoon(
         title="图书馆自习",
         date=TARGET,
         duration_min=180,
+        min_duration_min=60,
+        duration_source="explicit",
+        tags=["study", "elastic_duration"],
         location_id="library",
         earliest_start=datetime(2026, 8, 21, 8, 0, tzinfo=tz),
         latest_end=datetime(2026, 8, 21, 22, 30, tzinfo=tz),

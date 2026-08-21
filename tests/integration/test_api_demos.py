@@ -1020,7 +1020,7 @@ def test_explicit_user_weather_is_a_hard_constraint_on_first_plan(tmp_path):
         )
 
 
-def test_llm_failure_falls_back_to_local_parser(tmp_path):
+def test_llm_failure_is_reported_without_local_guessing(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         client.app.state.container.llm = FailingLLM()
         response = client.post(
@@ -1038,13 +1038,9 @@ def test_llm_failure_falls_back_to_local_parser(tmp_path):
             },
         )
 
-        assert response.status_code == 200, response.text
+        assert response.status_code == 503, response.text
         payload = response.json()
-        assert payload["status"] == "completed"
-        assert payload["plan"]["status"] == "valid"
-        assert "LLM_DEGRADED" in {
-            warning["code"] for warning in payload["warnings"]
-        }
+        assert payload["error"]["code"] == "LLM_PROVIDER_ERROR"
 
 
 def test_infeasible_plan_keeps_every_requested_task_visible(tmp_path):
@@ -1069,7 +1065,7 @@ def test_infeasible_plan_keeps_every_requested_task_visible(tmp_path):
         payload = response.json()
         assert payload["status"] == "partial"
         assert payload["plan"]["status"] == "infeasible"
-        assert payload["current_plan_saved"] is False
+        assert payload["current_plan_saved"] is True
         assert "没有替你删掉" in payload["answer"]
         assert "取快递" in payload["answer"]
         assert "跑步" in payload["answer"]
@@ -1083,9 +1079,8 @@ def test_infeasible_plan_keeps_every_requested_task_visible(tmp_path):
         }
         assert set(statuses) == {"study", "parcel", "run"}
         assert statuses["study"]["status"] == "scheduled"
-        assert statuses["parcel"]["status"] == "needs_adjustment"
+        assert statuses["parcel"]["status"] == "scheduled"
         assert statuses["run"]["status"] == "needs_adjustment"
-        assert "未能安排" in statuses["parcel"]["message"]
         assert "未能安排" in statuses["run"]["message"]
 
         actions = payload["suggested_actions"]

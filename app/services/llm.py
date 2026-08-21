@@ -75,12 +75,47 @@ class OpenAICompatibleLLM:
         if model not in used:
             self._used_models.set((*used, model))
 
+    @staticmethod
+    def _conversation_messages(
+        history: list[dict[str, str]] | None,
+        *,
+        current: str,
+    ) -> list[dict[str, str]]:
+        """Return recent turns as real chat messages, without duplicating now.
+
+        Qwen's OpenAI-compatible endpoint preserves conversational context
+        through the ordered ``messages`` array.  Flattening history into a
+        single prompt string loses the user/assistant boundary and makes
+        references such as “把这个挪到下午” much less reliable.
+        """
+
+        turns: list[dict[str, str]] = []
+        for raw in history or []:
+            role = str(raw.get("role", "")).strip().lower()
+            content = str(raw.get("content", "")).strip()
+            if role not in {"user", "assistant"} or not content:
+                continue
+            turns.append({"role": role, "content": content})
+
+        # The API persists the incoming message before invoking the graph, so
+        # the newest history entry can be the request we append below.
+        while (
+            turns
+            and turns[-1]["role"] == "user"
+            and turns[-1]["content"] == current.strip()
+        ):
+            turns.pop()
+        # Eight complete exchanges are enough for pronoun resolution while
+        # keeping the current request prominent at the end of the context.
+        return turns[-16:]
+
     async def parse_requirement(
         self,
         *,
         query: str,
         now_iso: str,
         memory_context: list[dict[str, Any]] | None = None,
+        history: list[dict[str, str]] | None = None,
     ) -> UnderstandResult:
         if not self.configured:
             raise AppError(
@@ -101,26 +136,31 @@ class OpenAICompatibleLLM:
         # Reference material first, the request last.  The schema alone
         # runs to thousands of tokens; with the request in front of it the
         # model reliably dropped stated constraints such as “白天”.
+        system_context = (
+            prompt
+            + "\n\n"
+            "<json_schema>\n"
+            f"{json.dumps(schema, ensure_ascii=False)}\n"
+            "</json_schema>\n"
+            "<campus_time_context>\n"
+            f"{campus_context}\n"
+            "</campus_time_context>\n"
+            "<user_memory_context>\n"
+            f"{json.dumps(memory_context or [], ensure_ascii=False)}"
+            "\n</user_memory_context>\n"
+            f"<now>{now_iso}</now>\n"
+        )
+        previous_turns = self._conversation_messages(history, current=query)
         messages = [
-            {"role": "system", "content": prompt},
+            {"role": "system", "content": system_context},
+            *previous_turns,
             {
                 "role": "user",
                 "content": (
-                    "<json_schema>\n"
-                    f"{json.dumps(schema, ensure_ascii=False)}\n"
-                    "</json_schema>\n"
-                    "<campus_time_context>\n"
-                    f"{campus_context}\n"
-                    "</campus_time_context>\n"
-                    "<user_memory_context>\n"
-                    f"{json.dumps(memory_context or [], ensure_ascii=False)}"
-                    "\n</user_memory_context>\n"
-                    f"<now>{now_iso}</now>\n"
-                    "<request>\n"
-                    f"{query}\n"
-                    "</request>\n"
-                    "先逐条对照 <request> 中出现的时段词、时长、次数和"
-                    "顺序词，确认每一条都落到了对应字段上，再输出 JSON。"
+                    f"<request>\n{query}\n</request>\n"
+                    "先逐条对照本轮 request 中出现的任务、时段、时长、次数和"
+                    "顺序词；没有明确出现的时段不得猜测。结合此前对话消解"
+                    "‘这个/那个/还是’等指代，然后只输出 JSON。"
                 ),
             },
         ]
@@ -180,28 +220,27 @@ class OpenAICompatibleLLM:
             encoding="utf-8"
         )
         schema = PlanEdit.model_json_schema()
-        transcript = "".join(
-            f"{turn.get('role', 'user')}: {turn.get('content', '')}" + chr(10)
-            for turn in (history or [])
-        )
+        previous_turns = self._conversation_messages(history, current=query)
         messages = [
-            {"role": "system", "content": prompt},
             {
-                "role": "user",
+                "role": "system",
                 "content": (
+                    prompt
+                    + "\n\n"
                     "<json_schema>\n"
                     f"{json.dumps(schema, ensure_ascii=False)}\n"
                     "</json_schema>\n"
                     "<current_plan>\n"
                     f"{plan_summary}\n"
                     "</current_plan>\n"
-                    "<conversation>\n"
-                    f"{transcript}"
-                    "</conversation>\n"
                     f"<now>{now_iso}</now>\n"
-                    "<request>\n"
-                    f"{query}\n"
-                    "</request>\n"
+                ),
+            },
+            *previous_turns,
+            {
+                "role": "user",
+                "content": (
+                    f"<request>\n{query}\n</request>\n"
                     "只输出被点名的改动。没被提到的安排不要出现在 operations 里。"
                 ),
             },

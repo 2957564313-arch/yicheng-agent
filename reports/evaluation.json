@@ -1,6 +1,6 @@
 {
   "summary": {
-    "generated_at": "2026-08-20T07:39:37.511350+00:00",
+    "generated_at": "2026-08-21T03:43:33.196213+00:00",
     "suite": "deterministic_regression",
     "total": 112,
     "passed": 112,
@@ -835,8 +835,8 @@
       "passed": true,
       "failures": [],
       "metrics": {
-        "task_count": 1,
-        "hard_violation_count": 0
+        "task_count": 0,
+        "hard_violation_count": 1
       }
     },
     {
@@ -1055,8 +1055,8 @@
       "passed": true,
       "failures": [],
       "metrics": {
-        "task_count": 1,
-        "hard_violation_count": 0
+        "task_count": 0,
+        "hard_violation_count": 1
       }
     },
     {

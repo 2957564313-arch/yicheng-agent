@@ -9,8 +9,10 @@ from app.nodes.understand import (
     _apply_timetable_relative_constraints,
     _can_apply_rule_guard,
     _drop_journey_origin_marker_tasks,
+    _expand_occurrences,
     _merge_llm_with_rule_constraints,
     _release_destination_from_departure_anchor,
+    _roll_over_exhausted_day,
 )
 from app.schemas.common import Intent, TaskFlexibility
 from app.schemas.memory import MemoryCreate
@@ -561,3 +563,184 @@ def test_online_merge_does_not_force_rule_defaults_over_model_semantics():
     assert result.tasks[0].title == "在宿舍复习专业课"
     assert result.tasks[0].duration_min == 45
     assert result.tasks[0].location_raw == "宿舍"
+
+
+def test_enumerated_request_keeps_every_explicit_task_and_occurrence():
+    query = (
+        "今天很空，能帮我安排一下吗？自习2次，还要取快递、跑步，"
+        "还要晚上和导师碰头2h。"
+    )
+
+    parsed = _parse(query)
+    expanded = _expand_occurrences(parsed.tasks)
+
+    assert len(expanded) == 5
+    assert sum("自习" in task.title for task in expanded) == 2
+    assert sum("快递" in task.title for task in expanded) == 1
+    assert sum("跑步" in task.title for task in expanded) == 1
+    assert sum("导师" in task.title for task in expanded) == 1
+    studies = [task for task in expanded if "自习" in task.title]
+    assert all(task.duration_source == "default" for task in studies)
+    assert all(task.duration_min == 120 for task in studies)
+    assert all(task.min_duration_min == 60 for task in studies)
+    advisor = next(task for task in expanded if "导师" in task.title)
+    assert advisor.duration_min == 120
+    assert advisor.duration_source == "explicit"
+    assert advisor.preferred_period == "evening"
+
+
+def test_online_merge_cannot_drop_enumerated_tasks_or_double_occurrences():
+    query = (
+        "今天很空，能帮我安排一下吗？自习2次，还要取快递、跑步，"
+        "还要晚上和导师碰头2h。"
+    )
+    rule_result = _parse(query)
+    target_date = rule_result.requested_date
+    assert target_date is not None
+
+    # A realistic imperfect model response: it represents the two sittings
+    # as two objects, but accidentally omits parcel pickup.  The merge layer
+    # must neither turn two sittings into four nor silently delete parcel.
+    llm_result = UnderstandResult(
+        intent=Intent.PLAN,
+        requested_date=target_date,
+        tasks=[
+            Task(
+                id="study_a",
+                title="自习（第一次）",
+                date=target_date,
+                duration_min=120,
+                min_duration_min=60,
+            ),
+            Task(
+                id="study_b",
+                title="自习（第二次）",
+                date=target_date,
+                duration_min=120,
+                min_duration_min=60,
+            ),
+            Task(
+                id="run",
+                title="跑步",
+                date=target_date,
+                duration_min=30,
+            ),
+            Task(
+                id="advisor",
+                title="晚上和导师碰头",
+                date=target_date,
+                duration_min=120,
+                preferred_period="evening",
+            ),
+        ],
+        confidence=0.95,
+    )
+
+    merged = _merge_llm_with_rule_constraints(
+        query=query,
+        llm_result=llm_result,
+        rule_result=rule_result,
+    )
+    expanded = _expand_occurrences(merged.tasks)
+
+    assert len(expanded) == 5
+    assert sum("自习" in task.title for task in expanded) == 2
+    assert sum("快递" in task.title for task in expanded) == 1
+    assert sum("跑步" in task.title for task in expanded) == 1
+    assert sum("导师" in task.title for task in expanded) == 1
+
+
+def test_late_full_day_workload_rolls_to_tomorrow_without_shrinking_tasks():
+    late_now = datetime(
+        2026,
+        8,
+        20,
+        17,
+        57,
+        tzinfo=ZoneInfo("Asia/Shanghai"),
+    )
+    parsed = RuleBasedRequirementParser("Asia/Shanghai").parse(
+        query=(
+            "今天很空，能帮我安排一下吗？自习2次，还要取快递、跑步，"
+            "还要晚上和导师碰头2h。"
+        ),
+        now=late_now,
+    )
+    parsed = parsed.model_copy(update={"tasks": _expand_occurrences(parsed.tasks)})
+
+    shifted, notice = _roll_over_exhausted_day(
+        result=parsed,
+        now=late_now,
+        old_plan=None,
+    )
+
+    assert shifted.requested_date == late_now.date() + timedelta(days=1)
+    assert len(shifted.tasks) == 5
+    assert [task.duration_min for task in shifted.tasks] == [
+        task.duration_min for task in parsed.tasks
+    ]
+    assert all(task.date == shifted.requested_date for task in shifted.tasks)
+    assert notice is not None
+
+
+def test_morning_full_day_workload_stays_today():
+    morning_now = datetime(
+        2026,
+        8,
+        20,
+        9,
+        0,
+        tzinfo=ZoneInfo("Asia/Shanghai"),
+    )
+    parsed = RuleBasedRequirementParser("Asia/Shanghai").parse(
+        query=(
+            "今天很空，能帮我安排一下吗？自习2次，还要取快递、跑步，"
+            "还要晚上和导师碰头2h。"
+        ),
+        now=morning_now,
+    )
+    parsed = parsed.model_copy(update={"tasks": _expand_occurrences(parsed.tasks)})
+
+    unchanged, notice = _roll_over_exhausted_day(
+        result=parsed,
+        now=morning_now,
+        old_plan=None,
+    )
+
+    assert unchanged.requested_date == morning_now.date()
+    assert notice is None
+
+
+def test_hard_deadline_is_never_silently_rolled_to_tomorrow():
+    late_now = datetime(
+        2026,
+        8,
+        20,
+        20,
+        0,
+        tzinfo=ZoneInfo("Asia/Shanghai"),
+    )
+    target = late_now.date()
+    result = UnderstandResult(
+        intent=Intent.PLAN,
+        requested_date=target,
+        tasks=[
+            Task(
+                id=f"task_{index}",
+                title=f"任务{index}",
+                date=target,
+                duration_min=120,
+                deadline=late_now.replace(hour=23, minute=0),
+            )
+            for index in range(3)
+        ],
+    )
+
+    unchanged, notice = _roll_over_exhausted_day(
+        result=result,
+        now=late_now,
+        old_plan=None,
+    )
+
+    assert unchanged.requested_date == target
+    assert notice is None

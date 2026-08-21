@@ -125,7 +125,6 @@ header, main, footer {
   gap: 16px;
 }
 
-.brand-mark,
 .assistant-avatar {
   display: grid;
   place-items: center;
@@ -138,10 +137,12 @@ header, main, footer {
 }
 
 .brand-mark {
+  display: block;
+  flex: 0 0 auto;
   width: 64px;
   height: 64px;
-  border-radius: 18px;
-  font-size: 33px;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 18px rgba(88, 57, 214, .2));
 }
 
 .assistant-avatar {
@@ -1628,7 +1629,7 @@ footer {
     width: min(100% - 24px, 1440px);
   }
   .masthead { align-items: flex-start; flex-direction: column; }
-  .brand-mark { width: 54px; height: 54px; font-size: 28px; }
+  .brand-mark { width: 54px; height: 54px; }
   h1 { font-size: 36px; }
   .header-status { justify-content: flex-start; }
   .demo-strip,
@@ -1971,7 +1972,7 @@ button.primary:disabled,
 @media (max-width: 900px) {
   header, main, footer, .debug-panel { width: min(100% - 24px, 1440px); }
   .masthead { align-items: center; flex-direction: row; gap: 10px; }
-  .masthead .brand-mark { width: 44px; height: 44px; font-size: 23px; }
+  .masthead .brand-mark { width: 44px; height: 44px; }
   .masthead h1 { font-size: 28px; }
   .masthead .subtitle,
   .header-status { display: none; }
@@ -2049,8 +2050,8 @@ body {
 
 header, main, footer { width: min(1480px, calc(100% - 48px)); }
 .masthead { padding: 24px 0 18px; }
-.brand-mark, .assistant-avatar { background: linear-gradient(145deg, #4f46e5, #7c3aed); box-shadow: 0 12px 24px rgba(79, 70, 229, .2); }
-.brand-mark { width: 52px; height: 52px; border-radius: 16px; font-size: 27px; }
+.assistant-avatar { background: linear-gradient(145deg, #4f46e5, #7c3aed); box-shadow: 0 12px 24px rgba(79, 70, 229, .2); }
+.brand-mark { width: 52px; height: 52px; }
 h1 { font: 820 34px/1 serif; }
 h2 { font-family: "PingFang SC", "Noto Sans SC", system-ui, sans-serif; }
 .eyebrow, .step { color: var(--orange); letter-spacing: .1em; }
@@ -2661,7 +2662,7 @@ body.has-plan-result .history-list { max-height: 122px; }
 body.has-plan-result .history-item { padding-block: 7px; }
 body.has-plan-result .history-entry:nth-child(n+4) { display: none; }
 body.has-plan-result .masthead { padding-top: 10px; padding-bottom: 10px; }
-body.has-plan-result .masthead .brand-mark { width: 42px; height: 42px; border-radius: 13px; font-size: 22px; }
+body.has-plan-result .masthead .brand-mark { width: 42px; height: 42px; }
 body.has-plan-result .masthead h1 { font-size: 27px; }
 body.has-plan-result .masthead .subtitle { display: none; }
 body.has-plan-result main { margin-top: 0; }

@@ -4,9 +4,10 @@ import re
 from datetime import date, datetime, time, timedelta
 
 from app.container import AppContainer
+from app.errors import AppError
 from app.nodes.common import append_trace
 from app.schemas.calendar import CalendarOverrideCreate
-from app.schemas.common import Issue, IssueSeverity, TaskFlexibility
+from app.schemas.common import TaskFlexibility
 from app.schemas.memory import MemoryCreate, MemoryItem
 from app.schemas.plan import Plan
 from app.schemas.task import Task, UserPreferences
@@ -42,8 +43,14 @@ def make_understand_node(container: AppContainer):
             now=datetime.fromisoformat(state["now_iso"]),
             old_plan=old_plan,
         )
+        # Policy/handbook questions are grounded by the scoped knowledge
+        # repository.  They do not need the requirement-extraction model and
+        # must not fail merely because a test double only implements answer
+        # rendering.  Planning and replanning remain model-required online.
         use_llm = (
-            container.llm.configured and state.get("mode") != "offline"
+            container.llm.configured
+            and state.get("mode") != "offline"
+            and rule_result.intent.value != "query"
         )
         # Changing an existing day is a conversation, so the model reads it —
         # with the plan and the recent turns in hand. It answers with the
@@ -72,30 +79,25 @@ def make_understand_node(container: AppContainer):
                     update={
                         "tasks": edited,
                         "clarifications": list(
-                            dict.fromkeys(
-                                [*edit.clarifications, *unresolved]
-                            )
+                            dict.fromkeys([*edit.clarifications, *unresolved])
                         ),
                     }
                 )
                 parser_name = "llm_plan_edit"
             except Exception as exc:
-                result = rule_result
-                parser_name = "deterministic_rules_fallback"
-                warnings.append(
-                    Issue(
-                        code="LLM_DEGRADED",
-                        severity=IssueSeverity.WARNING,
-                        message=("大模型暂时不可用，已使用确定性约束层继续完成规划"),
-                        details=_safe_llm_warning_details(exc),
-                        recoverable=True,
-                    ).model_dump(mode="json")
-                )
+                raise _required_llm_error(exc) from exc
         elif use_llm:
             try:
                 llm_result = await container.llm.parse_requirement(
                     query=state["query"],
                     now_iso=state["now_iso"],
+                    history=[
+                        {
+                            "role": str(turn.get("role", "user")),
+                            "content": str(turn.get("content", "")),
+                        }
+                        for turn in state.get("conversation_history", [])
+                    ],
                     memory_context=[
                         {
                             "category": memory.category,
@@ -124,17 +126,7 @@ def make_understand_node(container: AppContainer):
                     )
                 parser_name = "llm_with_rule_constraints"
             except Exception as exc:
-                result = rule_result
-                parser_name = "deterministic_rules_fallback"
-                warnings.append(
-                    Issue(
-                        code="LLM_DEGRADED",
-                        severity=IssueSeverity.WARNING,
-                        message=("大模型暂时不可用，已使用确定性约束层继续完成规划"),
-                        details=_safe_llm_warning_details(exc),
-                        recoverable=True,
-                    ).model_dump(mode="json")
-                )
+                raise _required_llm_error(exc) from exc
         else:
             result = rule_result
             parser_name = "deterministic_rules"
@@ -147,7 +139,18 @@ def make_understand_node(container: AppContainer):
         # Both readings converge here, so “三次自习” becomes three real tasks
         # whichever path recognised the count.
         result = result.model_copy(
-            update={"tasks": _expand_occurrences(result.tasks)}
+            update={
+                "tasks": _split_long_study_blocks(
+                    _expand_occurrences(result.tasks)
+                )
+            }
+        )
+
+        planning_now = datetime.fromisoformat(state["now_iso"])
+        result, rollover_notice = _roll_over_exhausted_day(
+            result=result,
+            now=planning_now,
+            old_plan=old_plan,
         )
 
         initial_location_raw = (
@@ -334,6 +337,7 @@ def make_understand_node(container: AppContainer):
             ),
             "clarifications": result.clarifications,
             "parse_confidence": result.confidence,
+            "rollover_notice": rollover_notice,
             "provider_warnings": warnings,
             "status": (
                 "needs_clarification" if result.clarifications else "understood"
@@ -349,11 +353,108 @@ def make_understand_node(container: AppContainer):
                     "timetable_task_count": len(fixed_schedule_tasks),
                     "academic_day": calendar_context.course_action,
                     "clarification_count": len(result.clarifications),
+                    "rolled_to_next_day": rollover_notice is not None,
                 },
             ),
         }
 
     return understand
+
+
+def _roll_over_exhausted_day(
+    *,
+    result: UnderstandResult,
+    now: datetime,
+    old_plan: Plan | None,
+) -> tuple[UnderstandResult, str | None]:
+    """Move a new full-day workload to tomorrow instead of crushing it at night.
+
+    This deliberately does not move edits, isolated tasks, or anything with an
+    exact time/deadline.  It only applies when a multi-task day can no longer
+    preserve the user's requested/default durations in today's usable time.
+    """
+
+    if (
+        old_plan is not None
+        or result.intent.value != "plan"
+        or result.requested_date != now.date()
+        or len(result.tasks) < 3
+        or result.clarifications
+    ):
+        return result, None
+    if any(
+        task.fixed_start is not None
+        or task.fixed_end is not None
+        or task.deadline is not None
+        for task in result.tasks
+    ):
+        return result, None
+
+    day_end = datetime.combine(now.date() + timedelta(days=1), time.min, now.tzinfo)
+    remaining_minutes = max(0, int((day_end - now).total_seconds() // 60))
+    # Default meals are flexible ranges in the scheduler. Capacity only needs
+    # to reserve the actual 30-minute break in each range that has not passed,
+    # not the entire availability range.
+    meal_minutes = sum(
+        min(
+            30,
+            _remaining_overlap_minutes(
+                now,
+                day_end,
+                datetime.combine(now.date(), start, now.tzinfo),
+                datetime.combine(now.date(), end, now.tzinfo),
+            ),
+        )
+        for start, end in (
+            (time(11, 30), time(13, 30)),
+            (time(17, 30), time(19, 30)),
+        )
+    )
+    ideal_minutes = sum(task.duration_min for task in result.tasks)
+    ideal_minutes += result.preferences.buffer_min * max(0, len(result.tasks) - 1)
+    usable_minutes = max(0, remaining_minutes - meal_minutes)
+    if ideal_minutes <= usable_minutes:
+        return result, None
+
+    target_date = now.date() + timedelta(days=1)
+    shifted_tasks = [
+        _shift_task_to_date(task, result.requested_date, target_date).model_copy(
+            update={"tags": [*task.tags, "rolled_to_next_day"]}
+        )
+        for task in result.tasks
+    ]
+    shifted = result.model_copy(
+        update={"requested_date": target_date, "tasks": shifted_tasks}
+    )
+    return (
+        shifted,
+        "今天剩余时间不足以完整容纳这些安排，我没有把任务压缩后硬塞到深夜，已按完整时长转到明天。",
+    )
+
+
+def _remaining_overlap_minutes(
+    range_start: datetime,
+    range_end: datetime,
+    window_start: datetime,
+    window_end: datetime,
+) -> int:
+    overlap_start = max(range_start, window_start)
+    overlap_end = min(range_end, window_end)
+    return max(0, int((overlap_end - overlap_start).total_seconds() // 60))
+
+
+def _required_llm_error(exc: Exception) -> AppError:
+    """Fail visibly instead of silently replacing Qwen with a weaker parser."""
+
+    if isinstance(exc, AppError):
+        return exc
+    return AppError(
+        code="LLM_PROVIDER_ERROR",
+        message="千问未能完成本次需求理解，请稍后重试。系统没有用本地规则替你猜测。",
+        status_code=503,
+        retryable=True,
+        details=[_safe_llm_warning_details(exc)],
+    )
 
 
 def _merge_client_memories(
@@ -992,17 +1093,17 @@ def _expand_occurrences(tasks: list[Task]) -> list[Task]:
                         "id": f"{task.id}_{index + 1}",
                         "title": f"{task.title}（第{index + 1}次）",
                         "occurrence_count": 1,
-                        # Three sittings asked for separately are three
-                        # sittings, not one long block broken by coffee: keep
-                        # real distance between them.
-                        "min_gap_min": max(task.min_gap_min, 90),
+                        # "自习3次" means three genuinely separate sittings,
+                        # not one long block with a short pause.  Keep at least
+                        # an hour between them; when today's remaining day is
+                        # too short, the request is rolled to tomorrow instead
+                        # of weakening what "3次" means.
+                        "min_gap_min": max(task.min_gap_min, 60),
                         # Separate sittings, not one block chopped up: they are
                         # deliberately left unchained so the planner can spread
                         # them across whatever gaps the day actually has.
                         "tags": list(
-                            dict.fromkeys(
-                                [*task.tags, f"occurrence_of:{task.id}"]
-                            )
+                            dict.fromkeys([*task.tags, f"occurrence_of:{task.id}"])
                         ),
                     }
                 )
@@ -1010,9 +1111,7 @@ def _expand_occurrences(tasks: list[Task]) -> list[Task]:
     if len(expanded) == len(tasks):
         return tasks
     known = {task.id for task in tasks}
-    renamed = {
-        task.id: f"{task.id}_1" for task in tasks if task.occurrence_count > 1
-    }
+    renamed = {task.id: f"{task.id}_1" for task in tasks if task.occurrence_count > 1}
     return [
         task.model_copy(
             update={
@@ -1025,6 +1124,64 @@ def _expand_occurrences(tasks: list[Task]) -> list[Task]:
         )
         for task in expanded
     ]
+
+
+def _split_long_study_blocks(tasks: list[Task]) -> list[Task]:
+    """Turn a long study total into usable sittings without losing minutes.
+
+    A seven-hour self-study request cannot cross lunch as one indivisible
+    block, so the old scheduler either shortened it drastically or failed to
+    publish a full day.  Study is naturally pausable: blocks of at most three
+    hours preserve the requested total while allowing meals, classes and
+    short recovery gaps between them.  Explicit multi-session requests have
+    already been expanded and are left exactly as the user described.
+    """
+
+    split: list[Task] = []
+    for task in tasks:
+        if (
+            "study" not in task.tags
+            or task.duration_min < 240
+            or any(tag.startswith("occurrence_of:") for tag in task.tags)
+            or task.flexibility.value != "movable"
+        ):
+            split.append(task)
+            continue
+
+        segment_count = (task.duration_min + 179) // 180
+        base = task.duration_min // segment_count
+        remainder = task.duration_min % segment_count
+        previous_id: str | None = None
+        for index in range(segment_count):
+            duration = base + (1 if index < remainder else 0)
+            segment_id = f"{task.id}_segment_{index + 1}"
+            dependencies = list(task.depends_on)
+            if previous_id:
+                dependencies.append(previous_id)
+            split.append(
+                task.model_copy(
+                    update={
+                        "id": segment_id,
+                        "title": f"{task.title}（第{index + 1}段）",
+                        "duration_min": duration,
+                        "min_duration_min": min(60, duration),
+                        "splittable": False,
+                        "min_gap_min": max(task.min_gap_min, 30),
+                        "depends_on": dependencies,
+                        "tags": list(
+                            dict.fromkeys(
+                                [
+                                    *task.tags,
+                                    "split_segment",
+                                    f"split_of:{task.id}",
+                                ]
+                            )
+                        ),
+                    }
+                )
+            )
+            previous_id = segment_id
+    return split
 
 
 def _merge_llm_with_rule_constraints(
@@ -1053,8 +1210,13 @@ def _merge_llm_with_rule_constraints(
             matched_indexes=matched_indexes,
         )
         if match_index is None:
-            if "common_task_fallback" not in rule_task.tags or not llm_result.tasks:
-                appended_rule_tasks.append(rule_task)
+            # The deterministic parser is also the request ledger for common,
+            # explicitly mentioned campus tasks.  An online model may omit one
+            # item from a long enumeration (for example "还要取快递").  Never
+            # interpret that omission as user intent: append every unmatched
+            # ledger item so the scheduler/validator can either place it or
+            # report it as unscheduled.
+            appended_rule_tasks.append(rule_task)
             continue
 
         model_task = merged[match_index]
@@ -1065,6 +1227,24 @@ def _merge_llm_with_rule_constraints(
             model_task=model_task,
             rule_task=rule_task,
         )
+
+    # A count is a property of one conceptual request, not a multiplier for
+    # however many objects the model happened to emit.  Qwen may represent
+    # “自习2次” as one task with occurrence_count=2 *or* as two separately
+    # named tasks.  The deterministic parser already owns the requested
+    # count; keeping the model's second representation here and expanding
+    # both later silently turns two sittings into three or four.
+    redundant_model_indexes = _redundant_model_occurrence_indexes(
+        rule_tasks=rule_result.tasks,
+        model_tasks=merged,
+        matched_indexes=matched_indexes,
+    )
+    if redundant_model_indexes:
+        merged = [
+            task
+            for index, task in enumerate(merged)
+            if index not in redundant_model_indexes
+        ]
 
     merged.extend(appended_rule_tasks)
     merged = [
@@ -1119,6 +1299,35 @@ def _merge_llm_with_rule_constraints(
             ),
         }
     )
+
+
+def _redundant_model_occurrence_indexes(
+    *,
+    rule_tasks: list[Task],
+    model_tasks: list[Task],
+    matched_indexes: set[int],
+) -> set[int]:
+    """Remove duplicate model encodings of a rule-owned occurrence count.
+
+    This is deliberately narrow: it applies only when the rule parser found
+    an explicit repeated occurrence.  Distinct tasks of the same broad kind
+    remain untouched for ordinary requests.
+    """
+
+    repeated_kinds = {
+        _task_kind(task.title, task.location_raw)
+        for task in rule_tasks
+        if task.occurrence_count > 1
+    }
+    repeated_kinds.discard(None)
+    if not repeated_kinds:
+        return set()
+    return {
+        index
+        for index, task in enumerate(model_tasks)
+        if index not in matched_indexes
+        and _task_kind(task.title, task.location_raw) in repeated_kinds
+    }
 
 
 def _drop_journey_origin_marker_tasks(
@@ -1244,6 +1453,14 @@ def _merge_task_constraints(
             else f"{notes}；{rule_task.notes}"
         )
 
+    rule_has_explicit_duration = rule_task.duration_source == "explicit"
+    rule_has_explicit_period = (
+        rule_task.constraint_source == "user" and rule_task.preferred_period is not None
+    )
+    model_has_explicit_period = (
+        model_task.constraint_source == "user"
+        and model_task.preferred_period is not None
+    )
     update = {
         "id": rule_task.id,
         # Course blocks come from the deterministic period parser. Keep its
@@ -1264,9 +1481,31 @@ def _merge_task_constraints(
         # the length of the whole task and multiply the requested work.
         "duration_min": (
             rule_task.duration_min
-            if fixed_by_rule or "split_segment" in rule_task.tags
+            if (
+                fixed_by_rule
+                or "split_segment" in rule_task.tags
+                or rule_has_explicit_duration
+            )
             else model_task.duration_min
         ),
+        # The deterministic parser knows whether a number was actually
+        # attached to this task.  Preserve that provenance and its flexible
+        # floor: a default two-hour study block may shrink to one hour, while
+        # an explicit “和导师碰头2h” must remain two hours.
+        "min_duration_min": (
+            rule_task.min_duration_min
+            if (not rule_has_explicit_duration or "elastic_duration" in rule_task.tags)
+            else None
+        ),
+        "max_duration_min": (
+            rule_task.max_duration_min
+            if rule_task.max_duration_min is not None
+            else model_task.max_duration_min
+        ),
+        "duration_source": rule_task.duration_source,
+        "occurrence_count": rule_task.occurrence_count,
+        "splittable": rule_task.splittable or model_task.splittable,
+        "min_gap_min": max(rule_task.min_gap_min, model_task.min_gap_min),
         "location_id": (
             rule_task.location_id if use_rule_location else model_task.location_id
         ),
@@ -1298,24 +1537,17 @@ def _merge_task_constraints(
         # so it cannot turn a preference into an impossible hard window.
         "preferred_period": (
             rule_task.preferred_period
-            if rule_task.preferred_period is not None
-            else (
-                None
-                if any(
-                    value is not None
-                    for value in (
-                        rule_task.earliest_start,
-                        rule_task.latest_end,
-                        rule_task.deadline,
-                    )
-                )
-                else model_task.preferred_period
-            )
+            if rule_has_explicit_period
+            else (model_task.preferred_period if model_has_explicit_period else None)
+        ),
+        "constraint_source": (
+            "user" if rule_has_explicit_period or model_has_explicit_period else "rule"
         ),
         "importance": max(model_task.importance, rule_task.importance),
-        "depends_on": list(
-            dict.fromkeys([*model_task.depends_on, *rule_task.depends_on])
-        ),
+        # Dependencies are structural.  The rule parser now creates them only
+        # for explicit sequence words (“先…再…”, “然后”), while a language
+        # model can easily mistake the enumerating “还要” for an order.
+        "depends_on": list(rule_task.depends_on),
         "tags": tags,
         "notes": notes,
     }

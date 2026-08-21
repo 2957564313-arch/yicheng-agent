@@ -25,9 +25,9 @@
           "scheduled_task_count": 2,
           "task_intervals": {
             "long_project": {
-              "end_at": "2026-09-14T11:40:00+08:00",
+              "end_at": "2026-09-14T16:30:00+08:00",
               "location_id": null,
-              "start_at": "2026-09-14T08:40:00+08:00"
+              "start_at": "2026-09-14T13:30:00+08:00"
             },
             "urgent_print": {
               "end_at": "2026-09-14T08:30:00+08:00",
@@ -158,9 +158,9 @@
           "scheduled_task_count": 1,
           "task_intervals": {
             "training": {
-              "end_at": "2026-09-14T19:30:00+08:00",
+              "end_at": "2026-09-14T20:15:00+08:00",
               "location_id": null,
-              "start_at": "2026-09-14T18:45:00+08:00"
+              "start_at": "2026-09-14T19:30:00+08:00"
             }
           },
           "total_displacement_minutes": 0,
@@ -462,9 +462,9 @@
               "start_at": "2026-09-14T10:00:00+08:00"
             },
             "task_b": {
-              "end_at": "2026-09-14T13:50:00+08:00",
+              "end_at": "2026-09-14T16:10:00+08:00",
               "location_id": null,
-              "start_at": "2026-09-14T12:50:00+08:00"
+              "start_at": "2026-09-14T15:10:00+08:00"
             },
             "task_c": {
               "end_at": "2026-09-14T19:00:00+08:00",
@@ -546,9 +546,9 @@
           "scheduled_task_count": 3,
           "task_intervals": {
             "library_task": {
-              "end_at": "2026-09-14T13:00:00+08:00",
+              "end_at": "2026-09-14T16:10:00+08:00",
               "location_id": "library",
-              "start_at": "2026-09-14T12:00:00+08:00"
+              "start_at": "2026-09-14T15:10:00+08:00"
             },
             "task_b": {
               "end_at": "2026-09-14T15:00:00+08:00",
@@ -561,7 +561,7 @@
               "start_at": "2026-09-14T18:00:00+08:00"
             }
           },
-          "total_displacement_minutes": 180,
+          "total_displacement_minutes": 370,
           "unaffected_task_count": 2
         },
         {
@@ -648,9 +648,9 @@
               "start_at": "2026-09-14T18:00:00+08:00"
             },
             "urgent": {
-              "end_at": "2026-09-14T08:30:00+08:00",
+              "end_at": "2026-09-14T09:30:00+08:00",
               "location_id": null,
-              "start_at": "2026-09-14T08:00:00+08:00"
+              "start_at": "2026-09-14T09:00:00+08:00"
             }
           },
           "total_displacement_minutes": 0,
@@ -757,7 +757,7 @@
           "kind": "replan",
           "preserved_task_count": 2,
           "preserved_task_ids": [
-            "task_b",
+            "task_a",
             "task_c"
           ],
           "purpose": "路线耗时增长时只调整直接通勤链，独立晚间任务保持。",
@@ -765,14 +765,14 @@
           "scheduled_task_count": 3,
           "task_intervals": {
             "task_a": {
-              "end_at": "2026-09-14T10:40:00+08:00",
+              "end_at": "2026-09-14T11:00:00+08:00",
               "location_id": "dorm",
-              "start_at": "2026-09-14T09:40:00+08:00"
+              "start_at": "2026-09-14T10:00:00+08:00"
             },
             "task_b": {
-              "end_at": "2026-09-14T12:20:00+08:00",
+              "end_at": "2026-09-14T12:40:00+08:00",
               "location_id": "library",
-              "start_at": "2026-09-14T11:20:00+08:00"
+              "start_at": "2026-09-14T11:40:00+08:00"
             },
             "task_c": {
               "end_at": "2026-09-14T19:00:00+08:00",
@@ -799,7 +799,7 @@
           "kind": "replan",
           "preserved_task_count": 2,
           "preserved_task_ids": [
-            "task_b",
+            "task_a",
             "task_c"
           ],
           "purpose": "新出现的通行高峰只调整直接通勤链，独立晚间任务保持。",
@@ -807,14 +807,14 @@
           "scheduled_task_count": 3,
           "task_intervals": {
             "task_a": {
-              "end_at": "2026-09-14T09:50:00+08:00",
+              "end_at": "2026-09-14T10:00:00+08:00",
               "location_id": "building_a",
-              "start_at": "2026-09-14T08:50:00+08:00"
+              "start_at": "2026-09-14T09:00:00+08:00"
             },
             "task_b": {
-              "end_at": "2026-09-14T11:00:00+08:00",
+              "end_at": "2026-09-14T11:10:00+08:00",
               "location_id": "building_b",
-              "start_at": "2026-09-14T10:30:00+08:00"
+              "start_at": "2026-09-14T10:40:00+08:00"
             },
             "task_c": {
               "end_at": "2026-09-14T19:00:00+08:00",
@@ -906,9 +906,9 @@
               "start_at": "2026-09-14T10:00:00+08:00"
             },
             "task_b": {
-              "end_at": "2026-09-14T13:50:00+08:00",
+              "end_at": "2026-09-14T16:10:00+08:00",
               "location_id": null,
-              "start_at": "2026-09-14T12:50:00+08:00"
+              "start_at": "2026-09-14T15:10:00+08:00"
             }
           },
           "total_displacement_minutes": 70,
@@ -981,7 +981,7 @@
         "hard_constraint_violation_count": 0,
         "preservation_rate": 0.7222222222222222,
         "preserved_task_count": 26,
-        "total_displacement_minutes": 1035,
+        "total_displacement_minutes": 1225,
         "unaffected_task_count": 22
       }
     },
@@ -1010,9 +1010,9 @@
           "scheduled_task_count": 2,
           "task_intervals": {
             "long_project": {
-              "end_at": "2026-09-14T11:40:00+08:00",
+              "end_at": "2026-09-14T16:30:00+08:00",
               "location_id": null,
-              "start_at": "2026-09-14T08:40:00+08:00"
+              "start_at": "2026-09-14T13:30:00+08:00"
             },
             "urgent_print": {
               "end_at": "2026-09-14T08:30:00+08:00",
@@ -1143,9 +1143,9 @@
           "scheduled_task_count": 1,
           "task_intervals": {
             "training": {
-              "end_at": "2026-09-14T19:30:00+08:00",
+              "end_at": "2026-09-14T20:15:00+08:00",
               "location_id": null,
-              "start_at": "2026-09-14T18:45:00+08:00"
+              "start_at": "2026-09-14T19:30:00+08:00"
             }
           },
           "total_displacement_minutes": 0,
@@ -1489,22 +1489,22 @@
               "start_at": "2026-09-14T10:00:00+08:00"
             },
             "task_a": {
+              "end_at": "2026-09-14T14:30:00+08:00",
+              "location_id": null,
+              "start_at": "2026-09-14T13:30:00+08:00"
+            },
+            "task_b": {
               "end_at": "2026-09-14T09:00:00+08:00",
               "location_id": null,
               "start_at": "2026-09-14T08:00:00+08:00"
             },
-            "task_b": {
-              "end_at": "2026-09-14T13:45:00+08:00",
-              "location_id": null,
-              "start_at": "2026-09-14T12:45:00+08:00"
-            },
             "task_c": {
-              "end_at": "2026-09-14T14:55:00+08:00",
+              "end_at": "2026-09-14T15:40:00+08:00",
               "location_id": null,
-              "start_at": "2026-09-14T13:55:00+08:00"
+              "start_at": "2026-09-14T14:40:00+08:00"
             }
           },
-          "total_displacement_minutes": 440,
+          "total_displacement_minutes": 770,
           "unaffected_task_count": 2
         },
         {
@@ -1531,9 +1531,9 @@
           "scheduled_task_count": 3,
           "task_intervals": {
             "library_task": {
-              "end_at": "2026-09-14T13:45:00+08:00",
+              "end_at": "2026-09-14T14:30:00+08:00",
               "location_id": "library",
-              "start_at": "2026-09-14T12:45:00+08:00"
+              "start_at": "2026-09-14T13:30:00+08:00"
             },
             "task_b": {
               "end_at": "2026-09-14T09:00:00+08:00",
@@ -1546,7 +1546,7 @@
               "start_at": "2026-09-14T09:10:00+08:00"
             }
           },
-          "total_displacement_minutes": 1115,
+          "total_displacement_minutes": 1160,
           "unaffected_task_count": 2
         },
         {
@@ -1628,9 +1628,9 @@
               "start_at": "2026-09-14T09:50:00+08:00"
             },
             "task_c": {
-              "end_at": "2026-09-14T12:00:00+08:00",
+              "end_at": "2026-09-14T14:30:00+08:00",
               "location_id": null,
-              "start_at": "2026-09-14T11:00:00+08:00"
+              "start_at": "2026-09-14T13:30:00+08:00"
             },
             "urgent": {
               "end_at": "2026-09-14T08:30:00+08:00",
@@ -1638,7 +1638,7 @@
               "start_at": "2026-09-14T08:00:00+08:00"
             }
           },
-          "total_displacement_minutes": 750,
+          "total_displacement_minutes": 600,
           "unaffected_task_count": 3
         },
         {
@@ -1670,9 +1670,9 @@
               "start_at": "2026-09-14T08:00:00+08:00"
             },
             "task_b": {
-              "end_at": "2026-09-14T15:00:00+08:00",
+              "end_at": "2026-09-14T15:30:00+08:00",
               "location_id": null,
-              "start_at": "2026-09-14T13:00:00+08:00"
+              "start_at": "2026-09-14T13:30:00+08:00"
             },
             "task_c": {
               "end_at": "2026-09-14T10:10:00+08:00",
@@ -1680,7 +1680,7 @@
               "start_at": "2026-09-14T09:10:00+08:00"
             }
           },
-          "total_displacement_minutes": 710,
+          "total_displacement_minutes": 680,
           "unaffected_task_count": 2
         },
         {
@@ -1748,14 +1748,14 @@
           "scheduled_task_count": 3,
           "task_intervals": {
             "task_a": {
-              "end_at": "2026-09-14T09:00:00+08:00",
+              "end_at": "2026-09-14T11:20:00+08:00",
               "location_id": "dorm",
-              "start_at": "2026-09-14T08:00:00+08:00"
+              "start_at": "2026-09-14T10:20:00+08:00"
             },
             "task_b": {
-              "end_at": "2026-09-14T11:20:00+08:00",
+              "end_at": "2026-09-14T09:00:00+08:00",
               "location_id": "library",
-              "start_at": "2026-09-14T10:20:00+08:00"
+              "start_at": "2026-09-14T08:00:00+08:00"
             },
             "task_c": {
               "end_at": "2026-09-14T10:10:00+08:00",
@@ -1763,7 +1763,7 @@
               "start_at": "2026-09-14T09:10:00+08:00"
             }
           },
-          "total_displacement_minutes": 710,
+          "total_displacement_minutes": 750,
           "unaffected_task_count": 1
         },
         {
@@ -1963,7 +1963,7 @@
         "hard_constraint_violation_count": 0,
         "preservation_rate": 0.027777777777777776,
         "preserved_task_count": 1,
-        "total_displacement_minutes": 9115,
+        "total_displacement_minutes": 9350,
         "unaffected_task_count": 22
       }
     },

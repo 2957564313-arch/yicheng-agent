@@ -277,6 +277,11 @@ def _execution_steps(
             status = "fallback"
         if key == "validate" and summary.get("error_count", 0):
             status = "failed"
+        if (
+            key == "plan"
+            and summary.get("scheduled", 0) < summary.get("requested", 0)
+        ):
+            status = "failed"
         if key == "understand":
             detail = f"识别 {summary.get('task_count', 0)} 项任务"
         elif key == "enrich":
@@ -992,12 +997,18 @@ async def execute_chat(
                 + habit_note
                 + "需要的话可以点下面的建议；这次不用也可以忽略。"
             )
-        current_plan_saved = bool(
-            not payload.preview_only
-            and plan
-            and plan.status == PlanStatus.VALID
-        )
-        if current_plan_saved and plan:
+        # The latest candidate is the working state of this conversation,
+        # including a partial day.  Saving only VALID plans made every
+        # unscheduled task disappear from the next turn: “move this study”
+        # then loaded no plan at all and rebuilt the day from that one phrase.
+        # Publication remains stricter below; an infeasible draft never
+        # becomes an agenda entry.
+        working_plan_saved = bool(not payload.preview_only and plan)
+        # A partial plan is still the current working state of the
+        # conversation.  It is saved so the next turn can complete or edit it;
+        # only publication to the agenda remains restricted to VALID plans.
+        current_plan_saved = working_plan_saved
+        if working_plan_saved and plan:
             persisted_parent_id = (
                 effective_old_plan_id
                 if effective_old_plan_id
@@ -1007,7 +1018,10 @@ async def execute_chat(
             container.plans.save(
                 plan,
                 parent_plan_id=persisted_parent_id,
-                agenda_published=payload.publish_to_agenda,
+                agenda_published=(
+                    payload.publish_to_agenda
+                    and plan.status == PlanStatus.VALID
+                ),
                 source_message_id=user_message_id,
             )
         assistant_message_id = None

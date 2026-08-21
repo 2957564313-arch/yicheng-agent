@@ -124,6 +124,10 @@ def make_respond_node(container: AppContainer):
             raw.get("severity") == IssueSeverity.ERROR.value for raw in warnings
         )
         if has_errors:
+            weather = [
+                WeatherContext.model_validate(raw)
+                for raw in state.get("weather_context", [])
+            ]
             draft, suggested_actions = _infeasible_answer(
                 plan=plan,
                 warnings=warnings,
@@ -134,6 +138,7 @@ def make_respond_node(container: AppContainer):
                     TravelEstimate.model_validate(raw)
                     for raw in state.get("travel_estimates", [])
                 ],
+                weather=weather,
             )
         else:
             draft = _success_answer(
@@ -156,6 +161,9 @@ def make_respond_node(container: AppContainer):
                 ),
             )
 
+        rollover_notice = state.get("rollover_notice")
+        if rollover_notice:
+            draft = f"{rollover_notice}\n\n{draft}"
         answer = draft
         used_llm = False
         if container.settings.llm_plan_render_enabled and container.llm.configured:
@@ -206,6 +214,9 @@ def make_respond_node(container: AppContainer):
                     used_llm = True
             except Exception:
                 pass
+
+        if rollover_notice and rollover_notice not in answer:
+            answer = f"{rollover_notice}\n\n{answer}"
 
         return {
             "final_answer": answer,
@@ -296,6 +307,17 @@ def _timetable_answer(summary: str) -> str:
     return "\n".join(lines)
 
 
+def _human_duration(minutes: int) -> str:
+    """Render durations the way a student reads them, not as raw totals."""
+
+    hours, remainder = divmod(max(0, minutes), 60)
+    if hours and remainder:
+        return f"{hours}小时{remainder}分钟"
+    if hours:
+        return f"{hours}小时"
+    return f"{remainder}分钟"
+
+
 def _success_answer(
     plan: Plan,
     warnings: list[dict],
@@ -369,9 +391,8 @@ def _success_answer(
         if opening_rules_available:
             verified_parts.append("场所开放时段")
         lines = [
-            "这几件事能排开。"
-            f"我把{'、'.join(verified_parts)}一起核对过了，"
-            "按这个节奏走，不需要卡着分钟一路赶。"
+            f"已把本次要求中的 {len(task_items)} 项安排全部放进时间轴，并核对了"
+            f"{'、'.join(verified_parts)}。"
         ]
         if any("自习" in title or "学习" in title for title in task_titles):
             if any("（第" in title and "段）" in title for title in task_titles):
@@ -383,10 +404,29 @@ def _success_answer(
                     "并让每一段都落在你指定的时段内。"
                 )
             else:
-                thought = (
-                    "安排思路：先留出一段完整、连续的学习时间，"
-                    "再按你说的先后顺序衔接其他事情，避免把专注时间切得"
-                    "太碎。"
+                has_explicit_sequence = any(
+                    task.depends_on for task in (tasks or [])
+                )
+                first_study = next(
+                    (
+                        item
+                        for item in task_items
+                        if "自习" in item.title or "学习" in item.title
+                    ),
+                    None,
+                )
+                begins_with_study = bool(
+                    first_study and task_items and first_study.id == task_items[0].id
+                )
+                thought = "安排思路："
+                if begins_with_study:
+                    thought += "先完成时间轴中的第一段学习，"
+                else:
+                    thought += "先处理时间轴中排在学习前的事项，"
+                thought += (
+                    "再按你明确提出的先后顺序衔接其余任务。"
+                    if has_explicit_sequence
+                    else "再按实际时间窗口衔接学习和其余任务。"
                 )
             if travel_items:
                 thought += "跨地点之间的通勤时间也已经按你选择的出行方式单独留出。"
@@ -395,14 +435,24 @@ def _success_answer(
             lines.append(
                 f"安排思路：把{task_names}按时间和地点顺序连起来，尽量减少来回折返。"
             )
-    if "后天" in query:
-        day_label = "后天"
-    elif "明天" in query:
-        day_label = "明天"
-    elif "今天" in query:
+    plan_day_offset = (plan.date - plan.created_at.date()).days
+    if plan_day_offset == 0:
         day_label = "今天"
+    elif plan_day_offset == 1:
+        day_label = "明天"
+    elif plan_day_offset == 2:
+        day_label = "后天"
     else:
         day_label = f"{plan.date.month}月{plan.date.day}日"
+    if (
+        plan.date == plan.created_at.date()
+        and plan.created_at.time() > time(8, 0)
+        and any(marker in query for marker in ("今天", "今日", "当天"))
+    ):
+        lines.append(
+            f"当前时间是 {plan.created_at:%H:%M}，已经过去的时段不会倒排；"
+            "下面只使用今天剩余的可用时间。"
+        )
     lines.append(
         f"{day_label}可以这样安排："
         if ordered_items
@@ -413,7 +463,7 @@ def _success_answer(
     ]
     if estimated_tasks:
         estimates = "、".join(
-            f"{task.title}暂按{task.duration_min}分钟"
+            f"{task.title}暂按{_human_duration(task.duration_min)}"
             for task in estimated_tasks
         )
         lines.append(
@@ -425,7 +475,7 @@ def _success_answer(
         duration_min = int((item.end_at - item.start_at).total_seconds() // 60)
         lines.append(
             f"• {item.start_at:%H:%M}—{item.end_at:%H:%M}　"
-            f"{label}（{duration_min}分钟）"
+            f"{label}（{_human_duration(duration_min)}）"
         )
     warning_messages = [
         Issue.model_validate(raw).message
@@ -825,6 +875,7 @@ def _infeasible_answer(
     now: datetime,
     query: str,
     routes: list[TravelEstimate],
+    weather: list[WeatherContext],
 ) -> tuple[str, list[dict]]:
     error_messages = [
         Issue.model_validate(raw).message
@@ -893,6 +944,38 @@ def _infeasible_answer(
         if task.notes
         and any(marker in task.notes for marker in ("营业时间", "开放时间", "硬约束"))
     ]
+    outdoor_unscheduled = [
+        task
+        for task in unscheduled
+        if "outdoor" in task.tags
+        or task.location_id in {"track", "east_track", "northwest_track"}
+        or any(
+            marker in task.title
+            for marker in (
+                "跑步",
+                "长跑",
+                "操场",
+                "骑行",
+                "足球",
+                "篮球",
+                "排球",
+                "网球",
+                "户外",
+            )
+        )
+    ]
+    precise_weather_risks = [
+        item
+        for item in weather
+        if item.date == plan.date
+        and item.risk_start_at is not None
+        and (
+            "雨" in (item.condition or "")
+            or "雪" in (item.condition or "")
+            or "风" in (item.condition or "")
+            or (item.rain_probability or 0) >= 0.5
+        )
+    ]
     if venue_errors:
         if len(unscheduled) == 1 and not plan.items:
             task = unscheduled[0]
@@ -953,6 +1036,7 @@ def _infeasible_answer(
             )
         return "\n".join(lines), []
 
+    weather_conflict = bool(outdoor_unscheduled and precise_weather_risks)
     lines = [
         f"你想把{all_task_names}都顾上，我明白。"
         "只是现在时间确实有点赶，我不想为了让日程看起来完整，"
@@ -982,6 +1066,33 @@ def _infeasible_answer(
             f"把原任务时长和约 {route_minutes} 分钟通勤都算进去，"
             f"至少需要 {required_minutes} 分钟"
             + (f"，还差约 {deficit} 分钟。" if deficit else "。")
+        )
+    elif weather_conflict:
+        risk = min(
+            precise_weather_risks,
+            key=lambda item: item.risk_start_at,
+        )
+        affected = "、".join(task.title for task in outdoor_unscheduled)
+        condition = risk.condition or "明显降雨风险"
+        condition_lower = condition.lower()
+        if "雨" not in condition and any(
+            marker in condition_lower
+            for marker in ("rain", "shower", "drizzle", "storm")
+        ):
+            condition = "降雨"
+        elif "雪" not in condition and "snow" in condition_lower:
+            condition = "降雪"
+        elif "风" not in condition and "wind" in condition_lower:
+            condition = "大风"
+        probability = (
+            f"（概率约 {risk.rain_probability:.0%}）"
+            if risk.rain_probability is not None
+            else ""
+        )
+        lines.append(
+            f"冲突原因：{risk.risk_start_at:%H:%M}后有{condition}{probability}，"
+            f"{affected}当前可用的室外时段与天气风险重叠。"
+            "我没有为了让检查变绿而把它硬塞进不安全的时间。"
         )
     elif error_messages:
         lines.append("冲突原因：" + "；".join(dict.fromkeys(error_messages)))
@@ -1018,6 +1129,10 @@ def _infeasible_answer(
             "所以我没有把这种“凑时间”的结果当成可行方案。"
         )
     if suggestions:
+        if weather_conflict:
+            for action in suggestions:
+                if action.get("label") == "改到下一天":
+                    action["description"] += " 到新日期后会重新核对实时天气。"
         lines.append("更合适的处理方式是：")
         lines.extend(
             f"{index}. {action['description']}"
@@ -1030,9 +1145,16 @@ def _infeasible_answer(
             )
             if len(suggestions) >= 2
             else (
-                "如果这个结束时间可以接受，点一下我就重新排好；"
-                f"如果 {deadline:%H:%M} 必须守住，请告诉我哪一项可以"
-                "顺延，"
+                (
+                    "如果这个结束时间可以接受，点一下我就重新排好；"
+                    f"如果 {deadline:%H:%M} 必须守住，请告诉我哪一项可以"
+                    "顺延，"
+                )
+                if deadline
+                else (
+                    "点一下就可以把待调整任务移到下一天；"
+                )
+                +
                 "我不会擅自牺牲你明确要求的任务时长。"
             )
         )
@@ -1129,15 +1251,20 @@ def _adjustment_suggestions(
     required_minutes: int,
     deficit: int,
 ) -> list[dict]:
-    if not deadline or deficit <= 0:
+    if not unscheduled and (not deadline or deficit <= 0):
         return []
+    replanning_deadline = deadline or datetime.combine(
+        plan_date,
+        time(23, 59),
+        planning_start.tzinfo,
+    )
     action_safety_min = 10
     adjustable = next(
         (task for task in tasks if "自习" in task.title or "学习" in task.title),
         max(tasks, key=lambda task: task.duration_min, default=None),
     )
     suggestions: list[dict] = []
-    if adjustable:
+    if adjustable and deadline and deficit > 0:
         shortened = max(
             5,
             ((adjustable.duration_min - deficit - action_safety_min) // 5) * 5,
@@ -1161,25 +1288,26 @@ def _adjustment_suggestions(
                     ),
                 }
             )
-    earliest_finish = _ceil_five_minutes(
-        planning_start + timedelta(minutes=required_minutes + action_safety_min)
-    )
-    suggestions.append(
-        {
-            "id": "option_2",
-            "label": "保留完整安排",
-            "description": (
-                "不牺牲" + "、".join(task.title for task in tasks) + "的完整性，"
-                f"把最晚结束时间放宽到约 {earliest_finish:%H:%M}。"
-            ),
-            "query": _standalone_query(
-                tasks=tasks,
-                planning_start=planning_start,
-                deadline=earliest_finish,
-                duration_overrides={},
-            ),
-        }
-    )
+    if deadline and deficit > 0:
+        earliest_finish = _ceil_five_minutes(
+            planning_start + timedelta(minutes=required_minutes + action_safety_min)
+        )
+        suggestions.append(
+            {
+                "id": "option_2",
+                "label": "保留完整安排",
+                "description": (
+                    "不牺牲" + "、".join(task.title for task in tasks) + "的完整性，"
+                    f"把最晚结束时间放宽到约 {earliest_finish:%H:%M}。"
+                ),
+                "query": _standalone_query(
+                    tasks=tasks,
+                    planning_start=planning_start,
+                    deadline=earliest_finish,
+                    duration_overrides={},
+                ),
+            }
+        )
     movable_unscheduled = [
         task
         for task in unscheduled
@@ -1223,12 +1351,13 @@ def _adjustment_suggestions(
                     "label": f"这次不排{omitted.title}",
                     "description": (
                         f"本次先不安排{omitted.title}，其余任务按"
-                        f"{deadline:%H:%M}前结束重新生成；不会静默删除。"
+                        f"{replanning_deadline:%H:%M}前结束重新生成；"
+                        "这是供你确认的选项，不会静默删除。"
                     ),
                     "query": _standalone_query(
                         tasks=remaining,
                         planning_start=planning_start,
-                        deadline=deadline,
+                        deadline=replanning_deadline,
                         duration_overrides={},
                     ),
                 }

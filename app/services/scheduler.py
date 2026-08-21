@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
@@ -27,12 +28,12 @@ class PlanningContext:
     now: datetime
     travel: dict[tuple[str, str], TravelEstimate] = field(default_factory=dict)
     congestion_windows: list[CongestionWindow] = field(default_factory=list)
-    opening_windows: dict[
-        str, list[tuple[datetime, datetime]]
-    ] = field(default_factory=dict)
-    task_windows: dict[
-        str, list[tuple[datetime, datetime]]
-    ] = field(default_factory=dict)
+    opening_windows: dict[str, list[tuple[datetime, datetime]]] = field(
+        default_factory=dict
+    )
+    task_windows: dict[str, list[tuple[datetime, datetime]]] = field(
+        default_factory=dict
+    )
     weather: list[WeatherContext] = field(default_factory=list)
     outdoor_location_ids: set[str] = field(default_factory=set)
     enforce_weather: bool = False
@@ -94,9 +95,7 @@ class PlanningContext:
         delays = [
             max(
                 window.minimum_extra_min,
-                math.ceil(
-                    base_duration * (window.duration_multiplier - 1)
-                ),
+                math.ceil(base_duration * (window.duration_multiplier - 1)),
             )
             for window in self.congestion_windows
             if departure_at < window.end_at and base_end > window.start_at
@@ -129,6 +128,17 @@ class _BeamState:
     task_items: list[PlanItem]
     unscheduled_task_ids: list[str]
     missing_route_pairs: set[tuple[str, str]]
+    unscheduled_cost: float = 0
+    # Loss against the duration the user asked for.  Coverage comes first,
+    # but once the same tasks fit we must keep their requested lengths.  This
+    # prevents an otherwise empty day from shortening a two-hour study block
+    # merely to save a few minutes of walking or finish a little earlier.
+    shortfall_minutes: int = 0
+    # Time between the first and last arrangement that is neither occupied by
+    # a task nor intentionally reserved for a meal.  A plan that leaves a
+    # two-hour hole in the middle of an otherwise free day is technically
+    # feasible but is not a good student schedule.
+    avoidable_idle_minutes: int = 0
     soft_cost: float = 0
     weather_breaches: int = 0
 
@@ -140,10 +150,13 @@ class Scheduler:
     # Priced so that any dry slot beats every wet one, while a day with no dry
     # slot left still produces a plan the student can act on.
     wet_slot_penalty = 5
-    # Reserved by default so an all-movable day still leaves time to eat.
+    # Default meals are flexible availability ranges: keep at least thirty
+    # minutes somewhere in each range instead of forcing everybody to eat at
+    # exactly 12:00/18:00. User-configured meal windows remain exact, hard
+    # constraints through ``preferences.meal_windows``.
     default_meal_windows = (
-        TimeWindow(start=time(12, 0), end=time(12, 45)),
-        TimeWindow(start=time(18, 0), end=time(18, 45)),
+        TimeWindow(start=time(11, 30), end=time(13, 30)),
+        TimeWindow(start=time(17, 30), end=time(19, 30)),
     )
     # Conservative campus crossing used when no route is known for a pair.
     # Larger than the real walk between any two points on the Xiasha campus,
@@ -189,17 +202,14 @@ class Scheduler:
         self._raise_if_fixed_overlap(task_items)
 
         movable = [
-            task
-            for task in tasks
-            if task.flexibility == TaskFlexibility.MOVABLE
+            task for task in tasks if task.flexibility == TaskFlexibility.MOVABLE
         ]
         movable = self._dependency_order(
             movable,
-            scheduled_ids={
-                item.task_id for item in task_items if item.task_id
-            },
+            scheduled_ids={item.task_id for item in task_items if item.task_id},
             now=context.now,
             timezone=context.timezone,
+            context=context,
         )
 
         old_starts = self._old_task_starts(context.old_plan)
@@ -217,14 +227,62 @@ class Scheduler:
                 context=context,
                 old_starts=old_starts,
             )
+            effective_preferences = preferences
+            # The default ten-minute breathing room is a comfort preference,
+            # not a reason to make an explicitly requested task disappear.
+            # Only retry without it when the normal search still leaves work
+            # out; meal windows, fixed events, venue hours and travel remain
+            # intact.  This makes a late but still mathematically feasible day
+            # compact instead of silently sacrificing the appointment.
+            if preferences.buffer_min and beam_result.unscheduled_task_ids:
+                compact_preferences = preferences.model_copy(update={"buffer_min": 0})
+                compact_result = self._solve_with_escalating_compression(
+                    initial_items=task_items,
+                    tasks=movable,
+                    preferences=compact_preferences,
+                    context=context,
+                    old_starts=old_starts,
+                )
+                if self._beam_score(
+                    compact_result,
+                    old_starts,
+                ) < self._beam_score(beam_result, old_starts):
+                    beam_result = compact_result
+                    effective_preferences = compact_preferences
+            # The built-in lunch/dinner windows are comfort defaults, not a
+            # licence to delete a requested task.  If a day is genuinely too
+            # tight even after removing optional buffers, prove whether all
+            # tasks fit without only the *soft* meal reservation.  Explicit
+            # user meal windows remain hard through ``preferences``.
+            if beam_result.unscheduled_task_ids and context.soft_meal_windows:
+                saved_soft_meals = context.soft_meal_windows
+                context.soft_meal_windows = []
+                try:
+                    tight_result = self._solve_with_escalating_compression(
+                        initial_items=task_items,
+                        tasks=movable,
+                        preferences=effective_preferences,
+                        context=context,
+                        old_starts=old_starts,
+                    )
+                finally:
+                    context.soft_meal_windows = saved_soft_meals
+                if self._beam_score(
+                    tight_result,
+                    old_starts,
+                ) < self._beam_score(beam_result, old_starts):
+                    beam_result = tight_result
             task_items = beam_result.task_items
             unscheduled = beam_result.unscheduled_task_ids
             missing_route_pairs = beam_result.missing_route_pairs
+        else:
+            effective_preferences = preferences
+        task_items = self._chronological_occurrence_labels(task_items, tasks)
         plan_items = self._insert_travel_items(
             task_items,
             context,
             missing_route_pairs,
-            preferences,
+            effective_preferences,
         )
         metrics = PlanMetrics(
             scheduled_task_count=len(task_items),
@@ -252,10 +310,77 @@ class Scheduler:
             missing_route_pairs=sorted(missing_route_pairs),
         )
 
+    @staticmethod
+    def _uses_soft_meal_window(
+        items: list[PlanItem],
+        context: PlanningContext,
+    ) -> bool:
+        """Whether movable work has consumed a default eating window.
+
+        A complete plan can still be a bad plan.  In particular, the normal
+        comfort buffer used to make the solver accept a five-task evening by
+        placing work across dinner, even though dropping the optional gaps
+        could preserve both the tasks and time to eat.  This predicate asks
+        the compact pass to compete whenever that happens.
+        """
+
+        for item in items:
+            if item.item_type != "task":
+                continue
+            for window in context.soft_meal_windows:
+                window_start = datetime.combine(
+                    context.target_date,
+                    window.start,
+                    context.timezone,
+                )
+                window_end = datetime.combine(
+                    context.target_date,
+                    window.end,
+                    context.timezone,
+                )
+                if item.start_at < window_end and item.end_at > window_start:
+                    return True
+        return False
+
+    @staticmethod
+    def _chronological_occurrence_labels(
+        items: list[PlanItem],
+        tasks: list[Task],
+    ) -> list[PlanItem]:
+        """Number repeated sittings in the order the student will do them.
+
+        Search deliberately places the most constrained occurrence first.
+        That implementation detail must not leak into the UI as a later
+        ``第二次`` appearing before ``第一次`` on the time line.
+        """
+
+        task_by_id = {task.id: task for task in tasks}
+        grouped: dict[str, list[PlanItem]] = {}
+        for item in items:
+            task = task_by_id.get(item.task_id or "")
+            if task is None:
+                continue
+            group = Scheduler._occurrence_group(task)
+            if group:
+                grouped.setdefault(group, []).append(item)
+
+        replacements: dict[str, PlanItem] = {}
+        for group_items in grouped.values():
+            ordered = sorted(group_items, key=lambda item: item.start_at)
+            base = re.sub(r"（第[一二三四五六七八九十\d]+次）$", "", ordered[0].title)
+            for index, item in enumerate(ordered, start=1):
+                replacements[item.id] = item.model_copy(
+                    update={"title": f"{base}（第{index}次）"}
+                )
+        return [replacements.get(item.id, item) for item in items]
+
     # Fractions of the way from a task's shortest acceptable length to its
     # ideal one.  The first pass asks for everything; later passes ask for
     # less, so a crowded day ends with shorter tasks rather than missing ones.
     compression_levels = (1.0, 0.6, 0.0)
+    complete_search_task_limit = 8
+    complete_search_node_limit = 6000
+    complete_search_candidates_per_task = 24
 
     def _solve_with_escalating_compression(
         self,
@@ -277,22 +402,270 @@ class Scheduler:
         """
 
         best: _BeamState | None = None
+        requested_duration = {task.id: task.duration_min for task in tasks}
         for level in self.compression_levels:
+            compressed_tasks = [self._compressed(task, level) for task in tasks]
             attempt = self._schedule_minimum_disruption(
                 initial_items=initial_items,
-                tasks=[self._compressed(task, level) for task in tasks],
+                tasks=compressed_tasks,
                 preferences=preferences,
                 context=context,
                 old_starts=old_starts,
             )
-            if best is None or len(attempt.unscheduled_task_ids) < len(
-                best.unscheduled_task_ids
+            # Beam search is fast, but it is still an approximation: its
+            # fixed processing order can consume the only useful gaps and
+            # prune the state that would have fitted every task.  When a
+            # small student-day plan is reported partial, prove that result
+            # with a bounded backtracking search before telling the user a
+            # task is impossible.  This is the correctness path of the
+            # online scheduler, not a provider fallback.
+            if (
+                (attempt.unscheduled_task_ids or attempt.weather_breaches)
+                and len(compressed_tasks) <= self.complete_search_task_limit
             ):
+                complete = self._search_complete_schedule(
+                    initial_items=initial_items,
+                    tasks=compressed_tasks,
+                    preferences=preferences,
+                    context=context,
+                    old_starts=old_starts,
+                )
+                if complete is not None:
+                    attempt = complete
+            attempt.shortfall_minutes = sum(
+                max(
+                    0,
+                    requested_duration.get(item.task_id or "", 0)
+                    - int((item.end_at - item.start_at).total_seconds() // 60),
+                )
+                for item in attempt.task_items
+                if item.item_type == "task" and item.task_id in requested_duration
+            )
+            # ``compressed_tasks`` carry the shortened duration as their own
+            # target, so candidate-level cost cannot see the gap to the
+            # user's original ideal duration.  Price that gap again at the
+            # completed-plan level.  Without this, a free day chose two
+            # one-hour study blocks over two requested two-hour blocks simply
+            # because the shorter timeline had less travel and delay cost.
+            attempt.soft_cost += 20.0 * attempt.shortfall_minutes
+            if best is None or self._beam_score(
+                attempt,
+                old_starts,
+            ) < self._beam_score(best, old_starts):
                 best = attempt
-            if not best.unscheduled_task_ids:
-                break
+            # Do not stop merely because the ideal-length pass managed to
+            # squeeze everything in.  It may have done so by consuming the
+            # meal window or pushing every flexible task to the end of the
+            # day.  The shorter passes are still scored against it and win
+            # only when the overall plan is genuinely better.
         assert best is not None
         return best
+
+    def _search_complete_schedule(
+        self,
+        *,
+        initial_items: list[PlanItem],
+        tasks: list[Task],
+        preferences: UserPreferences,
+        context: PlanningContext,
+        old_starts: dict[str, datetime],
+    ) -> _BeamState | None:
+        """Find a complete placement for a small plan or return ``None``.
+
+        The next task is selected by minimum remaining values (fewest legal
+        slots), so a two-hour evening appointment or a closing parcel station
+        is considered before a study block that can use most of the day.  A
+        depth-first search then backtracks when a locally attractive early
+        slot blocks a later request.  The node budget keeps latency bounded;
+        larger days continue to use the beam solver.
+        """
+
+        known_ids = {task.id for task in tasks} | {
+            item.task_id for item in initial_items if item.task_id
+        }
+        nodes = 0
+        best_complete: _BeamState | None = None
+
+        def candidate_rank(task: Task, candidate: _Candidate) -> tuple:
+            has_dependents = any(task.id in other.depends_on for other in tasks)
+            return (
+                self._candidate_soft_cost(
+                    task=task,
+                    start_at=candidate.start_at,
+                    travel_minutes=candidate.travel_minutes,
+                    preference_penalty=candidate.preference_penalty,
+                    shortfall_minutes=candidate.shortfall_minutes,
+                    old_start=old_starts.get(task.id),
+                    has_dependents=has_dependents,
+                    context=context,
+                ),
+                candidate.start_at,
+                candidate.end_at,
+            )
+
+        def visit(
+            scheduled: list[PlanItem],
+            remaining: tuple[Task, ...],
+            missing_pairs: set[tuple[str, str]],
+            soft_cost: float,
+            weather_breaches: int,
+            shortfall_minutes: int,
+        ) -> None:
+            nonlocal nodes, best_complete
+            if not remaining:
+                result = _BeamState(
+                    task_items=sorted(
+                        scheduled,
+                        key=lambda item: item.start_at,
+                    ),
+                    unscheduled_task_ids=[],
+                    missing_route_pairs=missing_pairs,
+                    avoidable_idle_minutes=self._avoidable_idle_minutes(
+                        scheduled,
+                        context,
+                    ),
+                    soft_cost=soft_cost,
+                    weather_breaches=weather_breaches,
+                    shortfall_minutes=shortfall_minutes,
+                )
+                if best_complete is None or self._beam_score(
+                    result,
+                    old_starts,
+                ) < self._beam_score(best_complete, old_starts):
+                    best_complete = result
+                return
+            if nodes >= self.complete_search_node_limit:
+                return
+
+            completed = {item.task_id for item in scheduled if item.task_id}
+            eligible = [
+                task
+                for task in remaining
+                if {
+                    dependency
+                    for dependency in task.depends_on
+                    if dependency in known_ids
+                }
+                <= completed
+            ]
+            if not eligible:
+                return
+
+            choices: list[tuple[int, Task, list[_Candidate], set[tuple[str, str]]]] = []
+            for task in eligible:
+                task_missing = set(missing_pairs)
+                candidates = list(
+                    self._candidate_intervals(
+                        task=task,
+                        scheduled=scheduled,
+                        preferences=preferences,
+                        context=context,
+                        missing_route_pairs=task_missing,
+                    )
+                )
+                # A duplicate interval can appear through more than one
+                # flexible-duration path.  Keep the cheaper representation.
+                unique: dict[tuple[datetime, datetime], _Candidate] = {}
+                for candidate in candidates:
+                    key = (candidate.start_at, candidate.end_at)
+                    current = unique.get(key)
+                    if current is None or candidate_rank(
+                        task, candidate
+                    ) < candidate_rank(task, current):
+                        unique[key] = candidate
+                ranked_all = sorted(
+                    unique.values(),
+                    key=lambda candidate: candidate_rank(task, candidate),
+                )
+                # Five-minute enumeration can create hundreds of equivalent
+                # starts.  Feeding all of them into every recursive level made
+                # one ordinary five-task day take more than a minute.  Keep a
+                # diverse set instead: the cheapest choices for every allowed
+                # duration plus the earliest/latest boundary of that duration.
+                # Those boundaries are the placements that make room for the
+                # neighbours; the middle copies add latency, not completeness.
+                ranked = self._best_per_length(
+                    ranked_all,
+                    key=lambda candidate: candidate_rank(task, candidate),
+                    limit=self.complete_search_candidates_per_task,
+                )
+                by_shortfall: dict[int, list[_Candidate]] = {}
+                for candidate in ranked_all:
+                    by_shortfall.setdefault(
+                        candidate.shortfall_minutes,
+                        [],
+                    ).append(candidate)
+                boundary_candidates = [
+                    boundary
+                    for group in by_shortfall.values()
+                    for boundary in (
+                        min(group, key=lambda value: value.start_at),
+                        max(group, key=lambda value: value.start_at),
+                    )
+                ]
+                ranked_by_interval = {
+                    (candidate.start_at, candidate.end_at): candidate
+                    for candidate in [*ranked, *boundary_candidates]
+                }
+                ranked = sorted(
+                    ranked_by_interval.values(),
+                    key=lambda candidate: candidate_rank(task, candidate),
+                )
+                if not ranked:
+                    return
+                choices.append((len(ranked), task, ranked, task_missing))
+
+            _, task, candidates, task_missing = min(
+                choices,
+                key=lambda entry: (
+                    entry[0],
+                    entry[1].latest_end
+                    or datetime.max.replace(tzinfo=context.timezone),
+                    -entry[1].importance,
+                    entry[1].id,
+                ),
+            )
+            next_remaining = tuple(other for other in remaining if other.id != task.id)
+            has_dependents = any(task.id in other.depends_on for other in tasks)
+            for candidate in candidates:
+                nodes += 1
+                if nodes > self.complete_search_node_limit:
+                    break
+                item = self._task_item(
+                    task,
+                    candidate.start_at,
+                    candidate.end_at,
+                    reason=("按全局完整性回溯排程，保留全部明确任务"),
+                )
+                visit(
+                    [*scheduled, item],
+                    next_remaining,
+                    set(task_missing),
+                    soft_cost
+                    + self._candidate_soft_cost(
+                        task=task,
+                        start_at=candidate.start_at,
+                        travel_minutes=candidate.travel_minutes,
+                        preference_penalty=candidate.preference_penalty,
+                        shortfall_minutes=candidate.shortfall_minutes,
+                        old_start=old_starts.get(task.id),
+                        has_dependents=has_dependents,
+                        context=context,
+                    ),
+                    weather_breaches + int(candidate.breaks_weather),
+                    shortfall_minutes + candidate.shortfall_minutes,
+                )
+            return
+
+        visit(
+            list(initial_items),
+            tuple(tasks),
+            set(),
+            0.0,
+            0,
+            0,
+        )
+        return best_complete
 
     @staticmethod
     def _compressed(task: Task, level: float) -> Task:
@@ -329,13 +702,15 @@ class Scheduler:
                 task_items=list(initial_items),
                 unscheduled_task_ids=[],
                 missing_route_pairs=set(),
+                avoidable_idle_minutes=self._avoidable_idle_minutes(
+                    initial_items,
+                    context,
+                ),
             )
         ]
         for task in tasks:
             expanded: list[_BeamState] = []
-            has_dependents = any(
-                task.id in candidate.depends_on for candidate in tasks
-            )
+            has_dependents = any(task.id in candidate.depends_on for candidate in tasks)
             for state in beam:
                 candidate_missing_pairs = set(state.missing_route_pairs)
                 candidates = list(
@@ -347,6 +722,7 @@ class Scheduler:
                         missing_route_pairs=candidate_missing_pairs,
                     )
                 )
+
                 def rank_key(
                     candidate: _Candidate,
                     task: Task = task,
@@ -371,20 +747,29 @@ class Scheduler:
                     key=rank_key,
                     limit=self.replan_candidates_per_task,
                 )
-                if not ranked:
-                    expanded.append(
-                        _BeamState(
-                            task_items=list(state.task_items),
-                            unscheduled_task_ids=[
-                                *state.unscheduled_task_ids,
-                                task.id,
-                            ],
-                            missing_route_pairs=candidate_missing_pairs,
-                            soft_cost=state.soft_cost,
-                            weather_breaches=state.weather_breaches,
-                        )
+                # Skipping must remain a branch even when this task has a
+                # feasible slot.  Otherwise the first flexible study block
+                # eagerly consumes the only evening slot and a later explicit
+                # two-hour adviser meeting has no state left in which it can
+                # be scheduled.  The weighted penalty below decides which
+                # wish to shorten/defer if all of them genuinely do not fit.
+                expanded.append(
+                    _BeamState(
+                        task_items=list(state.task_items),
+                        unscheduled_task_ids=[
+                            *state.unscheduled_task_ids,
+                            task.id,
+                        ],
+                        missing_route_pairs=candidate_missing_pairs,
+                        unscheduled_cost=(
+                            state.unscheduled_cost + self._unscheduled_penalty(task)
+                        ),
+                        shortfall_minutes=state.shortfall_minutes,
+                        avoidable_idle_minutes=state.avoidable_idle_minutes,
+                        soft_cost=state.soft_cost,
+                        weather_breaches=state.weather_breaches,
                     )
-                    continue
+                )
 
                 for candidate in ranked:
                     item = self._task_item(
@@ -392,11 +777,9 @@ class Scheduler:
                         candidate.start_at,
                         candidate.end_at,
                         reason=(
-                            "按全局最小扰动目标保留原计划，并同时满足"
-                            "通勤和可用时间窗"
+                            "按全局最小扰动目标保留原计划，并同时满足通勤和可用时间窗"
                             if old_starts
-                            else "按全局目标安排：先尽量排下更多任务，"
-                            "再优化通勤与偏好"
+                            else "按全局目标安排：先尽量排下更多任务，再优化通勤与偏好"
                         ),
                     )
                     child_items = sorted(
@@ -406,11 +789,15 @@ class Scheduler:
                     expanded.append(
                         _BeamState(
                             task_items=child_items,
-                            unscheduled_task_ids=list(
-                                state.unscheduled_task_ids
+                            unscheduled_task_ids=list(state.unscheduled_task_ids),
+                            missing_route_pairs=set(candidate_missing_pairs),
+                            unscheduled_cost=state.unscheduled_cost,
+                            shortfall_minutes=(
+                                state.shortfall_minutes + candidate.shortfall_minutes
                             ),
-                            missing_route_pairs=set(
-                                candidate_missing_pairs
+                            avoidable_idle_minutes=self._avoidable_idle_minutes(
+                                child_items,
+                                context,
                             ),
                             soft_cost=(
                                 state.soft_cost
@@ -418,20 +805,15 @@ class Scheduler:
                                     task=task,
                                     start_at=candidate.start_at,
                                     travel_minutes=candidate.travel_minutes,
-                                    preference_penalty=(
-                                        candidate.preference_penalty
-                                    ),
-                                    shortfall_minutes=(
-                                        candidate.shortfall_minutes
-                                    ),
+                                    preference_penalty=(candidate.preference_penalty),
+                                    shortfall_minutes=(candidate.shortfall_minutes),
                                     old_start=old_starts.get(task.id),
                                     has_dependents=has_dependents,
                                     context=context,
                                 )
                             ),
                             weather_breaches=(
-                                state.weather_breaches
-                                + int(candidate.breaks_weather)
+                                state.weather_breaches + int(candidate.breaks_weather)
                             ),
                         )
                     )
@@ -469,14 +851,7 @@ class Scheduler:
         old_starts: dict[str, datetime],
     ) -> tuple:
         shifts = [
-            int(
-                abs(
-                    (
-                        item.start_at - old_starts[item.task_id]
-                    ).total_seconds()
-                )
-                // 60
-            )
+            int(abs((item.start_at - old_starts[item.task_id]).total_seconds()) // 60)
             for item in state.task_items
             if item.task_id in old_starts
         ]
@@ -486,11 +861,12 @@ class Scheduler:
         # travel. Weather sits above disruption deliberately — ranking it
         # below meant a replan left a run in the rain because moving it
         # counted as more expensive than getting wet.
-        return (
+        coverage = (
+            round(state.unscheduled_cost, 6),
             len(state.unscheduled_task_ids),
-            state.weather_breaches,
-            sum(shift > 0 for shift in shifts),
-            sum(shifts),
+        )
+        safety = (state.weather_breaches,)
+        tie_breaker = (
             round(state.soft_cost, 6),
             tuple(
                 (item.task_id or "", item.start_at.isoformat())
@@ -498,6 +874,119 @@ class Scheduler:
                 if item.item_type == "task"
             ),
         )
+        if old_starts:
+            # During an edit, unchanged tasks are structural promises.  Keep
+            # them before optimising comfort, while still allowing a named
+            # task to move when the new requirement makes that necessary.
+            return (
+                *coverage,
+                *safety,
+                sum(shift > 0 for shift in shifts),
+                sum(shifts),
+                state.shortfall_minutes,
+                state.avoidable_idle_minutes,
+                *tie_breaker,
+            )
+        # On a new day, full requested duration and the user's temporal intent
+        # outrank compactness.  Putting every task back-to-back at night has
+        # little internal idle time, but is still much worse than using a free
+        # morning/afternoon.  Per-candidate soft cost contains scheduling delay,
+        # travel and stated-period preference; compare it before the final
+        # compactness tie-break so saving a few walking minutes cannot abandon
+        # an otherwise useful daytime window.
+        return (
+            *coverage,
+            *safety,
+            state.shortfall_minutes,
+            round(state.soft_cost, 6),
+            state.avoidable_idle_minutes,
+            tie_breaker[1],
+        )
+
+    @staticmethod
+    def _avoidable_idle_minutes(
+        items: list[PlanItem],
+        context: PlanningContext,
+    ) -> int:
+        """Return idle time inside the active schedule, excluding meals.
+
+        This is deliberately a plan-level quality measure.  Per-task costs
+        cannot distinguish a compact, useful day from the same tasks scattered
+        across large empty gaps.  Fixed commitments participate as anchors, so
+        movable work is naturally pulled into the usable spaces around class.
+        """
+
+        ordered = sorted(
+            (item for item in items if item.item_type == "task"),
+            key=lambda item: item.start_at,
+        )
+        if len(ordered) < 2:
+            return 0
+
+        idle = 0
+        for previous, current in pairwise(ordered):
+            gap_start = previous.end_at
+            gap_end = current.start_at
+            if gap_end <= gap_start:
+                continue
+            gap_minutes = int((gap_end - gap_start).total_seconds() // 60)
+            reserved = 0
+            for window in context.soft_meal_windows:
+                window_start = datetime.combine(
+                    context.target_date,
+                    window.start,
+                    context.timezone,
+                )
+                window_end = datetime.combine(
+                    context.target_date,
+                    window.end,
+                    context.timezone,
+                )
+                overlap_start = max(gap_start, window_start)
+                overlap_end = min(gap_end, window_end)
+                if overlap_end > overlap_start:
+                    reserved += int((overlap_end - overlap_start).total_seconds() // 60)
+            idle += max(0, gap_minutes - reserved)
+        return idle
+
+    @staticmethod
+    def _unscheduled_penalty(task: Task) -> float:
+        """Cost of omitting one request from the produced plan.
+
+        Coverage is not a useful binary metric when the day is overfull: five
+        wishes may not all fit, and dropping an explicit evening appointment
+        is much worse than deferring one default-length study sitting.  This
+        score encodes that product truth without asking the language model to
+        rewrite or silently delete tasks.
+        """
+
+        penalty = 80.0 + task.importance * 25.0
+        if task.duration_source == "explicit":
+            penalty += 220.0
+        if task.constraint_source == "user":
+            penalty += 140.0
+        if task.deadline is not None:
+            penalty += 120.0
+        if any(
+            tag in task.tags
+            for tag in (
+                "meeting",
+                "courier",
+                "service_hours",
+                "hard_constraint",
+            )
+        ):
+            penalty += 100.0
+        # A system-default study duration is deliberately elastic.  Omitting
+        # one sitting is still visible to the user, but it must not displace a
+        # named appointment or time-limited errand.
+        if (
+            task.duration_source == "default"
+            and task.min_duration_min is not None
+            and task.min_duration_min < task.duration_min
+        ):
+            penalty -= 90.0
+        return max(20.0, penalty)
 
     @staticmethod
     def _candidate_soft_cost(
@@ -512,9 +1001,7 @@ class Scheduler:
         shortfall_minutes: int = 0,
     ) -> float:
         shift_minutes = (
-            int(abs((start_at - old_start).total_seconds()) // 60)
-            if old_start
-            else 0
+            int(abs((start_at - old_start).total_seconds()) // 60) if old_start else 0
         )
         # Every movable task pays for being pushed back, not just the ones
         # that block another task.  Without this a task drifts to whatever
@@ -549,13 +1036,44 @@ class Scheduler:
         elif context.objective_bias == "reverse_order":
             # Turn "sooner is better" around instead of chaining the tasks up.
             scheduling_delay_minutes = -scheduling_delay_minutes
-        return bias_penalty + candidate_cost(
-            travel_minutes=travel_minutes,
-            preference_penalty=preference_penalty,
-            shift_minutes=shift_minutes,
-            scheduling_delay_minutes=scheduling_delay_minutes,
-            has_dependents=has_dependents,
-            shortfall_minutes=shortfall_minutes,
+        activity_delay_penalty = 0.0
+        activity_shortfall_penalty = 0.0
+        title_is_study = any(
+            keyword in task.title for keyword in ("自习", "学习", "复习")
+        )
+        is_study = "study" in task.tags or title_is_study
+        if (
+            is_study
+            and task.preferred_period != "evening"
+        ):
+            # A free morning or afternoon is worth more than saving a few
+            # walking minutes and moving self-study to late evening. Explicit
+            # evening requests are excluded, so the user's current wording
+            # continues to outrank this default quality preference.
+            # For study, using the earlier useful daytime window outranks a
+            # marginally shorter walk later in the day.  A minute-for-minute
+            # delay weight is intentional: the generic route cost is much
+            # smaller and must not push a free morning into late afternoon.
+            activity_delay_penalty = 6.0 * scheduling_delay_minutes
+            if start_at.time() >= time(18, 0):
+                # Crossing into an unrequested evening is a large quality
+                # regression. A shorter useful daytime sitting should win.
+                activity_delay_penalty += 10_000.0
+            # On a genuinely free day, keep the full ideal duration instead
+            # of shrinking every elastic sitting merely to compact the plan.
+            activity_shortfall_penalty = 20.0 * shortfall_minutes
+        return (
+            bias_penalty
+            + activity_delay_penalty
+            + activity_shortfall_penalty
+            + candidate_cost(
+                travel_minutes=travel_minutes,
+                preference_penalty=preference_penalty,
+                shift_minutes=shift_minutes,
+                scheduling_delay_minutes=scheduling_delay_minutes,
+                has_dependents=has_dependents,
+                shortfall_minutes=shortfall_minutes,
+            )
         )
 
     @staticmethod
@@ -565,14 +1083,49 @@ class Scheduler:
         scheduled_ids: set[str],
         now: datetime,
         timezone: ZoneInfo,
+        context: PlanningContext,
     ) -> list[Task]:
-        """Honor explicit task order before applying urgency scoring."""
+        """Honor dependencies, then protect the scarcest real-world windows.
+
+        A generic priority score is not enough for a campus day.  A study
+        block can usually move throughout the day, while a running track,
+        parcel station or explicit evening appointment has a closing edge.
+        Scheduling the unconstrained block first can consume the only slot of
+        the constrained task even though a complete plan exists.
+        """
         remaining = list(tasks)
         ordered: list[Task] = []
         known_ids = scheduled_ids | {task.id for task in tasks}
 
+        day_end = datetime.combine(
+            context.target_date + timedelta(days=1),
+            time.min,
+            timezone,
+        )
+
+        def effective_latest(task: Task) -> datetime:
+            boundaries = [
+                boundary for boundary in (task.latest_end, task.deadline) if boundary
+            ]
+            preferred = Scheduler._preferred_window(
+                task.preferred_period,
+                context.target_date,
+                timezone,
+            )
+            if preferred and task.constraint_source == "user":
+                boundaries.append(preferred[1])
+            activity_windows = context.task_windows.get(task.id, [])
+            if activity_windows:
+                boundaries.append(max(end for _, end in activity_windows))
+            if task.location_id:
+                venue_windows = context.opening_windows.get(task.location_id, [])
+                if venue_windows:
+                    boundaries.append(max(end for _, end in venue_windows))
+            return min(boundaries, default=day_end)
+
         def priority_key(task: Task):
             return (
+                effective_latest(task),
                 -task_priority(task, now),
                 task.deadline or datetime.max.replace(tzinfo=timezone),
                 task.id,
@@ -608,9 +1161,7 @@ class Scheduler:
 
         by_length: dict[int, list] = {}
         for candidate in candidates:
-            by_length.setdefault(candidate.shortfall_minutes, []).append(
-                candidate
-            )
+            by_length.setdefault(candidate.shortfall_minutes, []).append(candidate)
         if not by_length:
             return []
         share = max(1, limit // len(by_length))
@@ -684,8 +1235,7 @@ class Scheduler:
         # enforcing them as hard windows deleted tasks that had a perfectly good
         # slot an hour later, which is how “three sittings” became “two”.
         soft_period_preference = (
-            task.constraint_source != "user"
-            or "memory_period_preference" in task.tags
+            task.constraint_source != "user" or "memory_period_preference" in task.tags
         )
         if period_window and not soft_period_preference:
             search_start = max(search_start, period_window[0])
@@ -752,15 +1302,39 @@ class Scheduler:
                 cursor += timedelta(minutes=5)
                 continue
 
-            meal_penalty = int(
-                self._overlaps_windows(
-                    task,
-                    cursor,
-                    end_at,
-                    context.soft_meal_windows,
-                    context,
-                )
+            # The default lunch/dinner windows are not timeline events, but
+            # the student still needs a usable break.  A mere soft score is
+            # insufficient: the first complete packing found by the exact
+            # search used to occupy 30 of a 45 minute dinner window and then
+            # report the plan as fully valid.  Protect at least 30 minutes of
+            # the still-available window whenever the existing fixed plan has
+            # not already made that impossible.  Explicit meal tasks remain
+            # allowed inside the window.
+            if self._would_consume_required_meal_break(
+                task,
+                cursor,
+                end_at,
+                scheduled,
+                context,
+            ):
+                cursor += timedelta(minutes=5)
+                continue
+
+            # Default meal windows are soft because a genuinely immovable
+            # appointment may have to cross them.  Price the *actual minutes*
+            # consumed, though: the previous boolean cost treated a five-
+            # minute edge overlap exactly like losing the whole dinner break,
+            # so the first complete packing could leave only fifteen minutes
+            # to eat while claiming the day was comfortable.
+            meal_penalty = self._window_overlap_minutes(
+                task,
+                cursor,
+                end_at,
+                context.soft_meal_windows,
+                context,
             )
+            if self._matches_old_interval(task, cursor, end_at, context):
+                meal_penalty = 0
 
             previous, following = self._neighbors(cursor, end_at, scheduled)
             if previous is False or following is False:
@@ -772,8 +1346,7 @@ class Scheduler:
                 and context.initial_departure_at
                 and cursor >= context.initial_departure_at
                 and (
-                    previous is None
-                    or previous.end_at <= context.initial_departure_at
+                    previous is None or previous.end_at <= context.initial_departure_at
                 )
             )
             before_origin_id = (
@@ -815,15 +1388,12 @@ class Scheduler:
                 cursor += timedelta(minutes=5)
                 continue
             if previous and (
-                previous.end_at
-                + timedelta(minutes=before_travel + buffer_min)
-                > cursor
+                previous.end_at + timedelta(minutes=before_travel + buffer_min) > cursor
             ):
                 cursor += timedelta(minutes=5)
                 continue
             if following and (
-                end_at
-                + timedelta(minutes=after_travel + buffer_min)
+                end_at + timedelta(minutes=after_travel + buffer_min)
                 > following.start_at
             ):
                 cursor += timedelta(minutes=5)
@@ -841,17 +1411,13 @@ class Scheduler:
                 continue
 
             congestion_penalty = int(
-                preferences.avoid_congestion
-                and (before_delay > 0 or after_delay > 0)
+                preferences.avoid_congestion and (before_delay > 0 or after_delay > 0)
             )
             period_penalty = int(
                 bool(
                     soft_period_preference
                     and period_window
-                    and not (
-                        period_window[0] <= cursor
-                        and end_at <= period_window[1]
-                    )
+                    and not (period_window[0] <= cursor and end_at <= period_window[1])
                 )
             )
             yield _Candidate(
@@ -859,10 +1425,7 @@ class Scheduler:
                 end_at=end_at,
                 travel_minutes=before_travel + after_travel,
                 preference_penalty=(
-                    congestion_penalty
-                    + period_penalty
-                    + meal_penalty
-                    + weather_penalty
+                    congestion_penalty + period_penalty + meal_penalty + weather_penalty
                 ),
                 shortfall_minutes=shortfall,
                 breaks_weather=bool(weather_penalty),
@@ -894,10 +1457,7 @@ class Scheduler:
         context: PlanningContext,
     ) -> bool:
         text = f"{task.title} {' '.join(task.tags)}".lower()
-        if any(
-            marker in text
-            for marker in ("吃饭", "用餐", "午餐", "晚餐", "meal")
-        ):
+        if any(marker in text for marker in ("吃饭", "用餐", "午餐", "晚餐", "meal")):
             return False
         for window in windows:
             window_start = datetime.combine(
@@ -915,6 +1475,134 @@ class Scheduler:
         return False
 
     @staticmethod
+    def _window_overlap_minutes(
+        task: Task,
+        start_at: datetime,
+        end_at: datetime,
+        windows: list[TimeWindow],
+        context: PlanningContext,
+    ) -> int:
+        """Return how many protected meal minutes a task consumes."""
+
+        text = f"{task.title} {' '.join(task.tags)}".lower()
+        if any(marker in text for marker in ("吃饭", "用餐", "午餐", "晚餐", "meal")):
+            return 0
+        overlap = 0
+        for window in windows:
+            window_start = datetime.combine(
+                context.target_date,
+                window.start,
+                context.timezone,
+            )
+            window_end = datetime.combine(
+                context.target_date,
+                window.end,
+                context.timezone,
+            )
+            overlap_start = max(start_at, window_start)
+            overlap_end = min(end_at, window_end)
+            if overlap_start < overlap_end:
+                overlap += int((overlap_end - overlap_start).total_seconds() // 60)
+        return overlap
+
+    @staticmethod
+    def _would_consume_required_meal_break(
+        task: Task,
+        start_at: datetime,
+        end_at: datetime,
+        scheduled: list[PlanItem],
+        context: PlanningContext,
+    ) -> bool:
+        """Keep a real meal break without displaying a fake meal event.
+
+        Only the part of a meal window that has not passed can be protected.
+        If locked courses already consume more than the preferred allowance,
+        movable work may not make the situation worse, but the solver is not
+        allowed to reject the whole day for something it cannot change.
+        """
+
+        text = f"{task.title} {' '.join(task.tags)}".lower()
+        if any(marker in text for marker in ("吃饭", "用餐", "午餐", "晚餐", "meal")):
+            return False
+
+        # The built-in meal window is a default comfort policy, not authority
+        # to rewrite an existing plan.  If this exact task was already at this
+        # time, keep it during an unrelated replan.  A user-supplied hard meal
+        # window is checked earlier by ``_overlaps_meal_window`` and still
+        # wins.  Without this exemption every edit moved an independent 18:00
+        # task to 18:45, even when the student changed something at noon.
+        if Scheduler._matches_old_interval(
+            task,
+            start_at,
+            end_at,
+            context,
+        ):
+            return False
+
+        for window in context.soft_meal_windows:
+            full_start = datetime.combine(
+                context.target_date,
+                window.start,
+                context.timezone,
+            )
+            full_end = datetime.combine(
+                context.target_date,
+                window.end,
+                context.timezone,
+            )
+            available_start = max(full_start, context.now)
+            if available_start >= full_end:
+                continue
+            remaining_minutes = int((full_end - available_start).total_seconds() // 60)
+            required_free = min(30, remaining_minutes)
+            maximum_occupied = remaining_minutes - required_free
+
+            def overlap_minutes(
+                item_start: datetime,
+                item_end: datetime,
+                window_start: datetime = available_start,
+                window_end: datetime = full_end,
+            ) -> int:
+                overlap_start = max(item_start, window_start)
+                overlap_end = min(item_end, window_end)
+                if overlap_start >= overlap_end:
+                    return 0
+                return int((overlap_end - overlap_start).total_seconds() // 60)
+
+            occupied_before = sum(
+                overlap_minutes(item.start_at, item.end_at)
+                for item in scheduled
+                if item.item_type == "task"
+            )
+            occupied_after = occupied_before + overlap_minutes(start_at, end_at)
+            permitted = max(maximum_occupied, occupied_before)
+            if occupied_after > permitted:
+                return True
+        return False
+
+    @staticmethod
+    def _matches_old_interval(
+        task: Task,
+        start_at: datetime,
+        end_at: datetime,
+        context: PlanningContext,
+    ) -> bool:
+        """Whether this candidate exactly preserves a published task slot.
+
+        Soft defaults may guide a new plan, but an unrelated edit must not
+        move accepted work merely to improve a default meal suggestion.
+        Explicit user meal windows are checked separately as hard constraints.
+        """
+
+        return context.old_plan is not None and any(
+            item.item_type == "task"
+            and item.task_id == task.id
+            and item.start_at == start_at
+            and item.end_at == end_at
+            for item in context.old_plan.items
+        )
+
+    @staticmethod
     def _violates_weather(
         task: Task,
         start_at: datetime,
@@ -924,8 +1612,7 @@ class Scheduler:
         if not context.enforce_weather:
             return False
         is_outdoor = (
-            "outdoor" in task.tags
-            or task.location_id in context.outdoor_location_ids
+            "outdoor" in task.tags or task.location_id in context.outdoor_location_ids
         )
         if not is_outdoor:
             return False
@@ -993,9 +1680,7 @@ class Scheduler:
         context: PlanningContext,
     ) -> bool:
         venue_windows = (
-            context.opening_windows.get(location_id)
-            if location_id
-            else None
+            context.opening_windows.get(location_id) if location_id else None
         )
         activity_windows = context.task_windows.get(task_id)
         for windows in (venue_windows, activity_windows):
@@ -1044,11 +1729,7 @@ class Scheduler:
     def _ceil_five_minutes(value: datetime) -> datetime:
         value = value.replace(second=0, microsecond=0)
         remainder = value.minute % 5
-        return (
-            value
-            if remainder == 0
-            else value + timedelta(minutes=5 - remainder)
-        )
+        return value if remainder == 0 else value + timedelta(minutes=5 - remainder)
 
     @staticmethod
     def _occurrence_group(task: Task) -> str | None:
@@ -1116,8 +1797,7 @@ class Scheduler:
         return (
             Scheduler.split_segment_gap_min
             if any(
-                dependency.startswith(sibling_prefix)
-                for dependency in task.depends_on
+                dependency.startswith(sibling_prefix) for dependency in task.depends_on
             )
             else 0
         )
@@ -1127,11 +1807,7 @@ class Scheduler:
         task: Task,
         scheduled: list[PlanItem],
     ) -> datetime | None:
-        ends = [
-            item.end_at
-            for item in scheduled
-            if item.task_id in task.depends_on
-        ]
+        ends = [item.end_at for item in scheduled if item.task_id in task.depends_on]
         return max(ends) if ends else None
 
     @staticmethod
@@ -1153,7 +1829,8 @@ class Scheduler:
             end_at=end_at,
             location_id=task.location_id,
             location_raw=task.location_raw,
-            locked=task.flexibility in {
+            locked=task.flexibility
+            in {
                 TaskFlexibility.FIXED,
                 TaskFlexibility.LOCKED,
             },
@@ -1166,8 +1843,7 @@ class Scheduler:
         for previous, current in pairwise(items):
             if current.start_at < previous.end_at:
                 raise ValueError(
-                    "fixed tasks overlap: "
-                    f"{previous.task_id} and {current.task_id}"
+                    f"fixed tasks overlap: {previous.task_id} and {current.task_id}"
                 )
 
     @staticmethod
@@ -1201,8 +1877,7 @@ class Scheduler:
             if (
                 first_after_departure
                 and first_after_departure.location_id
-                and first_after_departure.location_id
-                != context.initial_location_id
+                and first_after_departure.location_id != context.initial_location_id
             ):
                 estimate = context.travel.get(
                     (
@@ -1239,9 +1914,7 @@ class Scheduler:
                                     start_at=context.initial_departure_at,
                                     end_at=context.initial_departure_at
                                     + timedelta(minutes=duration),
-                                    location_id=(
-                                        first_after_departure.location_id
-                                    ),
+                                    location_id=(first_after_departure.location_id),
                                     source=estimate.source,
                                     reason=(
                                         f"{mode_label}基础时间 "
@@ -1274,25 +1947,17 @@ class Scheduler:
                 continue
             if item.location_id == following.location_id:
                 continue
-            estimate = context.travel.get(
-                (item.location_id, following.location_id)
-            )
+            estimate = context.travel.get((item.location_id, following.location_id))
             if not estimate:
-                missing_route_pairs.add(
-                    (item.location_id, following.location_id)
-                )
+                missing_route_pairs.add((item.location_id, following.location_id))
                 continue
             base_duration = (
                 estimate.base_duration_min
                 if estimate.base_duration_min is not None
                 else estimate.duration_min
             )
-            desired_end = following.start_at - timedelta(
-                minutes=preferences.buffer_min
-            )
-            provisional_start = desired_end - timedelta(
-                minutes=base_duration
-            )
+            desired_end = following.start_at - timedelta(minutes=preferences.buffer_min)
+            provisional_start = desired_end - timedelta(minutes=base_duration)
             adjusted_duration, congestion_delay = context.travel_details(
                 item.location_id,
                 following.location_id,
@@ -1303,9 +1968,7 @@ class Scheduler:
             if adjusted_duration <= 0:
                 continue
             travel_end = desired_end
-            travel_start = travel_end - timedelta(
-                minutes=adjusted_duration
-            )
+            travel_start = travel_end - timedelta(minutes=adjusted_duration)
             if travel_start < item.end_at:
                 travel_start = item.end_at
                 adjusted_duration, congestion_delay = context.travel_details(
@@ -1315,22 +1978,17 @@ class Scheduler:
                 )
                 if adjusted_duration is None:
                     continue
-                travel_end = travel_start + timedelta(
-                    minutes=adjusted_duration
-                )
+                travel_end = travel_start + timedelta(minutes=adjusted_duration)
             mode_labels = {
                 "walk": "步行",
                 "bicycle": "骑自行车",
                 "electrobike": "骑电瓶车",
             }
             mode_label = mode_labels.get(estimate.mode, "通勤")
-            reason = (
-                f"{mode_label}基础时间 {base_duration} 分钟"
-                + (
-                    f"，校园通行高峰额外预留 {congestion_delay} 分钟"
-                    if congestion_delay
-                    else ""
-                )
+            reason = f"{mode_label}基础时间 {base_duration} 分钟" + (
+                f"，校园通行高峰额外预留 {congestion_delay} 分钟"
+                if congestion_delay
+                else ""
             )
             result.append(
                 PlanItem(

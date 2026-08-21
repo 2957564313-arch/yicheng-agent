@@ -311,9 +311,9 @@ def build_cases() -> list[dict]:
         (
             "northwest_sun_run_window",
             "7月24日下午去西北田径场完成40分钟阳光长跑。",
-            1,
-            "completed",
-            ["API_DEGRADED"],
+            0,
+            "partial",
+            ["API_DEGRADED", "TASK_UNSCHEDULED"],
         ),
         (
             "sunday_dorm_gate",
@@ -362,6 +362,11 @@ def build_cases() -> list[dict]:
                 min_task_count=count,
                 expected_status=status,
                 warning_codes=warning_codes,
+                answer_contains=(
+                    ["降雨", "下一天"]
+                    if suffix == "northwest_sun_run_window"
+                    else None
+                ),
             )
         )
 
@@ -494,9 +499,10 @@ def build_cases() -> list[dict]:
             "temporal_northwest_run",
             "temporal_constraints",
             "明天下午去西北田径场完成40分钟阳光长跑。",
-            min_task_count=1,
-            required_task_titles=["阳光长跑"],
-            answer_contains=["18:30"],
+            min_task_count=0,
+            expected_status="partial",
+            warning_codes=["API_DEGRADED", "TASK_UNSCHEDULED"],
+            answer_contains=["降雨", "下一天"],
         ),
         chat_case(
             "temporal_sunday_curfew",

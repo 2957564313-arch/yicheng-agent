@@ -23,6 +23,26 @@ def parse(query: str):
     )
 
 
+def test_occurrence_count_stays_with_its_own_task_across_list_punctuation():
+    result = parse("今天必须完成：自习2次、取快递、跑步，晚上和导师碰头2小时")
+
+    counts = {task.id: task.occurrence_count for task in result.tasks}
+
+    assert counts["study"] == 2
+    assert counts["parcel"] == 1
+    assert counts["run"] == 1
+    assert counts["meeting"] == 1
+
+
+def test_explicit_same_day_completion_becomes_a_hard_day_deadline():
+    result = parse("今天必须完成：自习2次、取快递、跑步，晚上和导师碰头2小时")
+
+    assert result.tasks
+    assert all(task.deadline is not None for task in result.tasks)
+    assert all(task.deadline.date() == result.requested_date for task in result.tasks)
+    assert all("same_day_required" in task.tags for task in result.tasks)
+
+
 def test_learning_duration_uses_actual_keyword():
     result = parse("明天去图书馆学习一个小时。")
     assert result.tasks[0].duration_min == 60
@@ -214,7 +234,10 @@ def test_departure_time_and_origin_are_hard_start_context():
     study = next(task for task in result.tasks if task.id == "study")
 
     assert study.earliest_start.isoformat() == "2026-07-24T16:00:00+08:00"
-    assert study.latest_end.isoformat() == "2026-07-24T22:30:00+08:00"
+    # A generic study request has no hidden 22:30 curfew.  Venue hours and
+    # explicit user limits remain hard constraints; otherwise the full day is
+    # available to the online planner.
+    assert study.latest_end.isoformat() == "2026-07-24T23:59:00+08:00"
     assert study.preferred_period is None
     assert (
         parser.journey_origin_from_query(
@@ -415,7 +438,9 @@ def test_complex_hdu_plan_keeps_courier_floor_and_sunshine_run_constraints():
     assert tasks["run"].duration_min == 40
     assert tasks["run"].location_raw == "西北田径场"
     assert "sunshine_run" in tasks["run"].tags
-    assert tasks["run"].depends_on == ["parcel"]
+    # A comma plus a later period enumerates wishes; only explicit sequencing
+    # words such as “然后/接着” create a dependency.
+    assert tasks["run"].depends_on == []
 
 
 def test_hdu_health_hot_water_and_indoor_sports_are_plannable_tasks():

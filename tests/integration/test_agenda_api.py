@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi.testclient import TestClient
 
 from tests.integration.test_api_demos import build_test_app
@@ -471,14 +473,33 @@ def test_heavy_learning_day_gets_optional_care_suggestion(tmp_path):
             },
         )
         assert response.status_code == 200, response.text
-        suggestions = response.json()["care_suggestions"]
+        payload = response.json()
+        study_items = [
+            item for item in payload["items"] if "自习" in item["title"]
+        ]
+        assert len(study_items) >= 3
+        durations = [
+            int(
+                (
+                    datetime.fromisoformat(item["end_at"])
+                    - datetime.fromisoformat(item["start_at"])
+                ).total_seconds()
+                // 60
+            )
+            for item in study_items
+        ]
+        assert sum(durations) == 420
+        assert all(duration >= 60 for duration in durations)
+
+        suggestions = payload["care_suggestions"]
         assert any(
             item["id"] == "balance_heavy_study"
             for item in suggestions
         )
-        assert any(
-            item["id"].startswith("meal_gap_")
-            for item in suggestions
+        # The scheduler already leaves the protected lunch window free, so a
+        # redundant "you missed a meal" suggestion must not be emitted.
+        assert not any(
+            item["id"].startswith("meal_gap_") for item in suggestions
         )
 
 

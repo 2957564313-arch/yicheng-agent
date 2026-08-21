@@ -2353,13 +2353,17 @@
     },
     "expected": {
       "http_status": 200,
-      "status": "completed",
-      "plan_status": "valid",
-      "min_task_count": 1,
+      "status": "partial",
+      "plan_status": null,
+      "min_task_count": 0,
       "warning_codes": [
-        "API_DEGRADED"
+        "API_DEGRADED",
+        "TASK_UNSCHEDULED"
       ],
-      "answer_contains": [],
+      "answer_contains": [
+        "降雨",
+        "下一天"
+      ],
       "answer_not_contains": [],
       "min_answer_length": 0,
       "required_task_titles": [],
@@ -3070,20 +3074,20 @@
     },
     "expected": {
       "http_status": 200,
-      "status": "completed",
-      "plan_status": "valid",
-      "min_task_count": 1,
+      "status": "partial",
+      "plan_status": null,
+      "min_task_count": 0,
       "warning_codes": [
-        "API_DEGRADED"
+        "API_DEGRADED",
+        "TASK_UNSCHEDULED"
       ],
       "answer_contains": [
-        "18:30"
+        "降雨",
+        "下一天"
       ],
       "answer_not_contains": [],
       "min_answer_length": 0,
-      "required_task_titles": [
-        "阳光长跑"
-      ],
+      "required_task_titles": [],
       "forbidden_task_titles": [],
       "required_travel_mode": null,
       "min_congestion_delay_min": 0,

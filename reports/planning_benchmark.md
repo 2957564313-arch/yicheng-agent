@@ -11,8 +11,8 @@
 | 方法 | 可行完成率 | 硬约束违反 | 截止满足率 | 保留率 | 误移动率 | 总位移（分钟） |
 |---|---:|---:|---:|---:|---:|---:|
 | 贪心最早插入基线 | 33.3% | 19 | 50.0% | 2.8% | 95.5% | 9755 |
-| 约束排程（关闭历史） | 100.0% | 0 | 100.0% | 2.8% | 95.5% | 9115 |
-| 完整策略（最小扰动） | 100.0% | 0 | 100.0% | 72.2% | 0.0% | 1035 |
+| 约束排程（关闭历史） | 100.0% | 0 | 100.0% | 2.8% | 95.5% | 9350 |
+| 完整策略（最小扰动） | 100.0% | 0 | 100.0% | 72.2% | 0.0% | 1225 |
 
 ## 方法边界
 
@@ -74,13 +74,13 @@
 | `P11_competing_deadlines` | deadline | 是 | 0 | 0 | 0 |
 | `P12_basic_control` | control | 是 | 0 | 0 | 0 |
 | `R01_class_insertion` | minimal_disruption | 是 | 0 | 2 | 870 |
-| `R02_morning_meeting` | minimal_disruption | 是 | 0 | 2 | 440 |
-| `R03_opening_delayed` | opening_hours | 是 | 0 | 2 | 1115 |
+| `R02_morning_meeting` | minimal_disruption | 是 | 0 | 2 | 770 |
+| `R03_opening_delayed` | opening_hours | 是 | 0 | 2 | 1160 |
 | `R04_rain_boundary` | weather | 是 | 0 | 2 | 1030 |
-| `R05_new_urgent_task` | deadline | 是 | 0 | 3 | 750 |
-| `R06_duration_expansion` | minimal_disruption | 是 | 0 | 2 | 710 |
+| `R05_new_urgent_task` | deadline | 是 | 0 | 3 | 600 |
+| `R06_duration_expansion` | minimal_disruption | 是 | 0 | 2 | 680 |
 | `R07_activity_window_shift` | activity_window | 是 | 0 | 2 | 710 |
-| `R08_route_time_changed` | travel | 是 | 0 | 1 | 710 |
+| `R08_route_time_changed` | travel | 是 | 0 | 1 | 750 |
 | `R09_congestion_changed` | congestion | 是 | 0 | 1 | 630 |
 | `R10_dependency_changed` | dependency | 是 | 0 | 1 | 870 |
 | `R11_locked_task` | locked_task | 是 | 0 | 1 | 410 |
@@ -104,7 +104,7 @@
 | `P12_basic_control` | control | 是 | 0 | 0 | 0 |
 | `R01_class_insertion` | minimal_disruption | 是 | 0 | 0 | 70 |
 | `R02_morning_meeting` | minimal_disruption | 是 | 0 | 0 | 70 |
-| `R03_opening_delayed` | opening_hours | 是 | 0 | 0 | 180 |
+| `R03_opening_delayed` | opening_hours | 是 | 0 | 0 | 370 |
 | `R04_rain_boundary` | weather | 是 | 0 | 0 | 175 |
 | `R05_new_urgent_task` | deadline | 是 | 0 | 0 | 0 |
 | `R06_duration_expansion` | minimal_disruption | 是 | 0 | 0 | 0 |

@@ -163,6 +163,167 @@ async def test_scheduler_marks_impossible_task_unscheduled(tz):
 
 
 @pytest.mark.asyncio
+async def test_late_free_day_keeps_every_requested_task_by_compacting_soft_gaps(tz):
+    """Regression for the real 17:57 request shown in the product UI.
+
+    Two default-length study sittings may shrink to one hour each.  Together
+    with a parcel errand, a run and the explicit two-hour adviser meeting they
+    fit before midnight after the protected dinner window, but only if the
+    generic ten-minute comfort gaps yield.  No requested task may disappear.
+    """
+
+    target_date = date(2026, 8, 20)
+    now = datetime(2026, 8, 20, 17, 57, tzinfo=tz)
+    tasks = [
+        Task(
+            id="study_1",
+            title="自习",
+            date=target_date,
+            duration_min=120,
+            min_duration_min=60,
+            duration_source="default",
+            min_gap_min=30,
+            tags=["study", "elastic_duration", "occurrence_of:study"],
+        ),
+        Task(
+            id="study_2",
+            title="自习",
+            date=target_date,
+            duration_min=120,
+            min_duration_min=60,
+            duration_source="default",
+            min_gap_min=30,
+            tags=["study", "elastic_duration", "occurrence_of:study"],
+        ),
+        Task(
+            id="parcel",
+            title="取快递",
+            date=target_date,
+            duration_min=30,
+            tags=["courier"],
+        ),
+        Task(
+            id="run",
+            title="跑步",
+            date=target_date,
+            duration_min=30,
+        ),
+        Task(
+            id="mentor",
+            title="和导师碰头",
+            date=target_date,
+            duration_min=120,
+            duration_source="explicit",
+            constraint_source="user",
+            preferred_period="evening",
+            tags=["meeting"],
+        ),
+    ]
+    context = await build_context(target_date, now, [])
+
+    result = Scheduler().schedule(
+        user_id="late_user",
+        thread_id="late_thread",
+        tasks=tasks,
+        preferences=UserPreferences(buffer_min=10),
+        context=context,
+    )
+
+    scheduled = [item for item in result.plan.items if item.item_type == "task"]
+    assert not result.unscheduled_task_ids
+    assert {item.task_id for item in scheduled} == {task.id for task in tasks}
+    mentor = next(item for item in scheduled if item.task_id == "mentor")
+    assert int((mentor.end_at - mentor.start_at).total_seconds() // 60) == 120
+    study_lengths = sorted(
+        int((item.end_at - item.start_at).total_seconds() // 60)
+        for item in scheduled
+        if item.task_id in {"study_1", "study_2"}
+    )
+    assert all(60 <= minutes <= 120 for minutes in study_lengths)
+    assert sum(study_lengths) >= 120
+    assert max(item.end_at for item in scheduled) <= datetime.combine(
+        target_date + timedelta(days=1),
+        time.min,
+        tzinfo=tz,
+    )
+    # This direct scheduler test deliberately starts after dinner has begun.
+    # The conversation layer rolls an otherwise unconstrained request this
+    # late to tomorrow; the low-level scheduler's remaining responsibility is
+    # to keep every requested task visible rather than silently delete one.
+    repeated = sorted(
+        (item for item in scheduled if item.task_id in {"study_1", "study_2"}),
+        key=lambda item: item.start_at,
+    )
+    assert [item.title for item in repeated] == ["自习（第1次）", "自习（第2次）"]
+
+
+@pytest.mark.asyncio
+async def test_free_day_uses_daytime_and_covers_multi_sitting_request(tz):
+    target_date = date(2026, 8, 20)
+    now = datetime(2026, 8, 20, 9, 0, tzinfo=tz)
+    tasks = [
+        Task(
+            id=f"study_{index}",
+            title="自习",
+            date=target_date,
+            duration_min=120,
+            min_duration_min=60,
+            duration_source="default",
+        )
+        for index in (1, 2)
+    ] + [
+        Task(
+            id="parcel",
+            title="取快递",
+            date=target_date,
+            duration_min=30,
+            tags=["courier"],
+        ),
+        Task(
+            id="run",
+            title="跑步",
+            date=target_date,
+            duration_min=30,
+        ),
+        Task(
+            id="mentor",
+            title="和导师碰头",
+            date=target_date,
+            duration_min=120,
+            duration_source="explicit",
+            constraint_source="user",
+            preferred_period="evening",
+            tags=["meeting"],
+        ),
+    ]
+    context = await build_context(target_date, now, [])
+
+    result = Scheduler().schedule(
+        user_id="day_user",
+        thread_id="day_thread",
+        tasks=tasks,
+        preferences=UserPreferences(buffer_min=10),
+        context=context,
+    )
+
+    scheduled = [item for item in result.plan.items if item.item_type == "task"]
+    assert not result.unscheduled_task_ids
+    assert len(scheduled) == len(tasks)
+    assert min(item.start_at for item in scheduled).hour < 12
+    study_lengths = sorted(
+        int((item.end_at - item.start_at).total_seconds() // 60)
+        for item in scheduled
+        if item.task_id in {"study_1", "study_2"}
+    )
+    # Compression is an overload strategy, not a generic optimisation knob.
+    # A free day must keep the requested/default two-hour study sittings.
+    assert study_lengths == [120, 120]
+    assert (
+        next(item for item in scheduled if item.task_id == "mentor").start_at.hour >= 18
+    )
+
+
+@pytest.mark.asyncio
 async def test_scheduler_uses_soft_lunch_hint_for_movable_work(tz):
     target_date = date(2026, 7, 24)
     task = Task(
@@ -178,9 +339,7 @@ async def test_scheduler_uses_soft_lunch_hint_for_movable_work(tz):
         datetime(2026, 7, 23, 20, 0, tzinfo=tz),
         [],
     )
-    context.soft_meal_windows = [
-        TimeWindow(start=time(12, 25), end=time(13, 15))
-    ]
+    context.soft_meal_windows = [TimeWindow(start=time(12, 25), end=time(13, 15))]
 
     result = Scheduler().schedule(
         user_id="meal_user",
@@ -211,9 +370,7 @@ async def test_explicit_meal_can_use_the_protected_meal_window(tz):
         datetime(2026, 7, 23, 20, 0, tzinfo=tz),
         [],
     )
-    context.soft_meal_windows = [
-        TimeWindow(start=time(12, 25), end=time(13, 15))
-    ]
+    context.soft_meal_windows = [TimeWindow(start=time(12, 25), end=time(13, 15))]
 
     result = Scheduler().schedule(
         user_id="meal_user",
@@ -418,9 +575,7 @@ async def test_travel_is_placed_close_to_following_task_when_gap_is_long(tz):
         preferences=UserPreferences(buffer_min=10),
         context=context,
     )
-    travel = next(
-        item for item in result.plan.items if item.item_type == "travel"
-    )
+    travel = next(item for item in result.plan.items if item.item_type == "travel")
 
     assert travel.start_at > tasks[0].fixed_end
     assert travel.end_at == tasks[1].fixed_start - timedelta(minutes=10)
@@ -503,9 +658,7 @@ def test_scheduler_uses_activity_specific_window_for_sunshine_run(tz):
         preferences=UserPreferences(),
         context=context,
     )
-    item = next(
-        item for item in result.plan.items if item.task_id == "sun_run"
-    )
+    item = next(item for item in result.plan.items if item.task_id == "sun_run")
 
     # The point of this test is the activity window, not one exact minute:
     # the run may start later inside it to keep the dinner gap clear.
@@ -518,3 +671,81 @@ def test_scheduler_uses_activity_specific_window_for_sunshine_run(tz):
     )
     assert plan.status == "valid"
     assert not [issue for issue in issues if issue.severity == "error"]
+
+
+def test_free_day_uses_daytime_for_repeated_study_instead_of_scattering_it(tz):
+    target_date = date(2026, 8, 20)
+    context = PlanningContext(
+        target_date=target_date,
+        timezone=tz,
+        now=datetime(2026, 8, 20, 9, 0, tzinfo=tz),
+        soft_meal_windows=list(Scheduler.default_meal_windows),
+    )
+    tasks = [
+        Task(
+            id="study_1",
+            title="自习（第1次）",
+            date=target_date,
+            duration_min=120,
+            min_duration_min=60,
+            preferred_period="day",
+            tags=["study", "elastic_duration"],
+        ),
+        Task(
+            id="study_2",
+            title="自习（第2次）",
+            date=target_date,
+            duration_min=120,
+            min_duration_min=60,
+            preferred_period="day",
+            tags=["study", "elastic_duration"],
+        ),
+        Task(
+            id="parcel",
+            title="取快递",
+            date=target_date,
+            duration_min=30,
+        ),
+        Task(
+            id="run",
+            title="跑步",
+            date=target_date,
+            duration_min=30,
+        ),
+        Task(
+            id="mentor",
+            title="和导师碰头",
+            date=target_date,
+            duration_min=120,
+            earliest_start=datetime(2026, 8, 20, 18, 0, tzinfo=tz),
+            latest_end=datetime(2026, 8, 21, 0, 0, tzinfo=tz),
+            preferred_period="evening",
+        ),
+    ]
+
+    result = Scheduler().schedule(
+        user_id="quality_user",
+        thread_id="quality_thread",
+        tasks=tasks,
+        preferences=UserPreferences(buffer_min=10),
+        context=context,
+    )
+    scheduled = {
+        item.task_id: item
+        for item in result.plan.items
+        if item.item_type == "task" and item.task_id
+    }
+
+    assert not result.unscheduled_task_ids
+    assert set(scheduled) == {task.id for task in tasks}
+    assert all(
+        int(
+            (scheduled[task_id].end_at - scheduled[task_id].start_at).total_seconds()
+            // 60
+        )
+        == 120
+        for task_id in ("study_1", "study_2")
+    )
+    assert min(scheduled["study_1"].start_at, scheduled["study_2"].start_at).hour < 12
+    assert max(scheduled["study_1"].end_at, scheduled["study_2"].end_at).hour <= 18
+    assert scheduled["mentor"].start_at.hour >= 18

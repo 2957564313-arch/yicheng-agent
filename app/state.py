@@ -35,6 +35,7 @@ class CampusAgentState(TypedDict, total=False):
     initial_departure_at: str | None
     clarifications: list[str]
     parse_confidence: float
+    rollover_notice: str | None
 
     normalized_locations: dict[str, dict[str, Any]]
     travel_estimates: list[dict[str, Any]]

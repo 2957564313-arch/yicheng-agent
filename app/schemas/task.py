@@ -45,8 +45,7 @@ class Task(BaseModel):
         ge=1,
         le=12,
         description=(
-            "用户要求这件事今天做几次。“自习3次”写 3，"
-            "规划器会生成 3 个独立任务。"
+            "用户要求这件事今天做几次。“自习3次”写 3，规划器会生成 3 个独立任务。"
         ),
     )
     splittable: bool = Field(
@@ -83,9 +82,7 @@ class Task(BaseModel):
 
     earliest_start: datetime | None = Field(
         default=None,
-        description=(
-            "最早可以开始的时间。“14点以后”“下课再去”写在这里。"
-        ),
+        description=("最早可以开始的时间。“14点以后”“下课再去”写在这里。"),
     )
     latest_end: datetime | None = Field(
         default=None,
@@ -124,6 +121,12 @@ class Task(BaseModel):
 
     def shortest_acceptable_min(self) -> int:
         """How short this task may be cut before it stops being worth doing."""
+        # An explicit study length is an ideal target, not necessarily an
+        # indivisible appointment.  Only tasks deliberately tagged elastic
+        # may use their shorter useful duration; meetings and classes remain
+        # exact even when both have an explicit duration.
+        if "elastic_duration" in self.tags and self.min_duration_min:
+            return min(self.min_duration_min, self.duration_min)
         if self.duration_source == "explicit":
             return self.duration_min
         return min(self.min_duration_min or self.duration_min, self.duration_min)
@@ -131,13 +134,9 @@ class Task(BaseModel):
     @model_validator(mode="after")
     def validate_duration_band(self) -> Task:
         if self.min_duration_min and self.min_duration_min > self.duration_min:
-            raise ValueError(
-                "min_duration_min must not exceed duration_min"
-            )
+            raise ValueError("min_duration_min must not exceed duration_min")
         if self.max_duration_min and self.max_duration_min < self.duration_min:
-            raise ValueError(
-                "max_duration_min must not be below duration_min"
-            )
+            raise ValueError("max_duration_min must not be below duration_min")
         return self
 
     @model_validator(mode="after")
