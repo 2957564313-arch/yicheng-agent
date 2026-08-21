@@ -477,11 +477,19 @@ class Scheduler:
                 old_starts,
             ) < self._beam_score(best, old_starts):
                 best = attempt
-            # Do not stop merely because the ideal-length pass managed to
-            # squeeze everything in.  It may have done so by consuming the
-            # meal window or pushing every flexible task to the end of the
-            # day.  The shorter passes are still scored against it and win
-            # only when the overall plan is genuinely better.
+            # For a new plan, a clean full-duration result is provably better
+            # than every compressed pass: `_beam_score` compares duration
+            # shortfall before comfort, travel and idle time.  Repeating the
+            # search cannot change the winner.  Replans still evaluate every
+            # distinct level because preserving old task positions ranks
+            # ahead of duration there.
+            if (
+                not old_starts
+                and not attempt.unscheduled_task_ids
+                and not attempt.weather_breaches
+                and not attempt.shortfall_minutes
+            ):
+                break
         assert best is not None
         return best
 
