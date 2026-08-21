@@ -181,7 +181,7 @@ class Task(BaseModel):
 
 
 class UserPreferences(BaseModel):
-    buffer_min: int = Field(default=10, ge=0, le=60)
+    buffer_min: int = Field(default=15, ge=0, le=60)
     walking_speed: str = Field(default="normal", pattern="^(slow|normal|fast)$")
     transport_mode: TransportMode = TransportMode.WALK
     avoid_congestion: bool = False

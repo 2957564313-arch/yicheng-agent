@@ -228,7 +228,7 @@ class Scheduler:
                 old_starts=old_starts,
             )
             effective_preferences = preferences
-            # The default ten-minute breathing room is a comfort preference,
+            # The default fifteen-minute breathing room is a comfort preference,
             # not a reason to make an explicitly requested task disappear.
             # Only retry without it when the normal search still leaves work
             # out; meal windows, fixed events, venue hours and travel remain
@@ -291,6 +291,11 @@ class Scheduler:
                 int((item.end_at - item.start_at).total_seconds() // 60)
                 for item in plan_items
                 if item.item_type == "travel"
+            ),
+            buffer_minutes=sum(
+                int((item.end_at - item.start_at).total_seconds() // 60)
+                for item in plan_items
+                if item.item_type == "buffer"
             ),
         )
         plan = Plan(
@@ -1626,7 +1631,35 @@ class Scheduler:
                 or "雨" in (item.condition or "")
             )
         ]
-        return bool(risk_starts and end_at > min(risk_starts))
+        if risk_starts and end_at > min(risk_starts):
+            return True
+
+        # A user saying that it is hot is planning input, not small talk.
+        # For outdoor exercise, strongly prefer slots outside the most exposed
+        # 11:00-17:00 window. It remains a soft safety preference so an
+        # otherwise impossible day still returns the requested activity with
+        # a clear care reminder instead of silently deleting it.
+        hot_weather = any(
+            (item.temperature_c is not None and item.temperature_c >= 32)
+            or any(
+                marker in (item.condition or "")
+                for marker in ("热", "高温", "炎热", "闷热")
+            )
+            for item in context.weather
+        )
+        if not hot_weather:
+            return False
+        hottest_start = datetime.combine(
+            context.target_date,
+            time(11, 0),
+            context.timezone,
+        )
+        hottest_end = datetime.combine(
+            context.target_date,
+            time(17, 0),
+            context.timezone,
+        )
+        return start_at < hottest_end and end_at > hottest_start
 
     @staticmethod
     def _neighbors(
@@ -1943,66 +1976,103 @@ class Scheduler:
             if index == len(ordered) - 1:
                 continue
             following = ordered[index + 1]
-            if not item.location_id or not following.location_id:
-                continue
-            if item.location_id == following.location_id:
-                continue
-            estimate = context.travel.get((item.location_id, following.location_id))
-            if not estimate:
-                missing_route_pairs.add((item.location_id, following.location_id))
-                continue
-            base_duration = (
-                estimate.base_duration_min
-                if estimate.base_duration_min is not None
-                else estimate.duration_min
-            )
-            desired_end = following.start_at - timedelta(minutes=preferences.buffer_min)
-            provisional_start = desired_end - timedelta(minutes=base_duration)
-            adjusted_duration, congestion_delay = context.travel_details(
-                item.location_id,
-                following.location_id,
-                departure_at=provisional_start,
-            )
-            if adjusted_duration is None:
-                continue
-            if adjusted_duration <= 0:
-                continue
-            travel_end = desired_end
-            travel_start = travel_end - timedelta(minutes=adjusted_duration)
-            if travel_start < item.end_at:
-                travel_start = item.end_at
-                adjusted_duration, congestion_delay = context.travel_details(
-                    item.location_id,
-                    following.location_id,
-                    departure_at=travel_start,
+            travel_end_at = item.end_at
+            if (
+                item.location_id
+                and following.location_id
+                and item.location_id != following.location_id
+            ):
+                estimate = context.travel.get(
+                    (item.location_id, following.location_id)
                 )
-                if adjusted_duration is None:
-                    continue
-                travel_end = travel_start + timedelta(minutes=adjusted_duration)
-            mode_labels = {
-                "walk": "步行",
-                "bicycle": "骑自行车",
-                "electrobike": "骑电瓶车",
-            }
-            mode_label = mode_labels.get(estimate.mode, "通勤")
-            reason = f"{mode_label}基础时间 {base_duration} 分钟" + (
-                f"，校园通行高峰额外预留 {congestion_delay} 分钟"
-                if congestion_delay
-                else ""
-            )
-            result.append(
-                PlanItem(
-                    id=f"travel_{uuid4().hex}",
-                    item_type="travel",
-                    title=f"{mode_label}前往{following.title}地点",
-                    start_at=travel_start,
-                    end_at=travel_end,
-                    location_id=following.location_id,
-                    source=estimate.source,
-                    reason=reason,
-                    travel_mode=estimate.mode,
-                    base_duration_min=base_duration,
-                    congestion_delay_min=congestion_delay,
+                if not estimate:
+                    missing_route_pairs.add(
+                        (item.location_id, following.location_id)
+                    )
+                else:
+                    base_duration = (
+                        estimate.base_duration_min
+                        if estimate.base_duration_min is not None
+                        else estimate.duration_min
+                    )
+                    desired_end = following.start_at - timedelta(
+                        minutes=preferences.buffer_min
+                    )
+                    provisional_start = desired_end - timedelta(
+                        minutes=base_duration
+                    )
+                    adjusted_duration, congestion_delay = context.travel_details(
+                        item.location_id,
+                        following.location_id,
+                        departure_at=provisional_start,
+                    )
+                    if adjusted_duration and adjusted_duration > 0:
+                        travel_end = desired_end
+                        travel_start = travel_end - timedelta(
+                            minutes=adjusted_duration
+                        )
+                        if travel_start < item.end_at:
+                            travel_start = item.end_at
+                            adjusted_duration, congestion_delay = context.travel_details(
+                                item.location_id,
+                                following.location_id,
+                                departure_at=travel_start,
+                            )
+                            if adjusted_duration is not None:
+                                travel_end = travel_start + timedelta(
+                                    minutes=adjusted_duration
+                                )
+                        if adjusted_duration is not None and travel_end <= following.start_at:
+                            mode_labels = {
+                                "walk": "步行",
+                                "bicycle": "骑自行车",
+                                "electrobike": "骑电瓶车",
+                            }
+                            mode_label = mode_labels.get(estimate.mode, "通勤")
+                            reason = f"{mode_label}基础时间 {base_duration} 分钟" + (
+                                f"，校园通行高峰额外预留 {congestion_delay} 分钟"
+                                if congestion_delay
+                                else ""
+                            )
+                            result.append(
+                                PlanItem(
+                                    id=f"travel_{uuid4().hex}",
+                                    item_type="travel",
+                                    title=f"{mode_label}前往{following.title}地点",
+                                    start_at=travel_start,
+                                    end_at=travel_end,
+                                    location_id=following.location_id,
+                                    source=estimate.source,
+                                    reason=reason,
+                                    travel_mode=estimate.mode,
+                                    base_duration_min=base_duration,
+                                    congestion_delay_min=congestion_delay,
+                                )
+                            )
+                            travel_end_at = travel_end
+
+            # Protect the requested breathing room even when neither task has
+            # a location. Travel and buffer are separate concepts: AMap owns
+            # the former, while this default interval gives the student time
+            # to wrap up, rest briefly, and absorb small delays.
+            if preferences.buffer_min > 0:
+                buffer_end = following.start_at
+                buffer_start = buffer_end - timedelta(
+                    minutes=preferences.buffer_min
                 )
-            )
+                buffer_start = max(buffer_start, item.end_at, travel_end_at)
+                if buffer_start < buffer_end:
+                    result.append(
+                        PlanItem(
+                            id=f"buffer_{uuid4().hex}",
+                            item_type="buffer",
+                            title="衔接缓冲",
+                            start_at=buffer_start,
+                            end_at=buffer_end,
+                            source=DataSource.STRUCTURED,
+                            reason=(
+                                "相邻安排之间默认预留时间，用于收尾、休息和临时变化"
+                            ),
+                        )
+                    )
         return sorted(result, key=lambda item: item.start_at)

@@ -10,7 +10,7 @@ from app.providers.campus_rules import CampusRulesRepository
 from app.providers.location_repository import LocationRepository
 from app.providers.route_static import StaticRouteProvider
 from app.schemas.common import DataSource, TaskFlexibility, TimeWindow
-from app.schemas.context import TravelEstimate
+from app.schemas.context import TravelEstimate, WeatherContext
 from app.schemas.task import Task, UserPreferences
 from app.services.scheduler import PlanningContext, Scheduler
 from app.services.validator import PlanValidator
@@ -749,3 +749,95 @@ def test_free_day_uses_daytime_for_repeated_study_instead_of_scattering_it(tz):
     assert min(scheduled["study_1"].start_at, scheduled["study_2"].start_at).hour < 12
     assert max(scheduled["study_1"].end_at, scheduled["study_2"].end_at).hour <= 18
     assert scheduled["mentor"].start_at.hour >= 18
+
+
+@pytest.mark.asyncio
+async def test_default_interval_is_counted_without_locations(tz):
+    target_date = date(2026, 8, 21)
+    now = datetime(2026, 8, 21, 13, 0, tzinfo=tz)
+    context = await build_context(target_date, now, [])
+    tasks = [
+        Task(
+            id="study",
+            title="自习",
+            date=target_date,
+            duration_min=60,
+            earliest_start=datetime(2026, 8, 21, 14, 0, tzinfo=tz),
+        ),
+        Task(
+            id="club",
+            title="社团活动",
+            date=target_date,
+            duration_min=120,
+            depends_on=["study"],
+        ),
+    ]
+
+    result = Scheduler().schedule(
+        user_id="buffer_user",
+        thread_id="buffer_thread",
+        tasks=tasks,
+        preferences=UserPreferences(),
+        context=context,
+    )
+    validated, issues = PlanValidator().validate(
+        plan=result.plan,
+        tasks=tasks,
+        context=context,
+    )
+
+    assert not [issue for issue in issues if issue.severity == "error"]
+    assert not [item for item in validated.items if item.item_type == "travel"]
+    buffers = [item for item in validated.items if item.item_type == "buffer"]
+    assert len(buffers) == 1
+    assert int(
+        (buffers[0].end_at - buffers[0].start_at).total_seconds() // 60
+    ) == 15
+    assert validated.metrics.buffer_minutes == 15
+    assert validated.metrics.travel_minutes == 0
+
+
+@pytest.mark.asyncio
+async def test_user_reported_heat_moves_outdoor_exercise_after_hottest_hours(tz):
+    target_date = date(2026, 8, 21)
+    now = datetime(2026, 8, 21, 13, 0, tzinfo=tz)
+    context = await build_context(target_date, now, [])
+    context.enforce_weather = True
+    context.outdoor_location_ids = {"track"}
+    context.weather = [
+        WeatherContext(
+            date=target_date,
+            period="day",
+            condition="用户提醒天气较热",
+            source=DataSource.USER,
+        )
+    ]
+    tasks = [
+        Task(
+            id="run",
+            title="跑步",
+            date=target_date,
+            duration_min=30,
+            location_id="track",
+            earliest_start=datetime(2026, 8, 21, 14, 0, tzinfo=tz),
+            tags=["outdoor"],
+        ),
+        Task(
+            id="club",
+            title="社团活动",
+            date=target_date,
+            duration_min=120,
+            earliest_start=datetime(2026, 8, 21, 14, 0, tzinfo=tz),
+        ),
+    ]
+
+    result = Scheduler().schedule(
+        user_id="hot_user",
+        thread_id="hot_thread",
+        tasks=tasks,
+        preferences=UserPreferences(),
+        context=context,
+    )
+    run = next(item for item in result.plan.items if item.task_id == "run")
+
+    assert run.start_at.time() >= time(17, 0)

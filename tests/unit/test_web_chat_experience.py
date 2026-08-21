@@ -50,12 +50,16 @@ def test_result_first_dashboard_keeps_key_plan_information_together() -> None:
     assert 'class="result-dashboard-grid"' in html
     assert 'id="result-constraints"' in html
     assert 'id="result-sources"' in html
+    assert 'id="result-reminder-card"' in html
+    assert 'id="result-reminders"' in html
     assert "function renderResultDashboard(data)" in javascript
-    assert "formatDuration(metrics.buffer_minutes || 0)" in javascript
-    assert "formatDuration(metrics.travel_minutes || 0)" in javascript
+    assert "metrics.buffer_minutes > 0" in javascript
+    assert "metrics.travel_minutes > 0" in javascript
+    assert 'const reminderMarker = "再替你留意";' in javascript
+    assert '!["meal", "buffer"].includes(item.item_type)' in javascript
     assert 'document.body.classList.toggle("has-plan-result", active);' in javascript
     assert "body.has-plan-result .composer-column" in styles
-    assert ".result-summary { grid-template-columns: repeat(6" in styles
+    assert ".result-summary { grid-template-columns: repeat(auto-fit" in styles
     assert 'data-kind="buffer"]' in styles
     assert "const items = [...(data.plan?.items || [])].filter(" in javascript
     assert 'item.item_type !== "meal"' in javascript
@@ -281,10 +285,10 @@ def test_day_schedule_allows_manual_edits_but_locks_authoritative_items() -> Non
     assert '<svg viewBox="0 0 24 24" aria-hidden="true">' in javascript
     assert 'title="调整时间或删除">•••' not in javascript
     assert ".schedule-event-lock" in styles
-    assert 'app.js?v=20260821-3' in (WEB_ROOT / "index.html").read_text(
+    assert 'app.js?v=20260821-5' in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
-    assert "styles.css?v=20260821-3" in (WEB_ROOT / "index.html").read_text(
+    assert "styles.css?v=20260821-5" in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
     assert 'term.current ? "（当前）"' not in javascript

@@ -222,11 +222,24 @@ class PlanValidator:
                     )
                 )
             if task.latest_end is not None and item.end_at > task.latest_end:
+                dormitory_return_rule = next(
+                    (
+                        note
+                        for note in (task.notes or "").split("；")
+                        if note.startswith("宿舍门禁返程约束：")
+                    ),
+                    None,
+                )
                 issues.append(
                     Issue(
                         code="LATEST_END_VIOLATION",
                         severity=IssueSeverity.ERROR,
-                        message=f"任务“{task.title}”晚于允许结束时间",
+                        message=(
+                            f"任务“{task.title}”结束过晚，"
+                            f"{dormitory_return_rule.removeprefix('宿舍门禁返程约束：')}"
+                            if dormitory_return_rule
+                            else f"任务“{task.title}”晚于允许结束时间"
+                        ),
                         task_ids=[task.id],
                     )
                 )

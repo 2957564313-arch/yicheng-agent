@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import math
 import re
 from datetime import date, datetime, time, timedelta
 from itertools import combinations
-import math
 from zoneinfo import ZoneInfo
 
 from app.container import AppContainer
@@ -47,6 +47,12 @@ def make_enrich_node(container: AppContainer):
             for raw in state.get("provider_warnings", [])
         ]
         preferences = UserPreferences.model_validate(state["preferences"])
+        target_date = date.fromisoformat(state["requested_date"])
+        academic_day = (
+            AcademicDayContext.model_validate(state["academic_day_context"])
+            if state.get("academic_day_context")
+            else None
+        )
         transport_mode = preferences.transport_mode.value
         normalized_locations = {}
         prefer_live = (
@@ -190,6 +196,47 @@ def make_enrich_node(container: AppContainer):
                     location_ids.append(location.id)
             location_ids = sorted(set(location_ids))
 
+        # Late campus plans need a route back to the dormitory even when the
+        # dorm itself is not one of the requested tasks. This route is used
+        # only for the return-home constraint/reminder and is never presented
+        # as inter-task commuting.
+        task_location_ids = list(location_ids)
+        needs_dorm_return = (
+            uses_default_campus_pack
+            and not is_knowledge_query
+            and _needs_evening_return_context(state["query"], tasks)
+        )
+        if needs_dorm_return:
+            dormitory = container.locations.get(
+                "student_dormitory",
+                campus_id=active_campus_id,
+            )
+            if dormitory is not None:
+                if (
+                    prefer_live
+                    and container.geocoder is not None
+                    and (
+                        dormitory.longitude is None
+                        or dormitory.latitude is None
+                    )
+                ):
+                    try:
+                        upgraded_dormitory = await container.geocoder.resolve(
+                            dormitory.name,
+                            campus_id=active_campus_id,
+                            campus_query=campus_query,
+                            search_city=search_city,
+                        )
+                        if upgraded_dormitory is not None:
+                            dormitory = upgraded_dormitory
+                    except Exception:
+                        pass
+                normalized_locations[dormitory.id] = dormitory.model_dump(
+                    mode="json"
+                )
+                location_ids.append(dormitory.id)
+                location_ids = sorted(set(location_ids))
+
         routes = []
         for origin, destination in combinations(location_ids, 2):
             for start, end in (
@@ -210,6 +257,57 @@ def make_enrich_node(container: AppContainer):
             _personalize_walking_estimate(route, preferences.walking_speed)
             for route in routes
         ]
+        if needs_dorm_return:
+            dorm_cutoff = _dormitory_cutoff(
+                target_date,
+                academic_holiday=bool(
+                    academic_day and academic_day.day_type == "holiday"
+                ),
+                timezone_name=container.settings.app_timezone,
+            )
+            dorm_cutoff_label = (
+                "24:00"
+                if dorm_cutoff.date() > target_date
+                else dorm_cutoff.strftime("%H:%M")
+            )
+            route_by_origin = {
+                route.origin_id: route.duration_min
+                for route in routes
+                if route.destination_id == "student_dormitory"
+            }
+            constrained_tasks: list[Task] = []
+            for task in tasks:
+                return_minutes = (
+                    0
+                    if task.location_id == "student_dormitory"
+                    else route_by_origin.get(task.location_id or "", 15)
+                )
+                latest_return_safe_end = dorm_cutoff - timedelta(
+                    minutes=return_minutes
+                )
+                if task.latest_end is None or task.latest_end > latest_return_safe_end:
+                    constrained_tasks.append(
+                        task.model_copy(
+                            update={
+                                "latest_end": latest_return_safe_end,
+                                "notes": "；".join(
+                                    value
+                                    for value in (
+                                        task.notes,
+                                        (
+                                            "宿舍门禁返程约束：须在"
+                                            f"{dorm_cutoff_label}前回宿舍，"
+                                            f"并预留{return_minutes}分钟返程"
+                                        ),
+                                    )
+                                    if value
+                                ),
+                            }
+                        )
+                    )
+                else:
+                    constrained_tasks.append(task)
+            tasks = constrained_tasks
         route_warning_messages = list(
             dict.fromkeys(
                 route.warning for route in routes if route.warning
@@ -283,12 +381,6 @@ def make_enrich_node(container: AppContainer):
                 )
             )
 
-        target_date = date.fromisoformat(state["requested_date"])
-        academic_day = (
-            AcademicDayContext.model_validate(state["academic_day_context"])
-            if state.get("academic_day_context")
-            else None
-        )
         congestion_windows = (
             container.rules.congestion_contexts(target_date)
             if uses_default_campus_pack
@@ -389,7 +481,7 @@ def make_enrich_node(container: AppContainer):
             )
 
         structured_facts = (
-            container.rules.facts_for_locations(set(location_ids))
+            container.rules.facts_for_locations(set(task_location_ids))
             if uses_default_campus_pack
             else []
         )
@@ -741,8 +833,7 @@ def _explicit_user_weather(
     timezone_name: str,
 ) -> WeatherContext | None:
     """Turn an explicit user weather update into a hard planning input."""
-    if not any(word in query for word in ("有雨", "下雨", "降雨")):
-        return None
+    mentions_rain = any(word in query for word in ("有雨", "下雨", "降雨"))
     matches = list(
         re.finditer(
             r"(\d{1,2})(?:\s*[:：]\s*(\d{1,2}))?\s*点?\s*"
@@ -751,23 +842,86 @@ def _explicit_user_weather(
             query,
         )
     )
-    if not matches:
-        return None
-    match = matches[-1]
-    hour = int(match.group(1))
-    minute = int(match.group(2) or 0)
-    if not (0 <= hour <= 23 and 0 <= minute <= 59):
-        return None
-    risk_start = datetime.combine(
-        target_date,
-        time(hour, minute),
-        ZoneInfo(timezone_name),
-    )
-    return WeatherContext(
-        date=target_date,
-        period=f"{hour:02d}:{minute:02d}以后",
-        condition="用户告知有雨",
-        rain_probability=1,
-        risk_start_at=risk_start,
-        source=DataSource.USER,
-    )
+    if mentions_rain and matches:
+        match = matches[-1]
+        hour = int(match.group(1))
+        minute = int(match.group(2) or 0)
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            risk_start = datetime.combine(
+                target_date,
+                time(hour, minute),
+                ZoneInfo(timezone_name),
+            )
+            return WeatherContext(
+                date=target_date,
+                period=f"{hour:02d}:{minute:02d}以后",
+                condition="用户告知有雨",
+                rain_probability=1,
+                risk_start_at=risk_start,
+                source=DataSource.USER,
+            )
+
+    if any(
+        marker in query
+        for marker in (
+            "天气有点热",
+            "天气很热",
+            "天气热",
+            "有点热",
+            "太热",
+            "高温",
+            "炎热",
+            "闷热",
+        )
+    ):
+        return WeatherContext(
+            date=target_date,
+            period="day",
+            condition="用户提醒天气较热",
+            source=DataSource.USER,
+        )
+    return None
+
+
+def _needs_evening_return_context(query: str, tasks: list[Task]) -> bool:
+    if any(
+        marker in query
+        for marker in (
+            "晚上",
+            "晚间",
+            "夜间",
+            "晚饭",
+            "夜宵",
+            "社团",
+            "聚会",
+            "晚自习",
+        )
+    ):
+        return True
+    for task in tasks:
+        boundaries = (
+            task.fixed_end,
+            task.latest_end,
+            task.deadline,
+        )
+        if any(value is not None and value.hour >= 21 for value in boundaries):
+            return True
+        if task.preferred_period in {"evening", "晚上", "晚间", "夜间"}:
+            return True
+    return False
+
+
+def _dormitory_cutoff(
+    target_date: date,
+    *,
+    academic_holiday: bool,
+    timezone_name: str,
+) -> datetime:
+    timezone = ZoneInfo(timezone_name)
+    if academic_holiday or target_date.weekday() in {4, 5}:
+        return datetime.combine(
+            target_date + timedelta(days=1),
+            time(0, 0),
+            timezone,
+        )
+    return datetime.combine(target_date, time(23, 0), timezone)

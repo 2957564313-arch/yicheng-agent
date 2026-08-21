@@ -825,7 +825,7 @@ def _apply_memory_preferences(
     if schedule_pace and "buffer_min" not in update:
         pace_updates = {
             "relaxed": (True, max(preferences.buffer_min, 15)),
-            "balanced": (True, max(preferences.buffer_min, 10)),
+            "balanced": (True, max(preferences.buffer_min, 15)),
             "compact": (False, 0),
         }
         avoid_tight, buffer_min = pace_updates[schedule_pace]
@@ -834,7 +834,7 @@ def _apply_memory_preferences(
     elif update.get("avoid_tight_schedule") is False and "buffer_min" not in update:
         update["buffer_min"] = 0
     elif update.get("avoid_tight_schedule") is True and "buffer_min" not in update:
-        update["buffer_min"] = max(preferences.buffer_min, 10)
+        update["buffer_min"] = max(preferences.buffer_min, 15)
     if not update:
         return preferences
     try:

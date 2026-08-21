@@ -28,6 +28,8 @@ const resultDetails = $("#result-details");
 const resultConstraints = $("#result-constraints");
 const resultConstraintTotal = $("#result-constraint-total");
 const resultSources = $("#result-sources");
+const resultReminderCard = $("#result-reminder-card");
+const resultReminders = $("#result-reminders");
 const resultQuickActions = $("#result-quick-actions");
 const resultActionStatus = $("#result-action-status");
 const resultCandidateActions = $("#result-candidate-actions");
@@ -1690,7 +1692,7 @@ function renderClock() {
 
 function renderTimeline(data) {
   const items = [...(data.plan?.items || [])].filter(
-    (item) => item.item_type !== "meal",
+    (item) => !["meal", "buffer"].includes(item.item_type),
   ).sort(
     (left, right) => (
       new Date(left.start_at).getTime() - new Date(right.start_at).getTime()
@@ -1879,15 +1881,19 @@ function renderResultSummary(data) {
       "tasks",
     ],
     [finalEnd, "预计结束时间", "time", "end"],
-    [formatDuration(metrics.buffer_minutes || 0), "弹性缓冲", "time", "buffer"],
-    [formatDuration(metrics.travel_minutes || 0), "校园通勤", "time", "travel"],
+    metrics.buffer_minutes > 0
+      ? [formatDuration(metrics.buffer_minutes), "衔接缓冲", "time", "buffer"]
+      : null,
+    metrics.travel_minutes > 0
+      ? [formatDuration(metrics.travel_minutes), "校园通勤", "time", "travel"]
+      : null,
     [
       `${passed}/${checks.length}`,
       "约束检查通过",
       passed === checks.length ? "success" : "attention",
       "checks",
     ],
-  ];
+  ].filter(Boolean);
   resultSummary.hidden = false;
   resultSummary.innerHTML = cards.map(([value, label, state, kind]) => `
     <div class="result-summary-card ${state}" data-kind="${kind}">
@@ -1925,17 +1931,52 @@ function renderResultDashboard(data) {
     `).join("")
     : '<p class="result-detail-empty">暂无约束检查。</p>';
 
+  const reminderMarker = "再替你留意";
+  const reminderStart = (data.answer || "").indexOf(reminderMarker);
+  let reminderItems = [];
+  if (reminderStart >= 0) {
+    const reminderSection = (data.answer || "")
+      .slice(reminderStart)
+      .split(/\n整套安排预计/)[0];
+    reminderItems = reminderSection
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("• "))
+      .map((line) => line.slice(2).trim());
+  }
+  if (!reminderItems.length) {
+    reminderItems = (data.insights || [])
+      .filter((item) => (
+        item.title?.includes("天气")
+        || item.title?.includes("校园规则")
+        || item.title?.includes("课表")
+      ))
+      .map((item) => item.content)
+      .filter(Boolean)
+      .slice(0, 5);
+  }
+  resultReminderCard.hidden = reminderItems.length === 0;
+  resultReminders.innerHTML = reminderItems.map((item) => `
+    <div class="result-reminder-item">
+      <span>${dashboardIcon("shield")}</span>
+      <p>${escapeHtml(item)}</p>
+    </div>
+  `).join("");
+
   const freshness = data.data_freshness || {};
   const isLive = (value) => value === "live_api";
+  const hasTravel = (data.plan?.items || []).some(
+    (item) => item.item_type === "travel",
+  );
   const sourceEntries = [
-    {
+    hasTravel ? {
       icon: "map",
       name: "高德地图",
       purpose: isLive(freshness.route)
         ? "实时路线与通勤计算"
-        : "已接入 · 当前使用校准路线",
-      state: isLive(freshness.route) ? "实时" : "演示",
-    },
+        : "校园校准路线与通勤计算",
+      state: isLive(freshness.route) ? "实时" : "校准",
+    } : null,
     {
       icon: "building",
       name: "场馆规则",
@@ -1947,8 +1988,8 @@ function renderResultDashboard(data) {
       name: "高德天气",
       purpose: isLive(freshness.weather)
         ? "实时天气与降雨风险"
-        : "冻结天气场景校验",
-      state: isLive(freshness.weather) ? "实时" : "演示",
+        : "天气数据与风险校验",
+      state: isLive(freshness.weather) ? "实时" : "校准",
     },
     {
       icon: "calendar",
@@ -1956,7 +1997,7 @@ function renderResultDashboard(data) {
       purpose: "课程与空闲时间确认",
       state: "个人数据",
     },
-  ];
+  ].filter(Boolean);
   resultSources.innerHTML = sourceEntries.map((entry) => {
     return `
       <div class="result-source-item">

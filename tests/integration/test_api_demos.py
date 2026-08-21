@@ -1021,6 +1021,37 @@ def test_explicit_user_weather_is_a_hard_constraint_on_first_plan(tmp_path):
         )
 
 
+def test_hot_evening_plan_uses_weather_buffers_and_dormitory_rule(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "hot_evening_user",
+                "thread_id": "hot_evening_thread",
+                "query": (
+                    "今天14点以后自习1小时，然后去东操场跑步30分钟，"
+                    "天气有点热，请看着安排；18点吃晚饭45分钟，"
+                    "19点15分到21点15分参加社团活动。"
+                ),
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-08-21T13:00:00+08:00"
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["plan"] is not None, payload["answer"]
+        tasks = task_items(payload)
+        run = tasks["run"]
+        assert run["start_at"] >= "2026-08-21T17:00:00+08:00"
+        assert payload["plan"]["metrics"]["buffer_minutes"] >= 15
+        assert "补水" in payload["answer"]
+        assert "宿舍当天门禁至 24:00" in payload["answer"]
+        assert "23:45" in payload["answer"]
+
+
 def test_llm_failure_is_reported_without_local_guessing(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         client.app.state.container.llm = FailingLLM()

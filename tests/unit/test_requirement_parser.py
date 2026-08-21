@@ -133,7 +133,7 @@ def test_task_scoped_deadline_does_not_leak_to_evening_run():
     assert run.deadline is None
     assert run.earliest_start.isoformat() == "2026-07-24T18:00:00+08:00"
     assert run.latest_end.isoformat() == "2026-07-24T22:00:00+08:00"
-    assert result.preferences.buffer_min == 10
+    assert result.preferences.buffer_min == 15
 
 
 def test_empty_task_request_requires_clarification():

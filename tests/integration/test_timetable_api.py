@@ -282,7 +282,7 @@ def test_realistic_monday_plan_uses_timetable_and_orders_fixed_point_events(
         assert task_by_id["fixed_point_rehearsal_2100"]["start_at"] == (
             "2026-03-02T21:00:00+08:00"
         )
-        assert payload["plan"]["metrics"]["buffer_minutes"] == 0
+        assert payload["plan"]["metrics"]["buffer_minutes"] >= 15
         assert all(check["passed"] for check in payload["constraint_checks"])
 
 

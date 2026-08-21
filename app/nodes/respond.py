@@ -120,6 +120,21 @@ def make_respond_node(container: AppContainer):
             *state.get("provider_warnings", []),
             *state.get("validation_issues", []),
         ]
+        if (
+            _needs_dormitory_reminder(plan)
+            and not any(
+                raw.get("code") == "CAMPUS_KNOWLEDGE_NOT_CONFIGURED"
+                for raw in warnings
+            )
+            and not any(
+                fact.id == "dormitory_access_and_lights" for fact in facts
+            )
+        ):
+            dormitory_fact = container.rules.fact_by_id(
+                "dormitory_access_and_lights"
+            )
+            if dormitory_fact is not None:
+                facts.append(dormitory_fact)
         has_errors = any(
             raw.get("severity") == IssueSeverity.ERROR.value for raw in warnings
         )
@@ -153,6 +168,14 @@ def make_respond_node(container: AppContainer):
                     for raw in state.get("weather_context", [])
                 ],
                 congestion_windows=container.rules.congestion_windows(plan.date),
+                routes=[
+                    TravelEstimate.model_validate(raw)
+                    for raw in state.get("travel_estimates", [])
+                ],
+                academic_holiday=(
+                    (state.get("academic_day_context") or {}).get("day_type")
+                    == "holiday"
+                ),
             )
             suggested_actions = _congestion_suggested_actions(
                 plan,
@@ -223,6 +246,9 @@ def make_respond_node(container: AppContainer):
             "final_plan": plan.model_dump(mode="json"),
             "response_warnings": warnings,
             "suggested_actions": suggested_actions,
+            "retrieved_facts": [
+                fact.model_dump(mode="json") for fact in facts
+            ],
             "status": "partial" if has_errors else "completed",
             "node_trace": append_trace(
                 state,
@@ -328,6 +354,8 @@ def _success_answer(
     facts: list[RetrievedFact],
     weather: list[WeatherContext],
     congestion_windows: list[tuple[datetime, datetime]],
+    routes: list[TravelEstimate] | None = None,
+    academic_holiday: bool = False,
 ) -> str:
     ordered_items = sorted(plan.items, key=lambda value: value.start_at)
     task_items = [item for item in ordered_items if item.item_type == "task"]
@@ -386,6 +414,8 @@ def _success_answer(
             )
     else:
         verified_parts = ["时间顺序"]
+        if _uses_personal_timetable(tasks or []):
+            verified_parts.append("杭电助手课表")
         if travel_items:
             verified_parts.append("路上耗时")
         if opening_rules_available:
@@ -522,11 +552,29 @@ def _success_answer(
             verified_summary.append("开放时段")
         lines.append(f"{'、'.join(verified_summary)}已经核对过，可以按这份安排执行。")
     reminder_context = " ".join([query, *task_titles])
-    reminders = _knowledge_reminders(facts, query=reminder_context)
-    weather_reminder = _weather_reminder(weather, query=query)
+    reminders = _knowledge_reminders(
+        [
+            fact
+            for fact in facts
+            if fact.id != "dormitory_access_and_lights"
+        ],
+        query=reminder_context,
+    )
+    timetable_reminder = _timetable_constraint_reminder(tasks or [])
+    if timetable_reminder:
+        reminders.insert(0, timetable_reminder)
+    dormitory_reminder = _dormitory_return_reminder(
+        plan,
+        facts=facts,
+        routes=routes or [],
+        academic_holiday=academic_holiday,
+    )
+    if dormitory_reminder:
+        reminders.insert(0, dormitory_reminder)
+    weather_reminder = _weather_reminder(weather, query=query, plan=plan)
     if weather_reminder:
         reminders.insert(0, weather_reminder)
-        reminders = reminders[:3]
+        reminders = reminders[:5]
     elif any(word in query for word in ("天气", "下雨", "降雨", "有雨")) and any(
         raw.get("code") == "API_DEGRADED"
         and raw.get("details", {}).get("provider") == "weather"
@@ -537,16 +585,22 @@ def _success_answer(
             "目标日期暂时没有可靠的天气预报；临近当天再查一次会更"
             "准确，如果遇到降雨或高温，我可以只调整跑步等户外安排。",
         )
-        reminders = reminders[:3]
+        reminders = reminders[:5]
     congestion_reminder = _congestion_reminder(
         ordered_items,
         congestion_windows,
     )
     if congestion_reminder:
         reminders.insert(0, congestion_reminder)
-        reminders = reminders[:3]
+        reminders = reminders[:5]
     if reminders:
-        count_label = {1: "一点", 2: "两点", 3: "三点"}.get(
+        count_label = {
+            1: "一点",
+            2: "两点",
+            3: "三点",
+            4: "四点",
+            5: "五点",
+        }.get(
             len(reminders),
             "几件事",
         )
@@ -633,12 +687,13 @@ def _weather_reminder(
     weather: list[WeatherContext],
     *,
     query: str = "",
+    plan: Plan | None = None,
 ) -> str | None:
     live_items = [item for item in weather if item.source.value in {"user", "live_api"}]
     if not live_items:
         return None
 
-    def risk_score(item: WeatherContext) -> tuple[int, int, float]:
+    def risk_score(item: WeatherContext) -> tuple[int, int, int, float]:
         condition = item.condition or ""
         severe = int(
             "雨" in condition
@@ -647,8 +702,12 @@ def _weather_reminder(
             or (item.rain_probability or 0) >= 0.5
         )
         explicit_boundary = int(item.risk_start_at is not None)
+        heat = int(
+            (item.temperature_c is not None and item.temperature_c >= 32)
+            or any(marker in condition for marker in ("热", "高温", "炎热", "闷热"))
+        )
         temperature = item.temperature_c or -100
-        return severe, explicit_boundary, temperature
+        return severe, explicit_boundary, heat, temperature
 
     live = max(
         live_items,
@@ -690,7 +749,16 @@ def _weather_reminder(
             f"{care}。户外活动出发前请再看一次临近预报，变化时"
             "我可以局部调整。"
         )
-    if live.temperature_c is not None and live.temperature_c >= 32:
+    has_heat = (
+        (live.temperature_c is not None and live.temperature_c >= 32)
+        or any(marker in condition for marker in ("热", "高温", "炎热", "闷热"))
+    )
+    if has_heat:
+        temperature_label = (
+            f"当前预报约 {live.temperature_c:g}℃"
+            if live.temperature_c is not None
+            else "你提醒天气有点热"
+        )
         if any(
             marker in query
             for marker in (
@@ -703,15 +771,138 @@ def _weather_reminder(
                 "骑行",
             )
         ):
+            outdoor_items = [
+                item
+                for item in (plan.items if plan else [])
+                if item.item_type == "task"
+                and any(
+                    marker in item.title
+                    for marker in (
+                        "跑步",
+                        "长跑",
+                        "运动",
+                        "骑行",
+                        "足球",
+                        "篮球",
+                        "操场",
+                        "户外",
+                    )
+                )
+            ]
+            avoided_hottest_period = bool(outdoor_items) and all(
+                not (
+                    item.start_at.time() < time(17, 0)
+                    and item.end_at.time() > time(11, 0)
+                )
+                for item in outdoor_items
+            )
             return (
-                f"当前预报约 {live.temperature_c:g}℃，运动前记得补水，"
-                "尽量避开最晒的时段。"
+                f"{temperature_label}，"
+                + (
+                    "我已把户外运动避开 11:00—17:00 最晒的时段；"
+                    if avoided_hottest_period
+                    else "户外运动尽量避开 11:00—17:00 最晒的时段；"
+                )
+                + "出发前先补水，强度别一下拉满，觉得闷热或头晕就及时停下来。"
             )
         return (
-            f"当前预报约 {live.temperature_c:g}℃，出门记得防晒和补水，"
+            f"{temperature_label}，出门记得防晒和补水，"
             "尽量走阴凉处；室内外温差较大时也可以带件薄外套。"
         )
     return None
+
+
+def _needs_dormitory_reminder(plan: Plan) -> bool:
+    task_items = [item for item in plan.items if item.item_type == "task"]
+    threshold = datetime.combine(
+        plan.date,
+        time(21, 0),
+        plan.created_at.tzinfo,
+    )
+    return bool(task_items) and max(item.end_at for item in task_items) >= threshold
+
+
+def _dormitory_return_reminder(
+    plan: Plan,
+    *,
+    facts: list[RetrievedFact],
+    routes: list[TravelEstimate],
+    academic_holiday: bool = False,
+) -> str | None:
+    if not _needs_dormitory_reminder(plan) or not any(
+        fact.id == "dormitory_access_and_lights" for fact in facts
+    ):
+        return None
+    task_items = sorted(
+        (item for item in plan.items if item.item_type == "task"),
+        key=lambda item: item.end_at,
+    )
+    last = task_items[-1]
+    holiday_or_weekend = academic_holiday or plan.date.weekday() in {4, 5}
+    if holiday_or_weekend:
+        cutoff = datetime.combine(
+            plan.date + timedelta(days=1),
+            time(0, 0),
+            last.end_at.tzinfo,
+        )
+        cutoff_label = "24:00"
+    else:
+        cutoff = datetime.combine(plan.date, time(23, 0), last.end_at.tzinfo)
+        cutoff_label = "23:00"
+    route = next(
+        (
+            item
+            for item in routes
+            if item.origin_id == last.location_id
+            and item.destination_id == "student_dormitory"
+        ),
+        None,
+    )
+    return_minutes = (
+        0
+        if last.location_id == "student_dormitory"
+        else route.duration_min if route is not None else 15
+    )
+    depart_by = cutoff - timedelta(minutes=return_minutes)
+    source_label = (
+        "按高德路线"
+        if route is not None and route.source == DataSource.LIVE_API
+        else "按校园校准路线"
+        if route is not None
+        else "地点未完整说明，先按默认"
+    )
+    return (
+        f"宿舍当天门禁至 {cutoff_label}；最后一项在 {last.end_at:%H:%M} "
+        f"结束，建议结束后直接返宿。{source_label} {return_minutes} 分钟返程；"
+        "如果之后还有临时安排，最晚应在"
+        f" {depart_by:%H:%M} 动身并于 {cutoff_label} 前回到宿舍。"
+    )
+
+
+def _uses_personal_timetable(tasks: list[Task]) -> bool:
+    return any(
+        any(
+            marker in (task.notes or "")
+            for marker in ("杭电助手", "杭助", "个人课表", "课表")
+        )
+        for task in tasks
+    )
+
+
+def _timetable_constraint_reminder(tasks: list[Task]) -> str | None:
+    course_tasks = [task for task in tasks if _uses_personal_timetable([task])]
+    if not course_tasks:
+        return None
+    periods = "、".join(
+        f"{task.fixed_start:%H:%M}—{task.fixed_end:%H:%M} {task.title}"
+        for task in course_tasks
+        if task.fixed_start is not None and task.fixed_end is not None
+    )
+    return (
+        f"杭电助手课表中的 {periods} 已作为不可移动时段，其他任务只使用剩余空档。"
+        if periods
+        else "杭电助手个人课表已作为不可移动约束，其他任务只使用剩余空档。"
+    )
 
 
 def _congestion_reminder(

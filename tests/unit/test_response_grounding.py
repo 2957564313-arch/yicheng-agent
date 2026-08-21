@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from app.nodes.respond import (
     _claims_peak_was_avoided,
     _direct_calendar_answer,
+    _dormitory_return_reminder,
     _ensure_query_guardrails,
     _fact_source_label,
     _facts_answer,
@@ -336,6 +337,84 @@ def test_hot_weather_reminder_matches_non_sport_task():
     assert reminder is not None
     assert "防晒和补水" in reminder
     assert "运动前" not in reminder
+
+
+def test_user_reported_heat_gets_caring_exercise_guidance():
+    plan = Plan(
+        id="hot_plan",
+        user_id="user",
+        thread_id="thread",
+        date=datetime(2026, 8, 21, tzinfo=TZ).date(),
+        status=PlanStatus.VALID,
+        items=[
+            PlanItem(
+                id="run_item",
+                task_id="run",
+                item_type="task",
+                title="跑步",
+                start_at=datetime(2026, 8, 21, 17, 15, tzinfo=TZ),
+                end_at=datetime(2026, 8, 21, 17, 45, tzinfo=TZ),
+                location_id="track",
+                source=DataSource.USER,
+            )
+        ],
+        created_at=datetime(2026, 8, 21, 13, 0, tzinfo=TZ),
+    )
+    reminder = _weather_reminder(
+        [
+            WeatherContext(
+                date=plan.date,
+                period="day",
+                condition="用户提醒天气较热",
+                source=DataSource.USER,
+            )
+        ],
+        query="天气有点热，想跑步",
+        plan=plan,
+    )
+
+    assert reminder is not None
+    assert "避开 11:00—17:00" in reminder
+    assert "补水" in reminder
+    assert "闷热或头晕" in reminder
+
+
+def test_late_friday_plan_proactively_explains_dormitory_return_time():
+    late_plan = Plan(
+        id="late_plan",
+        user_id="user",
+        thread_id="thread",
+        date=datetime(2026, 8, 21, tzinfo=TZ).date(),
+        status=PlanStatus.VALID,
+        items=[
+            PlanItem(
+                id="club_item",
+                task_id="club",
+                item_type="task",
+                title="社团活动",
+                start_at=datetime(2026, 8, 21, 19, 15, tzinfo=TZ),
+                end_at=datetime(2026, 8, 21, 21, 15, tzinfo=TZ),
+                source=DataSource.USER,
+            )
+        ],
+        created_at=datetime(2026, 8, 21, 13, 0, tzinfo=TZ),
+    )
+    reminder = _dormitory_return_reminder(
+        late_plan,
+        facts=[
+            RetrievedFact(
+                id="dormitory_access_and_lights",
+                content="周五宿舍门禁至24:00。",
+                source=DataSource.STRUCTURED,
+            )
+        ],
+        routes=[],
+    )
+
+    assert reminder is not None
+    assert "门禁至 24:00" in reminder
+    assert "默认 15 分钟返程" in reminder
+    assert "23:45 动身" in reminder
 
 
 def test_weather_reminder_checks_night_forecast_not_only_first_period():

@@ -223,6 +223,13 @@ class CampusRulesRepository:
                 facts.append(self._rule_fact(rule))
         return facts
 
+    def fact_by_id(self, rule_id: str) -> RetrievedFact | None:
+        rule = next(
+            (item for item in self._rules if item.get("id") == rule_id),
+            None,
+        )
+        return self._rule_fact(rule) if rule is not None else None
+
     @staticmethod
     def _rule_fact(rule: dict) -> RetrievedFact:
         verified_at = (

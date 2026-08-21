@@ -1124,7 +1124,7 @@ class RuleBasedRequirementParser:
             tasks,
         )
         return [*course_tasks, *fixed_tasks, *tasks], UserPreferences(
-            buffer_min=0 if overall_deadline else 10,
+            buffer_min=0 if overall_deadline else 15,
             transport_mode=self.transport_mode_from_query(query),
             avoid_congestion=self.avoid_congestion_from_query(query),
         )

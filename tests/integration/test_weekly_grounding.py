@@ -338,9 +338,9 @@ async def test_weekly_period_preference_moves_when_course_occupies_morning(
             for item in result.plan.items
             if item.task_id == weekly_task_id
         )
-        # The default ten-minute buffer remains a hard execution safeguard.
-        assert grounded.start_at == at(12, 10)
-        assert grounded.end_at == at(13, 10)
+        # The default fifteen-minute buffer remains a hard execution safeguard.
+        assert grounded.start_at == at(12, 15)
+        assert grounded.end_at == at(13, 15)
 
 
 @pytest.mark.asyncio

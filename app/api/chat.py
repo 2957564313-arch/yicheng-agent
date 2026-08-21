@@ -317,6 +317,7 @@ def _constraint_checks(
     issues: list[Issue],
     *,
     weather_enforced: bool,
+    travel_applicable: bool = True,
 ) -> list[ConstraintCheck]:
     definitions = [
         (
@@ -366,6 +367,15 @@ def _constraint_checks(
             definition
             for definition in definitions
             if definition[0] != "weather"
+        ]
+    if not travel_applicable and not any(
+        issue.code in {"MISSING_TRAVEL_ESTIMATE", "INSUFFICIENT_TRAVEL_TIME"}
+        for issue in issues
+    ):
+        definitions = [
+            definition
+            for definition in definitions
+            if definition[0] != "travel"
         ]
     return [
         ConstraintCheck(
@@ -1095,6 +1105,12 @@ async def execute_chat(
             constraint_checks=_constraint_checks(
                 warnings,
                 weather_enforced=weather_enforced,
+                travel_applicable=bool(
+                    plan
+                    and any(
+                        item.item_type == "travel" for item in plan.items
+                    )
+                ),
             ),
             execution_steps=_execution_steps(traces, warnings),
             task_statuses=_task_statuses(

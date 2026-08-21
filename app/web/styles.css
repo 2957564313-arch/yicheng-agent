@@ -2480,6 +2480,13 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
 .result-detail-heading h3 { margin: 0; color: #3730a3; font-size: 14px; }
 .result-section-heading p { margin: 3px 0 0; color: #8b93a2; font-size: 10px; }
 .result-details { display: grid; gap: 10px; }
+.result-reminder-card { border-color: #fde7bc; background: #fffdf7; }
+.result-reminder-card .result-detail-heading h3 { color: #9a5b12; }
+.result-reminder-list { display: grid; gap: 7px; margin-top: 9px; }
+.result-reminder-item { display: grid; grid-template-columns: 18px minmax(0,1fr); gap: 7px; align-items: start; }
+.result-reminder-item > span { display: grid; width: 18px; height: 18px; place-items: center; border-radius: 6px; color: #d97706; background: #fff3d5; }
+.result-reminder-item svg { width: 12px; height: 12px; }
+.result-reminder-item p { margin: 0; color: #5f6673; font-size: 9px; line-height: 1.55; }
 .result-detail-card { padding: 13px; border: 1px solid #e7e9f2; border-radius: 13px; background: #fff; }
 .result-detail-heading { margin-bottom: 9px; }
 .result-detail-heading span { color: #6b7280; font-size: 10px; font-weight: 700; }
@@ -2506,7 +2513,7 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
 .result-source-item em { display: block; overflow: hidden; margin-top: 4px; color: #7c3aed; font-size: 8px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
 .result-detail-empty { margin: 6px 0 0; color: #9aa1ad; font-size: 10px; }
 
-.result-summary { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.result-summary { grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); }
 .result-summary-card { position: relative; padding: 11px 12px 11px 34px; }
 .result-summary-icon { position: absolute; left: 11px; top: 12px; display: grid; width: 17px; height: 17px; place-items: center; border-radius: 5px; color: #6366f1; background: #eef2ff; }
 .result-summary-icon svg { width: 13px; height: 13px; }
