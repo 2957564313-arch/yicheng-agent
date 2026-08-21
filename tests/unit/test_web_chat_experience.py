@@ -156,15 +156,16 @@ def test_personalization_learns_location_and_requires_confirmation() -> None:
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
     styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
 
-    assert "偏好仅在确认后保存，可随时停用、修改或删除。" in html
+    assert "偏好仅在确认后保存，可随时停用、修改或删除。" not in html
     assert "只保存你主动设置的内容" not in html
     assert "你确认后才会保存" not in html
     assert "自习地点（快捷设置）" not in html
     assert '<option value="preferred_study_location">自习地点</option>' in html
     assert 'id="preference-candidates"' in html
-    assert "根据对话中重复采用的安排生成建议，确认后再保存" in html
+    assert "根据对话中重复采用的安排生成建议，仅在确认后保存" in html
     assert "智能偏好推荐" in html
-    assert "手动设置" in html
+    assert "手动设置" not in html
+    assert "直接添加需要长期使用的偏好" not in html
     assert "function recordManualScheduleBehavior" not in javascript
     assert "function locationPreferenceCandidates" in javascript
     assert "values.length < 3" in javascript
