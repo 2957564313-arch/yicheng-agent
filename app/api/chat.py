@@ -39,6 +39,8 @@ _CURRENT_PLAN_KEYWORDS = (
     "还有",
     "别忘了",
     "取消",
+    "改日",
+    "改天",
     "删除",
     "去掉",
     "移除",
@@ -808,21 +810,12 @@ async def execute_chat(
     trace_id = f"trace_{uuid4().hex}"
 
     needs_current_plan = _requires_current_plan(payload.query)
-    effective_old_plan_id = payload.old_plan_id
-    previous_plan = (
-        container.plans.get(effective_old_plan_id)
-        if effective_old_plan_id
-        else None
-    )
-    if (
-        previous_plan is None
-        and effective_old_plan_id is None
-        and needs_current_plan
-    ):
-        latest_plan = container.plans.latest_for_thread(thread_id)
-        if latest_plan:
-            previous_plan = latest_plan
-            effective_old_plan_id = latest_plan.id
+    effective_old_plan_id = payload.old_plan_id if needs_current_plan else None
+    previous_plan = None
+    if effective_old_plan_id:
+        candidate = container.plans.get(effective_old_plan_id)
+        if candidate is not None and candidate.user_id == payload.user_id:
+            previous_plan = candidate
     client_previous_plan = (
         payload.client_context.previous_plan
         if payload.client_context
@@ -833,14 +826,24 @@ async def execute_chat(
         and needs_current_plan
         and client_previous_plan is not None
         and client_previous_plan.user_id == payload.user_id
-        and client_previous_plan.thread_id == thread_id
         and (
             effective_old_plan_id is None
             or client_previous_plan.id == effective_old_plan_id
         )
     ):
-        previous_plan = client_previous_plan
-        effective_old_plan_id = client_previous_plan.id
+        persisted_client_plan = container.plans.get(client_previous_plan.id)
+        previous_plan = (
+            persisted_client_plan
+            if persisted_client_plan is not None
+            and persisted_client_plan.user_id == payload.user_id
+            else client_previous_plan
+        )
+        effective_old_plan_id = previous_plan.id
+    if previous_plan is None and needs_current_plan:
+        latest_plan = container.plans.latest_for_thread(thread_id)
+        if latest_plan and latest_plan.user_id == payload.user_id:
+            previous_plan = latest_plan
+            effective_old_plan_id = latest_plan.id
 
     container.plans.ensure_user_and_thread(
         user_id=payload.user_id,

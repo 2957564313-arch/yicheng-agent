@@ -2129,6 +2129,9 @@ class RuleBasedRequirementParser:
             query=query,
             old_task_items=old_task_items,
         )
+        is_pure_removal = bool(removed_ids) and not (
+            rescheduled or duration_changes
+        )
         overall_deadline = self._overall_deadline(query, old_plan.date)
         for index, item in enumerate(old_task_items):
             if item.item_type != "task" or not item.task_id:
@@ -2145,6 +2148,13 @@ class RuleBasedRequirementParser:
                 start_at = item.start_at
                 duration = duration_changes[item.task_id]
                 end_at = start_at + timedelta(minutes=duration)
+                flexibility = TaskFlexibility.FIXED
+            elif is_pure_removal:
+                # A cancellation/defer request is a surgical edit. Keep every
+                # surviving activity exactly where the user put it; a separate
+                # optimization request may use the newly freed interval later.
+                start_at = item.start_at
+                end_at = item.end_at
                 flexibility = TaskFlexibility.FIXED
             elif "实验课" in title and "延迟一小时" in query:
                 start_at = item.start_at + timedelta(hours=1)
@@ -2302,6 +2312,9 @@ class RuleBasedRequirementParser:
                 "清空安排",
                 "全部取消",
                 "取消全部",
+                "改日",
+                "改天",
+                "下次再安排",
             )
         )
 

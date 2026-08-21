@@ -368,7 +368,33 @@ def _success_answer(
     weather_adjustment = _has_precise_weather_risk(
         weather
     ) and _outdoor_tasks_finish_before_weather_risk(plan, weather)
-    if weather_adjustment:
+    is_removal = any(
+        marker in query
+        for marker in (
+            "取消",
+            "删除",
+            "去掉",
+            "移除",
+            "不去了",
+            "不用安排",
+            "不安排",
+            "别安排",
+            "改日",
+            "改天",
+            "下次再安排",
+        )
+    )
+    if is_removal:
+        lines = [
+            "你要改日的安排已经移除出今天的日程，"
+            "其他事项的名称和时间均保持原样。"
+        ]
+        if task_names:
+            lines.append(
+                f"今天继续按原时间完成{task_names}；"
+                "空出来的时段先保留，只有你继续要求优化时才会重排。"
+            )
+    elif weather_adjustment:
         lines = [
             "天气有变化时，安全比赶进度更重要。"
             "我把容易受影响的户外安排挪到了更稳妥的时段，"
@@ -379,29 +405,10 @@ def _success_answer(
             f"{task_names}；这样既照顾安全，也不需要推翻整天的计划。"
         )
     elif intent == "replan":
-        is_removal = any(
-            marker in query
-            for marker in (
-                "取消",
-                "删除",
-                "去掉",
-                "移除",
-                "不去了",
-                "不用安排",
-                "不安排",
-                "别安排",
-            )
-        )
-        if is_removal:
-            lines = [
-                "你要取消的安排我已经移除了，"
-                "其他事项仍尽量保持原来的时间，不会顺手把整天推翻。"
-            ]
-        else:
-            lines = [
-                "你刚刚强调的变化我记下了。"
-                "这次只调整受影响的部分，能保留的安排我都替你留住了。"
-            ]
+        lines = [
+            "你刚刚强调的变化我记下了。"
+            "这次只调整受影响的部分，能保留的安排我都替你留住了。"
+        ]
         if task_names:
             lines.append(
                 f"安排思路：围绕新的要求重新衔接{task_names}，"

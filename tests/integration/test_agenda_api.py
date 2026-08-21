@@ -776,13 +776,18 @@ def test_conversational_removal_keeps_unaffected_daily_agenda(tmp_path):
         )
         assert first.status_code == 200, first.text
         assert first.json()["status"] == "completed"
+        original_items = {
+            item["task_id"]: (item["title"], item["start_at"], item["end_at"])
+            for item in first.json()["plan"]["items"]
+            if item["item_type"] == "task" and item["task_id"] != "run"
+        }
 
         second = client.post(
             "/api/v1/chat",
             json={
                 "user_id": "removal_user",
                 "thread_id": "removal_thread",
-                "query": "跑步不去了，其他安排保持不变。",
+                "query": "天气有点热，跑步改日，其他安排保持不变。",
                 "mode": "offline",
                 "client_context": {
                     "now": "2026-07-25T10:05:00+08:00"
@@ -798,6 +803,16 @@ def test_conversational_removal_keeps_unaffected_daily_agenda(tmp_path):
             and change["change_type"] == "removed"
             for change in payload["plan_diff"]
         )
+        remaining_items = {
+            item["task_id"]: (item["title"], item["start_at"], item["end_at"])
+            for item in payload["plan"]["items"]
+            if item["item_type"] == "task"
+        }
+        assert remaining_items == original_items
+        assert [
+            change for change in payload["plan_diff"]
+            if change["change_type"] != "removed"
+        ] == []
 
         agenda = client.get(
             "/api/v1/users/removal_user/agenda",
@@ -815,6 +830,12 @@ def test_conversational_removal_keeps_unaffected_daily_agenda(tmp_path):
         assert "图书馆自习" in titles
         assert any("快递" in title for title in titles)
         assert not any("跑步" in title for title in titles)
+        agenda_items = {
+            item["task_id"]: (item["title"], item["start_at"], item["end_at"])
+            for item in agenda.json()["items"]
+            if item["source"] == "plan" and item["kind"] != "travel"
+        }
+        assert agenda_items == original_items
 
 
 def test_conversational_clear_all_creates_an_explicit_empty_day(tmp_path):

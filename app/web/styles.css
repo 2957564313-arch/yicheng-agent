@@ -1389,6 +1389,8 @@ textarea:focus {
   margin: 0;
 }
 
+#result-reopen[hidden] { display: none; }
+
 .weekly-summary {
   display: grid;
   gap: 10px;

@@ -35,6 +35,7 @@ const resultActionStatus = $("#result-action-status");
 const resultCandidateActions = $("#result-candidate-actions");
 const resultChangeSummary = $("#result-change-summary");
 const resultBackChat = $("#result-back-chat");
+const resultReopen = $("#result-reopen");
 const taskStatuses = $("#task-statuses");
 const answer = $("#answer");
 const conversationStream = $("#conversation-stream");
@@ -570,7 +571,9 @@ function syncConversationOutline() {
     button.addEventListener("click", () => {
       const target = document.getElementById(button.dataset.messageTarget);
       if (!target) return;
-      if (document.body.classList.contains("has-plan-result")) setResultMode(false);
+      if (document.body.classList.contains("has-plan-result")) {
+        returnToConversation();
+      }
       window.requestAnimationFrame(() => {
         target.scrollIntoView({ behavior: "smooth", block: "center" });
         target.classList.add("is-located");
@@ -1710,6 +1713,8 @@ function renderTimeline(data) {
   const changesByTask = new Map(
     changes.map((change) => [change.task_id, change]),
   );
+  const removalOnly = changes.length > 0
+    && changes.every((change) => change.change_type === "removed");
   if (resultChangeSummary) {
     const hasPreviousPlan = Boolean(data.previous_plan);
     const previousTravel = data.previous_plan?.metrics?.travel_minutes || 0;
@@ -1733,14 +1738,14 @@ function renderTimeline(data) {
         <small>${before} → ${after}</small>
       </span>`;
     });
-    if (travelDelta) {
+    if (travelDelta && !removalOnly) {
       changeCards.push(`<span class="result-change-chip travel-change">
         <b>通勤时间</b>
         <em>${travelDelta < 0 ? "减少" : "增加"}${formatDuration(Math.abs(travelDelta))}</em>
         <small>${formatDuration(previousTravel)} → ${formatDuration(currentTravel)}</small>
       </span>`);
     }
-    if (waitingDelta) {
+    if (waitingDelta && !removalOnly) {
       const previousWaiting = planIdleMinutes(data.previous_plan);
       const currentWaiting = planIdleMinutes(data.plan);
       changeCards.push(`<span class="result-change-chip waiting-change">
@@ -1821,6 +1826,7 @@ function setResultMode(active) {
 function returnToConversation() {
   setResultMode(false);
   setActiveWorkspaceView("chat");
+  if (resultReopen) resultReopen.hidden = !lastResultData?.plan;
   requestAnimationFrame(() => {
     composerPanel?.scrollIntoView({ behavior: "smooth", block: "start" });
     queryInput?.focus({ preventScroll: true });
@@ -1828,6 +1834,11 @@ function returnToConversation() {
 }
 
 resultBackChat?.addEventListener("click", returnToConversation);
+resultReopen?.addEventListener("click", () => {
+  if (!lastResultData?.plan) return;
+  resultReopen.hidden = true;
+  setResultMode(true);
+});
 
 function setInlineRequestEditing(active) {
   resultRequest.classList.toggle("is-editing", active);
@@ -2249,6 +2260,7 @@ function renderResponse(data) {
     "has-plan-result",
   );
   lastResultData = data;
+  if (resultReopen) resultReopen.hidden = true;
   pendingPlanCandidate = null;
   if (resultCandidateActions) {
     resultCandidateActions.hidden = true;
@@ -2264,19 +2276,28 @@ function renderResponse(data) {
   answer.textContent = data.answer;
   answer.classList.remove("muted");
   completeConversationTurn(data.answer);
+  const publishedPlanId = localStorage.getItem(planPublishedKey);
   const planPublished = Boolean(
-    data.plan?.id
-    && localStorage.getItem(planPublishedKey) === data.plan.id
+    data.plan?.id && publishedPlanId === data.plan.id
+  );
+  const updatesPublishedAgenda = Boolean(
+    data.previous_plan?.id && publishedPlanId === data.previous_plan.id
   );
   if (data.current_plan_saved && data.plan?.status === "valid") {
     const dateLabel = `${data.plan.date.slice(5, 7).replace(/^0/, "")}月${data.plan.date.slice(8, 10).replace(/^0/, "")}日`;
     saveState.textContent = planPublished
       ? `已加入 ${dateLabel} 日程`
-      : "方案已自动保存";
+      : updatesPublishedAgenda
+        ? "调整方案已保存，确认后更新日程"
+        : "方案已自动保存";
     if (resultAddAgenda) {
       resultAddAgenda.hidden = false;
       resultAddAgenda.disabled = false;
-      resultAddAgenda.textContent = planPublished ? "查看日程" : "加入日程";
+      resultAddAgenda.textContent = planPublished
+        ? "查看日程"
+        : updatesPublishedAgenda
+          ? "更新日程"
+          : "加入日程";
     }
   } else {
     saveState.textContent = data.plan
@@ -2771,6 +2792,7 @@ async function requestChat(query, { previewOnly = false, render = true } = {}) {
       user_id: consoleUserId,
       thread_id: consoleThreadId,
       query,
+      old_plan_id: clientContext.previous_plan?.id || null,
       mode: planningMode,
       publish_to_agenda: false,
       preview_only: previewOnly,
@@ -2832,9 +2854,18 @@ resultRerun?.addEventListener("click", async () => {
 resultAddAgenda?.addEventListener("click", async () => {
   const plan = lastResultData?.plan;
   if (!plan?.id || plan.status !== "valid") return;
-  const wasPublished = localStorage.getItem(planPublishedKey) === plan.id;
+  const previousPublishedPlanId = localStorage.getItem(planPublishedKey);
+  const wasPublished = previousPublishedPlanId === plan.id;
+  const isAgendaUpdate = Boolean(
+    lastResultData?.previous_plan?.id
+    && previousPublishedPlanId === lastResultData.previous_plan.id
+  );
   resultAddAgenda.disabled = true;
-  resultAddAgenda.textContent = wasPublished ? "正在打开…" : "正在加入…";
+  resultAddAgenda.textContent = wasPublished
+    ? "正在打开…"
+    : isAgendaUpdate
+      ? "正在更新…"
+      : "正在加入…";
   if (!wasPublished) localStorage.setItem(planPublishedKey, plan.id);
   try {
     scheduleCursorDate = plan.date;
@@ -2847,8 +2878,18 @@ resultAddAgenda?.addEventListener("click", async () => {
     saveState.classList.add("saved");
     resultAddAgenda.textContent = "查看日程";
   } catch (error) {
-    if (!wasPublished) localStorage.removeItem(planPublishedKey);
-    resultAddAgenda.textContent = wasPublished ? "查看日程" : "加入日程";
+    if (!wasPublished) {
+      if (previousPublishedPlanId) {
+        localStorage.setItem(planPublishedKey, previousPublishedPlanId);
+      } else {
+        localStorage.removeItem(planPublishedKey);
+      }
+    }
+    resultAddAgenda.textContent = wasPublished
+      ? "查看日程"
+      : isAgendaUpdate
+        ? "更新日程"
+        : "加入日程";
     renderDebug(error);
   } finally {
     resultAddAgenda.disabled = false;

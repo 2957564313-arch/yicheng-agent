@@ -87,6 +87,8 @@ def test_fresh_homepage_stays_clean_until_the_user_runs_a_plan() -> None:
     assert "mode: planningMode" in javascript
     assert 'id="debug-panel"' not in html
     assert "初期调试信息" not in html
+    assert "当前为公开测试版" not in html
+    assert "课程、调课、停课与补课均以杭助同步结果为准" not in html
     assert 'id="demo-buttons"' not in html
     assert 'id="sidebar-demo-buttons"' not in html
     assert "async function loadDemos()" not in javascript
@@ -162,11 +164,15 @@ def test_result_dashboard_can_return_to_the_main_conversation() -> None:
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
 
     assert 'id="result-back-chat"' in html
+    assert 'id="result-reopen"' in html
     assert "function returnToConversation()" in javascript
     assert 'resultBackChat?.addEventListener("click", returnToConversation);' in javascript
     assert 'button.dataset.view === "chat"' in javascript
     assert "setResultMode(false);" in javascript
     assert 'queryInput?.focus({ preventScroll: true });' in javascript
+    assert 'resultReopen?.addEventListener("click"' in javascript
+    assert "resultReopen.hidden = !lastResultData?.plan;" in javascript
+    assert 'if (document.body.classList.contains("has-plan-result")) {' in javascript
 
 
 def test_result_dashboard_has_icons_sources_and_four_quick_actions() -> None:
@@ -197,6 +203,13 @@ def test_result_dashboard_has_icons_sources_and_four_quick_actions() -> None:
     assert "function planIdleMinutes(plan)" in javascript
     assert ".result-change-chip.waiting-change" in styles
     assert "const hasPreviousPlan = Boolean(data.previous_plan);" in javascript
+    assert "const removalOnly = changes.length > 0" in javascript
+    assert "if (waitingDelta && !removalOnly)" in javascript
+    assert "old_plan_id: clientContext.previous_plan?.id || null" in javascript
+    assert 'updatesPublishedAgenda' in javascript
+    assert '"更新日程"' in javascript
+    assert '"调整方案已保存，确认后更新日程"' in javascript
+    assert "previousPublishedPlanId" in javascript
     assert "固定课程和锁定安排的时间绝对不变" in javascript
     assert "function formatDuration(minutes)" in javascript
     assert "item.location_raw || (item.location_id" in javascript

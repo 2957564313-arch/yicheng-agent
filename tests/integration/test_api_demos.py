@@ -1130,6 +1130,64 @@ def test_infeasible_plan_keeps_every_requested_task_visible(tmp_path):
         assert actions[3]["label"].startswith("这次不排")
 
 
+def test_visible_client_plan_beats_a_different_thread_draft_for_edits(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        visible = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "visible_plan_user",
+                "thread_id": "visible_plan_thread",
+                "query": (
+                    "2026年7月28日14点自习1小时，15点30取快递，"
+                    "18点跑步30分钟，19点和导师碰头2小时。"
+                ),
+                "mode": "offline",
+                "client_context": {"now": "2026-07-25T10:00:00+08:00"},
+            },
+        )
+        assert visible.status_code == 200, visible.text
+        visible_plan = visible.json()["plan"]
+
+        unrelated = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "visible_plan_user",
+                "thread_id": "visible_plan_thread",
+                "query": (
+                    "2026年7月29日14点自习1小时，19点参加社团活动2小时。"
+                ),
+                "mode": "offline",
+                "client_context": {"now": "2026-07-25T10:02:00+08:00"},
+            },
+        )
+        assert unrelated.status_code == 200, unrelated.text
+
+        edited = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "visible_plan_user",
+                "thread_id": "visible_plan_thread",
+                "query": "天气有点热，跑步改日，其他活动和时间不动。",
+                "mode": "offline",
+                "client_context": {
+                    "now": "2026-07-25T10:05:00+08:00",
+                    "previous_plan": visible_plan,
+                },
+            },
+        )
+        assert edited.status_code == 200, edited.text
+        payload = edited.json()
+        assert payload["previous_plan"]["id"] == visible_plan["id"]
+        titles = {
+            item["title"]
+            for item in payload["plan"]["items"]
+            if item["item_type"] == "task"
+        }
+        assert any("导师" in title for title in titles)
+        assert not any("社团" in title for title in titles)
+        assert not any("跑步" in title for title in titles)
+
+
 def test_suggested_action_query_generates_complete_plan(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         first = client.post(

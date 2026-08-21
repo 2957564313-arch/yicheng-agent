@@ -299,6 +299,7 @@ def test_complete_new_request_with_weather_does_not_reuse_old_plan(tmp_path):
             },
         )
         assert first.status_code == 200
+        previous_plan = first.json()["plan"]
         second = client.post(
             "/api/v1/chat",
             json={
@@ -308,8 +309,12 @@ def test_complete_new_request_with_weather_does_not_reuse_old_plan(tmp_path):
                     "明天15:00到16:00固定参加社团会议，"
                     "之后取快递，请结合天气和开放时间安排。"
                 ),
+                "old_plan_id": previous_plan["id"],
                 "mode": "offline",
-                "client_context": {"now": "2026-07-24T19:00:00+08:00"},
+                "client_context": {
+                    "now": "2026-07-24T19:00:00+08:00",
+                    "previous_plan": previous_plan,
+                },
             },
         )
         assert second.status_code == 200, second.text
