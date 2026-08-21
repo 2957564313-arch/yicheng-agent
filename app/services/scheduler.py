@@ -415,8 +415,20 @@ class Scheduler:
 
         best: _BeamState | None = None
         requested_duration = {task.id: task.duration_min for task in tasks}
+        attempted_duration_profiles: set[tuple[tuple[str, int], ...]] = set()
         for level in self.compression_levels:
             compressed_tasks = [self._compressed(task, level) for task in tasks]
+            duration_profile = tuple(
+                (task.id, task.duration_min) for task in compressed_tasks
+            )
+            # Explicit-duration tasks cannot be compressed, and many default
+            # tasks also have no shorter acceptable length.  All three levels
+            # are then byte-for-byte the same scheduling problem.  Running it
+            # three times added seconds to ordinary requests without creating
+            # another candidate plan.
+            if duration_profile in attempted_duration_profiles:
+                continue
+            attempted_duration_profiles.add(duration_profile)
             attempt = self._schedule_minimum_disruption(
                 initial_items=initial_items,
                 tasks=compressed_tasks,
