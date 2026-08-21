@@ -72,7 +72,7 @@ class ChatRequest(BaseModel):
     thread_id: str | None = Field(default=None, max_length=128)
     query: str = Field(min_length=1, max_length=2000)
     old_plan_id: str | None = Field(default=None, max_length=80)
-    mode: Literal["auto", "offline", "live"] = "auto"
+    mode: Literal["auto", "offline", "live"] = "live"
     publish_to_agenda: bool = True
     preview_only: bool = False
     client_context: ClientContext | None = None

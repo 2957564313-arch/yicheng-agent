@@ -14,7 +14,7 @@ globalThis.fetch = (resource, options = {}) => {
 const $ = (selector) => document.querySelector(selector);
 const queryInput = $("#query");
 const submitButton = $("#submit");
-const modeSelect = $("#mode");
+const planningMode = "live";
 const timeline = $("#timeline");
 const planTitle = $("#plan-title");
 const resultSummary = $("#result-summary");
@@ -46,7 +46,6 @@ const constraints = $("#constraints");
 const adjustment = $("#adjustment");
 const diff = $("#diff");
 const insights = $("#insights");
-const debugContent = $("#debug-content");
 const clock = $("#clock");
 const memoryType = $("#memory-type");
 const memoryValue = $("#memory-value");
@@ -193,7 +192,6 @@ if (/^[A-Za-z0-9_-]{1,128}$/.test(requestedThreadId || "")) {
   localStorage.setItem("yicheng_thread_id", requestedThreadId);
 }
 let lastSuggestedActions = [];
-let lastDebugPayload = null;
 let serverClockBaseMs = null;
 let serverClockFetchedAtMs = null;
 let currentCampusProfile = null;
@@ -938,7 +936,7 @@ function initializeWorkspaceNavigation() {
           body: JSON.stringify({
             from_message_id: fromMessageId,
             query,
-            mode: modeSelect.value,
+            mode: planningMode,
             publish_to_agenda: false,
             client_context: clientContextSnapshot(),
           }),
@@ -2131,10 +2129,9 @@ function renderInsights(items = []) {
 }
 
 function renderDebug(payload) {
-  lastDebugPayload = payload;
-  debugContent.textContent = payload
-    ? JSON.stringify(payload, null, 2)
-    : "尚无运行数据。";
+  if (payload instanceof Error || payload?.error) {
+    console.error("易程智策请求错误", payload);
+  }
 }
 
 function renderSuggestedActions(actions = []) {
@@ -2691,7 +2688,7 @@ function renderError(error) {
   warnings.innerHTML = `
     <div class="warning error">
       <strong>请求未完成</strong>
-      <span>请检查输入后重试；如果仍然失败，可展开页面底部调试信息。</span>
+      <span>请检查输入后重试；如果仍然失败，请稍后再试。</span>
     </div>`;
   renderDebug(error);
 }
@@ -2733,7 +2730,7 @@ async function requestChat(query, { previewOnly = false, render = true } = {}) {
       user_id: consoleUserId,
       thread_id: consoleThreadId,
       query,
-      mode: modeSelect.value,
+      mode: planningMode,
       publish_to_agenda: false,
       preview_only: previewOnly,
       client_context: clientContext,

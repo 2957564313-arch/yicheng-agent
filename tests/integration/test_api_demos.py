@@ -54,9 +54,10 @@ def test_health_and_demo_catalog(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         home = client.get("/")
         assert home.status_code == 200
-        assert '<option value="auto">智能联网</option>' in home.text
-        assert '<option value="live">强制实时</option>' in home.text
-        assert 'option value="offline"' not in home.text
+        assert 'id="mode"' not in home.text
+        assert "智能联网" not in home.text
+        assert "强制实时" not in home.text
+        assert "初期调试信息" not in home.text
 
         health = client.get("/api/v1/health")
         assert health.status_code == 200

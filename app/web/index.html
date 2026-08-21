@@ -8,7 +8,7 @@
       content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
     <title>易程智策 · 我的校园日程</title>
-    <link rel="stylesheet" href="/styles.css?v=20260821-2" />
+    <link rel="stylesheet" href="/styles.css?v=20260821-3" />
     <link rel="icon" href="/favicon.ico?v=20260821-1" sizes="any" />
     <link rel="icon" type="image/png" href="/assets/icon-192.png?v=20260821-1" sizes="192x192" />
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=20260821-1" />
@@ -91,14 +91,13 @@
           <div class="history-heading">
             <div>
               <p class="step">Workspace</p>
-              <h2>对话历史</h2>
+              <h2>我的空间</h2>
             </div>
             <div class="history-heading-actions">
               <button id="history-close" class="icon-button mobile-only" type="button" aria-label="关闭历史">×</button>
             </div>
           </div>
           <nav class="workspace-nav" aria-label="工作区页面">
-            <p class="workspace-nav-label">我的空间</p>
             <button type="button" class="workspace-nav-button active" data-view="chat">
               <span class="nav-icon">⌁</span><span>对话</span><small>随时规划与调整</small>
             </button>
@@ -115,6 +114,10 @@
               <span class="nav-icon">♡</span><span>偏好</span><small>让安排越来越懂你</small>
             </button>
           </nav>
+          <div class="history-section-label">
+            <strong>对话历史</strong>
+            <small>最近记录</small>
+          </div>
           <div id="history-list" class="history-list"></div>
           <p id="history-empty" class="history-empty">还没有对话。先告诉我今天要完成什么。</p>
         </aside>
@@ -127,10 +130,6 @@
                 <p class="step">新对话</p>
                 <h2>今天想完成什么？</h2>
               </div>
-              <select id="mode" aria-label="运行模式">
-                <option value="auto">智能联网</option>
-                <option value="live">强制实时</option>
-              </select>
             </div>
             <textarea
               id="query"
@@ -703,13 +702,6 @@
       <span>易程智策 · 杭电个性化校园日程助手</span>
       <span>对话负责理解与修改，长期日程、提醒和校园规则负责陪伴执行</span>
     </footer>
-    <details id="debug-panel" class="debug-panel">
-      <summary>初期调试信息</summary>
-      <p>
-        这里仅用于开发阶段排查问题；正式展示时保持折叠即可。
-      </p>
-      <pre id="debug-content">尚无运行数据。</pre>
-    </details>
-    <script src="/app.js?v=20260821-2" defer></script>
+    <script src="/app.js?v=20260821-3" defer></script>
   </body>
 </html>

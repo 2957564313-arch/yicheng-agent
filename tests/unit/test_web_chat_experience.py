@@ -77,12 +77,34 @@ def test_fresh_homepage_stays_clean_until_the_user_runs_a_plan() -> None:
     assert 'data-schedule-mode="day"' not in html
     assert 'data-schedule-mode="week"' not in html
     assert 'id="save-state" class="status subtle" hidden' in html
+    assert 'id="mode"' not in html
+    assert "智能联网" not in html and "强制实时" not in html
+    assert 'const planningMode = "live";' in javascript
+    assert "mode: planningMode" in javascript
+    assert 'id="debug-panel"' not in html
+    assert "初期调试信息" not in html
     assert 'id="demo-buttons"' not in html
     assert 'id="sidebar-demo-buttons"' not in html
     assert "async function loadDemos()" not in javascript
     assert "setPanelHidden(visualGrid, !isChat || !hasPlanResult);" in javascript
     assert "if (!keepResultMode) setResultMode(false);" in javascript
     assert "homepageModeKey" not in javascript
+
+
+def test_sidebar_prioritizes_workspace_navigation_before_history() -> None:
+    html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
+
+    assert "<h2>我的空间</h2>" in html
+    assert html.index('class="workspace-nav"') < html.index(
+        'class="history-section-label"'
+    )
+    assert html.index("<strong>对话历史</strong>") < html.index(
+        'id="history-list"'
+    )
+    assert ".history-sidebar .history-heading h2" in styles
+    assert "font: 820 22px/1.2" in styles
+    assert "margin: 24px 6px 10px" in styles
 
 
 def test_self_hosted_accounts_replace_external_login_choices() -> None:
@@ -259,10 +281,10 @@ def test_day_schedule_allows_manual_edits_but_locks_authoritative_items() -> Non
     assert '<svg viewBox="0 0 24 24" aria-hidden="true">' in javascript
     assert 'title="调整时间或删除">•••' not in javascript
     assert ".schedule-event-lock" in styles
-    assert 'app.js?v=20260821-2' in (WEB_ROOT / "index.html").read_text(
+    assert 'app.js?v=20260821-3' in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
-    assert "styles.css?v=20260821-2" in (WEB_ROOT / "index.html").read_text(
+    assert "styles.css?v=20260821-3" in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
     assert 'term.current ? "（当前）"' not in javascript

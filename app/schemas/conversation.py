@@ -48,7 +48,7 @@ class ConversationThreadUpdate(BaseModel):
 class ConversationForkRequest(BaseModel):
     from_message_id: str = Field(min_length=1, max_length=80)
     query: str = Field(min_length=1, max_length=2000)
-    mode: Literal["auto", "offline", "live"] = "auto"
+    mode: Literal["auto", "offline", "live"] = "live"
     publish_to_agenda: bool = False
     client_context: ClientContext | None = None
 

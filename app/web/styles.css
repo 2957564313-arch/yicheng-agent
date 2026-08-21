@@ -1547,38 +1547,6 @@ footer {
   font-size: 11px;
 }
 
-.debug-panel {
-  width: min(1440px, calc(100% - 40px));
-  margin: -18px auto 30px;
-  padding: 10px 13px;
-  border: 1px dashed #babdb6;
-  border-radius: 12px;
-  color: var(--muted);
-  background: rgba(255, 255, 255, .42);
-  font-size: 11px;
-}
-
-.debug-panel summary {
-  cursor: pointer;
-  color: #5d6862;
-  font-weight: 650;
-}
-
-.debug-panel p { margin: 9px 0; }
-
-.debug-panel pre {
-  max-height: 360px;
-  overflow: auto;
-  margin: 0;
-  padding: 12px;
-  border-radius: 9px;
-  color: #d9e7df;
-  background: #1d2924;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font: 10px/1.55 ui-monospace, monospace;
-}
-
 @media (max-width: 1120px) {
   .workspace { grid-template-columns: minmax(260px, .7fr) minmax(520px, 1.3fr); }
   .visual-grid { grid-template-columns: 1fr; }
@@ -1586,7 +1554,7 @@ footer {
 }
 
 @media (max-width: 820px) {
-  header, main, footer, .debug-panel {
+  header, main, footer {
     width: min(100% - 24px, 1440px);
   }
   .masthead { align-items: flex-start; flex-direction: column; }
@@ -1652,11 +1620,45 @@ footer {
 .history-heading h2,
 .tools-heading h2 { margin: 0; font-size: 16px; }
 
+.history-sidebar .history-heading {
+  align-items: flex-start;
+  padding: 8px 10px 20px;
+}
+
+.history-sidebar .history-heading .step {
+  margin-bottom: 7px;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .18em;
+}
+
+.history-sidebar .history-heading h2 {
+  color: #182033;
+  font: 820 22px/1.2 "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  letter-spacing: -.02em;
+}
+
 .history-section-label {
-  padding: 10px 8px 7px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 24px 6px 10px;
+  padding: 16px 4px 0;
+  border-top: 1px solid var(--line);
+  color: #374151;
+}
+
+.history-section-label strong {
+  font-size: 13px;
+  font-weight: 780;
+  letter-spacing: .02em;
+}
+
+.history-section-label small {
+  color: #a1a7b1;
+  font-size: 9px;
 }
 
 .history-list {
@@ -1930,7 +1932,7 @@ button.primary:disabled,
 }
 
 @media (max-width: 900px) {
-  header, main, footer, .debug-panel { width: min(100% - 24px, 1440px); }
+  header, main, footer { width: min(100% - 24px, 1440px); }
   .masthead { align-items: center; flex-direction: row; gap: 10px; }
   .masthead .brand-mark { width: 44px; height: 44px; }
   .masthead h1 { font-size: 28px; }
@@ -2025,17 +2027,8 @@ h2 { font-family: "PingFang SC", "Noto Sans SC", system-ui, sans-serif; }
 .workspace-nav {
   display: grid;
   gap: 4px;
-  margin: 2px 0 10px;
-  padding: 0 2px 12px;
-  border-bottom: 1px solid var(--line);
-}
-.workspace-nav-label {
-  margin: 3px 8px 5px;
-  color: #9aa1ad;
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: .12em;
-  text-transform: uppercase;
+  margin: 2px 0 0;
+  padding: 0 2px;
 }
 .workspace-nav-button {
   display: grid;
@@ -2320,7 +2313,7 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
 .result-summary-card.attention strong { color: #b42318; }
 
 @media (max-width: 900px) {
-  header, main, footer, .debug-panel { width: min(100% - 20px, 1480px); }
+  header, main, footer { width: min(100% - 20px, 1480px); }
   .masthead { padding: 14px 0 10px; }
   .workspace { margin-top: 0; }
   .composer-panel { position: static; }
@@ -2584,8 +2577,7 @@ body.has-plan-result .assistant-panel,
 body.has-plan-result .adjustment-panel { display: none !important; }
 body.has-plan-result .history-heading { display: flex; }
 body.has-plan-result .workspace-nav { margin-top: 10px; }
-body.has-plan-result .workspace-nav-label { color: #273044; font-size: 12px; letter-spacing: 0; text-transform: none; }
-body.has-plan-result .history-section-label { padding-top: 11px; border-top: 1px solid var(--line); color: #273044; font-size: 11px; }
+body.has-plan-result .history-section-label { margin-top: 18px; padding-top: 12px; }
 body.has-plan-result .history-list { max-height: 122px; }
 body.has-plan-result .history-item { padding-block: 7px; }
 body.has-plan-result .history-entry:nth-child(n+4) { display: none; }
