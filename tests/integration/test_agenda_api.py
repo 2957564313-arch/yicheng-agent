@@ -221,6 +221,47 @@ def test_course_items_are_locked_against_manual_edit_and_delete(tmp_path):
         assert deleted.json()["error"]["code"] == "AGENDA_ITEM_LOCKED"
 
 
+def test_clear_day_removes_adjustable_plan_and_manual_items(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        assert client.post("/api/v1/demos/demo_01_normal/run").status_code == 200
+        created = client.post(
+            "/api/v1/users/demo_user/agenda/items",
+            json={
+                "title": "临时讨论",
+                "start_at": "2026-07-24T21:30:00+08:00",
+                "end_at": "2026-07-24T22:00:00+08:00",
+                "location_name": "线上",
+                "kind": "meeting",
+            },
+        )
+        assert created.status_code == 201, created.text
+        before = client.get(
+            "/api/v1/users/demo_user/agenda",
+            params={"start_date": "2026-07-24", "end_date": "2026-07-24"},
+        ).json()["items"]
+        adjustable = [
+            item for item in before if item["source"] not in {"course", "external"}
+        ]
+        assert {item["source"] for item in adjustable} >= {"plan", "manual"}
+
+        cleared = client.delete(
+            "/api/v1/users/demo_user/agenda/day",
+            params={"target_date": "2026-07-24"},
+        )
+        assert cleared.status_code == 200, cleared.text
+        assert cleared.json() == {
+            "status": "cleared",
+            "cleared_count": len(adjustable),
+            "preserved_count": 0,
+        }
+        after = client.get(
+            "/api/v1/users/demo_user/agenda",
+            params={"start_date": "2026-07-24", "end_date": "2026-07-24"},
+        )
+        assert after.status_code == 200, after.text
+        assert after.json()["items"] == []
+
+
 def test_imported_early_course_gets_wakeup_and_class_reminders(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         imported = client.post(

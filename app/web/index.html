@@ -8,7 +8,7 @@
       content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
     <title>易程智策 · 我的校园日程</title>
-    <link rel="stylesheet" href="/styles.css?v=20260821-7" />
+    <link rel="stylesheet" href="/styles.css?v=20260821-9" />
     <link rel="icon" href="/favicon.ico?v=20260821-1" sizes="any" />
     <link rel="icon" type="image/png" href="/assets/icon-192.png?v=20260821-1" sizes="192x192" />
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=20260821-1" />
@@ -269,13 +269,13 @@
               </div>
             </div>
             <p class="panel-note">
-              只保存你主动设置的内容，可随时停用、修改或删除。
+              你确认后才会保存，可随时停用、修改或删除。
             </p>
             <div class="personalization-control">
               <label class="toggle-row">
                 <span>
                   <strong>个性化习惯建议</strong>
-                  <small>发现重复行为后先询问，绝不自动加入日程</small>
+                  <small>从你反复确认的安排中学习，先询问再保存为偏好</small>
                 </span>
                 <input
                   id="personalization-toggle"
@@ -287,6 +287,7 @@
               <p id="personalization-state" class="panel-note">
                 当前关闭。
               </p>
+              <div id="preference-candidates" class="preference-candidates" hidden></div>
               <button
                 id="personalization-reset"
                 class="text-button"
@@ -304,12 +305,7 @@
                 <option value="schedule_pace">日程节奏</option>
                 <option value="activity_location">事项地点偏好（可自定义）</option>
                 <option value="preferred_study_period">高效学习时段</option>
-                <option value="preferred_study_location">自习地点（快捷设置）</option>
-                <option value="usual_lunch_time">常用午餐时间</option>
-                <option value="usual_dinner_time">常用晚餐时间</option>
-                <option value="usual_bedtime">常用就寝时间</option>
-                <option value="usual_wake_time">常用起床时间</option>
-                <option value="sleep_goal_hours">希望睡眠时长</option>
+                <option value="preferred_study_location">自习地点</option>
                 <option value="custom_note">自定义偏好</option>
               </select>
               <select
@@ -385,7 +381,7 @@
               <div>
                 <p class="step">日程总览</p>
                 <h2>一眼看清今天、这一周和整个月</h2>
-                <p class="schedule-caption">安排按时间顺序呈现，课程、任务、通勤和提醒各有颜色。</p>
+                <p class="schedule-caption">按日、周、月查看你的全部安排。</p>
               </div>
               <span id="schedule-state" class="campus-state">正在读取</span>
             </div>
@@ -397,6 +393,7 @@
               </div>
               <div class="schedule-date-actions">
                 <button id="schedule-add" type="button" class="date-chip">＋ 增加事件</button>
+                <button id="schedule-clear-day" type="button" class="date-chip schedule-clear-day" disabled>清空当日安排</button>
                 <button id="schedule-prev" type="button" class="icon-button" aria-label="上一个时间段">‹</button>
                 <button id="schedule-today" type="button" class="date-chip">回到今天</button>
                 <button id="schedule-next" type="button" class="icon-button" aria-label="下一个时间段">›</button>
@@ -706,6 +703,6 @@
       <span>易程智策 · 杭电个性化校园日程助手</span>
       <span>对话负责理解与修改，长期日程、提醒和校园规则负责陪伴执行</span>
     </footer>
-    <script src="/app.js?v=20260821-7" defer></script>
+    <script src="/app.js?v=20260821-9" defer></script>
   </body>
 </html>

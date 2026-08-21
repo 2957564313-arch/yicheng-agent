@@ -134,6 +134,43 @@ def test_sidebar_merges_hduhelp_and_timetable_after_preferences() -> None:
     assert "记录取消后，下次同步会从日程中移除" not in html
 
 
+def test_personal_preferences_omit_meal_and_sleep_fields() -> None:
+    html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+
+    for key in (
+        "usual_lunch_time",
+        "usual_dinner_time",
+        "usual_bedtime",
+        "usual_wake_time",
+        "sleep_goal_hours",
+    ):
+        assert f'<option value="{key}">' not in html
+        assert f'  {key}: {{' not in javascript
+        assert f'"{key}",' in javascript
+    assert "希望睡眠时长请填写4到12小时" not in javascript
+
+
+def test_personalization_learns_location_and_requires_confirmation() -> None:
+    html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+    styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
+
+    assert "你确认后才会保存，可随时停用、修改或删除。" in html
+    assert "只保存你主动设置的内容" not in html
+    assert "自习地点（快捷设置）" not in html
+    assert '<option value="preferred_study_location">自习地点</option>' in html
+    assert 'id="preference-candidates"' in html
+    assert "从你反复确认的安排中学习，先询问再保存为偏好" in html
+    assert "function recordManualScheduleBehavior" in javascript
+    assert "function locationPreferenceCandidates" in javascript
+    assert "values.length < 3" in javascript
+    assert "你已在 ${candidate.occurrences} 个不同日期这样安排" in javascript
+    assert "确认后才会保存" in javascript
+    assert 'key: "activity_location"' in javascript
+    assert ".preference-candidate" in styles
+
+
 def test_self_hosted_accounts_replace_external_login_choices() -> None:
     html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
@@ -322,17 +359,26 @@ def test_day_schedule_allows_manual_edits_but_locks_authoritative_items() -> Non
     styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
 
     assert 'id="schedule-add"' in html
+    assert 'id="schedule-clear-day"' in html
+    assert "按日、周、月查看你的全部安排。" in html
+    assert "课程、任务、通勤和提醒各有颜色" not in html
     assert 'id="schedule-editor"' in html
     assert 'id="schedule-editor-name" required' in html
     assert 'id="schedule-editor-start" type="time" required' in html
     assert 'id="schedule-editor-end" type="time" required' in html
     assert "固定课表和杭助预约不会被改动" in javascript
-    assert 'item.source === "course" || item.source === "external"' in javascript
+    assert 'item?.source === "course" || item?.source === "external"' in javascript
     assert 'data-schedule-edit="${escapeHtml(item.id)}"' in javascript
     assert 'method: itemId ? "PUT" : "POST"' in javascript
     assert '{ method: "DELETE" }' in javascript
     assert 'scheduleAdd?.addEventListener("click"' in javascript
+    assert 'scheduleClearDay?.addEventListener("click"' in javascript
+    assert "/agenda/day?target_date=" in javascript
+    assert "杭助同步的固定安排会保留" in javascript
+    assert ".schedule-clear-day" in styles
     assert ".schedule-editor::backdrop" in styles
+    assert ".schedule-editor-actions #schedule-editor-cancel" in styles
+    assert "min-height: 42px; margin: 0" in styles
     assert 'const lockLabel = "锁定";' in javascript
     assert "课表锁定" not in javascript
     assert "杭助锁定" not in javascript
@@ -340,10 +386,10 @@ def test_day_schedule_allows_manual_edits_but_locks_authoritative_items() -> Non
     assert '<svg viewBox="0 0 24 24" aria-hidden="true">' in javascript
     assert 'title="调整时间或删除">•••' not in javascript
     assert ".schedule-event-lock" in styles
-    assert 'app.js?v=20260821-7' in (WEB_ROOT / "index.html").read_text(
+    assert 'app.js?v=20260821-9' in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
-    assert "styles.css?v=20260821-7" in (WEB_ROOT / "index.html").read_text(
+    assert "styles.css?v=20260821-9" in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
     assert 'term.current ? "（当前）"' not in javascript

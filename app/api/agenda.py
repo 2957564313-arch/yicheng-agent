@@ -7,6 +7,7 @@ from fastapi import APIRouter, Query, Request, Response
 
 from app.errors import AppError
 from app.schemas.agenda import (
+    AgendaClearDayResponse,
     AgendaItemCreate,
     AgendaItemUpdate,
     AgendaMutationResponse,
@@ -231,6 +232,51 @@ def delete_agenda_item(
         )
     container.agenda_edits.suppress(user_id=user_id, target=target, now=now)
     return AgendaMutationResponse(status="deleted")
+
+
+@router.delete(
+    "/{user_id}/agenda/day",
+    response_model=AgendaClearDayResponse,
+)
+def clear_agenda_day(
+    user_id: str,
+    target_date: date,
+    request: Request,
+) -> AgendaClearDayResponse:
+    """Clear user-adjustable items while preserving authoritative HDU data."""
+
+    container = request.app.state.container
+    timezone = ZoneInfo(container.settings.app_timezone)
+    now = datetime.now(timezone)
+    items = [
+        item
+        for item in container.agenda.list_items(
+            user_id=user_id,
+            start_date=target_date,
+            end_date=target_date,
+        )
+        if item.start_at.astimezone(timezone).date() == target_date
+    ]
+    preserved = [item for item in items if item.source in {"course", "external"}]
+    adjustable = [item for item in items if item.source not in {"course", "external"}]
+    for item in adjustable:
+        manual = container.agenda_edits.get(user_id=user_id, item_id=item.id)
+        if manual is not None:
+            container.agenda_edits.delete_manual(
+                user_id=user_id,
+                item_id=item.id,
+                now=now,
+            )
+        else:
+            container.agenda_edits.suppress(
+                user_id=user_id,
+                target=item,
+                now=now,
+            )
+    return AgendaClearDayResponse(
+        cleared_count=len(adjustable),
+        preserved_count=len(preserved),
+    )
 
 
 @router.post(

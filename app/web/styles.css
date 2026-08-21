@@ -346,6 +346,26 @@ textarea:focus {
   font-size: 10px;
 }
 
+.preference-candidates { display: grid; gap: 7px; }
+.preference-candidates[hidden] { display: none; }
+.preference-candidate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(38, 113, 91, .2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .82);
+}
+.preference-candidate strong,
+.preference-candidate small { display: block; }
+.preference-candidate strong { color: var(--ink); font-size: 11px; line-height: 1.45; }
+.preference-candidate small { margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.preference-candidate-actions { display: flex; gap: 5px; }
+.preference-candidate-actions button { padding: 5px 8px; font-size: 10px; white-space: nowrap; }
+.preference-candidate-actions button:first-child { color: #fff; border-color: var(--green); background: var(--green); }
+
 .hduhelp-card {
   display: grid;
   gap: 12px;
@@ -2112,6 +2132,9 @@ h2 { font-family: "PingFang SC", "Noto Sans SC", system-ui, sans-serif; }
 .schedule-date-actions { display: inline-flex; align-items: center; gap: 5px; }
 .schedule-date-actions .icon-button { display: inline-grid; place-items: center; width: 31px; height: 31px; padding: 0; border-radius: 9px; color: #6b7280; background: #f8f9fb; }
 .date-chip { padding: 7px 11px; border-radius: 9px; color: #4f46e5; background: #eef2ff; border-color: #dfe2ff; font-size: 11px; font-weight: 750; }
+.schedule-clear-day { color: #b42318; border-color: #fecaca; background: #fff7f7; }
+.schedule-clear-day:hover:not(:disabled) { border-color: #fca5a5; background: #fff1f2; }
+.schedule-clear-day:disabled { color: #9ca3af; border-color: #e5e7eb; background: #f8f9fb; cursor: not-allowed; }
 .schedule-period-label { margin: 18px 0 10px; color: #374151; font-size: 14px; font-weight: 750; }
 .schedule-day-timeline { display: grid; gap: 9px; }
 .schedule-event { display: grid; grid-template-columns: 78px minmax(0,1fr); gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid #e6e8ef; border-left: 4px solid #6366f1; border-radius: 13px; background: #fff; }
@@ -2225,7 +2248,9 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
 .schedule-editor input { width: 100%; }
 .schedule-editor-grid { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 10px; }
 .schedule-editor-actions { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; align-items: center; }
-.schedule-editor-actions button { min-height: 38px; }
+.schedule-editor-actions button { display: inline-flex; align-items: center; justify-content: center; width: auto; min-height: 42px; margin: 0; padding: 9px 16px; line-height: 1; }
+.schedule-editor-actions #schedule-editor-cancel,
+.schedule-editor-actions #schedule-editor-save { min-width: 82px; }
 .schedule-editor-actions .danger { color: #b42318; border-color: #fecaca; background: #fff7f7; }
 
 .conversation-outline {
@@ -2307,6 +2332,9 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
   .schedule-editor-grid label:first-child { grid-column: 1 / -1; }
   .schedule-editor-actions { grid-template-columns: 1fr 1fr; }
   .schedule-editor-actions span { display: none; }
+  .schedule-editor-actions #schedule-editor-delete { grid-column: 1 / -1; justify-self: start; }
+  .schedule-editor-actions #schedule-editor-cancel,
+  .schedule-editor-actions #schedule-editor-save { width: 100%; }
 }
 
 .result-summary {
@@ -2341,6 +2369,8 @@ button.schedule-month-cell:hover, .schedule-month-cell.is-selected { border-colo
   .schedule-toolbar { align-items: stretch; flex-direction: column; }
   .schedule-tabs { width: 100%; }
   .schedule-tab { flex: 1; }
+  .preference-candidate { grid-template-columns: 1fr; }
+  .preference-candidate-actions { justify-content: flex-start; }
   .schedule-date-actions { justify-content: space-between; }
   .schedule-date-actions .date-chip { flex: 1; }
   .schedule-week-grid { grid-template-columns: repeat(7, minmax(94px, 1fr)); }

@@ -62,6 +62,7 @@ const memoryList = $("#memory-list");
 const personalizationToggle = $("#personalization-toggle");
 const personalizationReset = $("#personalization-reset");
 const personalizationState = $("#personalization-state");
+const preferenceCandidates = $("#preference-candidates");
 const timetableSummary = $("#timetable-summary");
 const hduhelpToken = $("#hduhelp-token");
 const hduhelpConnect = $("#hduhelp-connect");
@@ -149,6 +150,7 @@ const schedulePrev = $("#schedule-prev");
 const scheduleToday = $("#schedule-today");
 const scheduleNext = $("#schedule-next");
 const scheduleAdd = $("#schedule-add");
+const scheduleClearDay = $("#schedule-clear-day");
 const scheduleEditor = $("#schedule-editor");
 const scheduleEditorForm = $("#schedule-editor-form");
 const scheduleEditorTitle = $("#schedule-editor-title");
@@ -537,6 +539,16 @@ function scheduleItemsByDate() {
   }, {});
 }
 
+function isAuthoritativeScheduleItem(item) {
+  return item?.source === "course" || item?.source === "external";
+}
+
+function adjustableScheduleItemsForDate(date) {
+  return (lastAgendaData?.items || []).filter(
+    (item) => agendaItemDate(item) === date && !isAuthoritativeScheduleItem(item),
+  );
+}
+
 let scheduleCalendarContexts = {};
 
 const conversationOutline = document.createElement("section");
@@ -662,7 +674,7 @@ function scheduleCalendarNotice(date) {
 }
 
 function scheduleItemMarkup(item, compact = false) {
-  const immutable = item.source === "course" || item.source === "external";
+  const immutable = isAuthoritativeScheduleItem(item);
   const lockLabel = "锁定";
   return `
     <article class="schedule-event ${escapeHtml(item.kind || "task")}" title="${escapeHtml(item.title || "日程")}${item.location_name ? ` · ${escapeHtml(item.location_name)}` : ""}">
@@ -740,6 +752,7 @@ async function saveScheduleEditor() {
   );
   const data = await response.json();
   if (!response.ok) throw data;
+  recordManualScheduleBehavior(data.item);
   scheduleCursorDate = scheduleEditorDate.value;
   scheduleEditor.close();
   await refreshVisibleSchedule();
@@ -759,11 +772,34 @@ async function deleteScheduleEditorItem() {
   await refreshVisibleSchedule();
 }
 
+async function clearCurrentScheduleDay() {
+  const selectedDate = scheduleCursorDate || shanghaiDateString();
+  const adjustableItems = adjustableScheduleItemsForDate(selectedDate);
+  if (!adjustableItems.length) return null;
+  const confirmed = globalThis.confirm(
+    `确定清空 ${selectedDate} 的 ${adjustableItems.length} 项个人安排吗？杭助同步的固定安排会保留。`,
+  );
+  if (!confirmed) return null;
+  scheduleClearDay.disabled = true;
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/agenda/day?target_date=${encodeURIComponent(selectedDate)}`,
+    { method: "DELETE" },
+  );
+  const data = await response.json();
+  if (!response.ok) throw data;
+  await refreshVisibleSchedule();
+  scheduleState.textContent = data.cleared_count
+    ? `已清空 ${data.cleared_count} 项，保留 ${data.preserved_count} 项杭助固定安排`
+    : "当天没有可清空的个人安排";
+  return data;
+}
+
 function renderScheduleViews() {
   if (!schedulePanel || !scheduleCursorDate) return;
   const byDate = scheduleItemsByDate();
   const selected = scheduleCursorDate;
   const dayItems = (byDate[selected] || []).sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
+  const adjustableDayItems = adjustableScheduleItemsForDate(selected);
   const today = shanghaiDateString();
   const startOfWeek = scheduleWeekStart(selected);
   const monthStart = scheduleMonthStart(selected);
@@ -824,6 +860,13 @@ function renderScheduleViews() {
   [scheduleDayView, scheduleWeekView, scheduleMonthView].forEach((panel) => {
     if (panel) panel.hidden = !panel.id.endsWith(`${scheduleViewMode}-view`);
   });
+  if (scheduleClearDay) {
+    scheduleClearDay.hidden = scheduleViewMode !== "day";
+    scheduleClearDay.disabled = scheduleViewMode !== "day" || adjustableDayItems.length === 0;
+    scheduleClearDay.title = adjustableDayItems.length
+      ? `清空 ${adjustableDayItems.length} 项个人安排，保留杭助固定安排`
+      : "当天没有可清空的个人安排";
+  }
   if (scheduleState) scheduleState.textContent = `${dayItems.length} 项安排`;
 }
 
@@ -1081,6 +1124,15 @@ function initializeWorkspaceNavigation() {
     loadAgendaRange(start, end).catch((error) => renderDebug(error));
   });
   scheduleAdd?.addEventListener("click", () => openScheduleEditor());
+  scheduleClearDay?.addEventListener("click", async () => {
+    try {
+      await clearCurrentScheduleDay();
+    } catch (error) {
+      renderDebug(error);
+      renderScheduleViews();
+      scheduleState.textContent = "清空失败，请稍后再试";
+    }
+  });
   scheduleEditorClose?.addEventListener("click", () => scheduleEditor.close());
   scheduleEditorCancel?.addEventListener("click", () => scheduleEditor.close());
   scheduleEditorForm?.addEventListener("submit", async (event) => {
@@ -1505,33 +1557,8 @@ const memoryDefinitions = {
     category: "habit",
   },
   preferred_study_location: {
-    label: "自习地点（快捷设置）",
+    label: "自习地点",
     placeholder: "例如：图书馆12层",
-    category: "preference",
-  },
-  usual_lunch_time: {
-    label: "常用午餐时间",
-    placeholder: "例如：12:25",
-    category: "habit",
-  },
-  usual_dinner_time: {
-    label: "常用晚餐时间",
-    placeholder: "例如：18:00",
-    category: "habit",
-  },
-  usual_bedtime: {
-    label: "常用就寝时间",
-    placeholder: "例如：23:30",
-    category: "habit",
-  },
-  usual_wake_time: {
-    label: "常用起床时间",
-    placeholder: "例如：07:00",
-    category: "habit",
-  },
-  sleep_goal_hours: {
-    label: "希望睡眠时长",
-    placeholder: "例如：7.5小时",
     category: "preference",
   },
   custom_note: {
@@ -1546,9 +1573,15 @@ const retiredMemoryKeys = new Set([
   "avoid_tight_schedule",
   "preferred_locations",
   "weekly_daily_focus_limit_min",
+  "usual_lunch_time",
+  "usual_dinner_time",
+  "usual_bedtime",
+  "usual_wake_time",
+  "sleep_goal_hours",
 ]);
 
 function behaviorTopic(title) {
+  const normalizedTitle = String(title || "").replace(/\s+/g, "").slice(0, 40);
   const definitions = [
     ["study", "自习", ["自习", "学习", "复习", "阅读"]],
     ["exercise", "运动", ["跑步", "运动", "健身", "锻炼"]],
@@ -1556,8 +1589,10 @@ function behaviorTopic(title) {
     ["parcel", "取快递", ["快递", "取件", "驿站"]],
   ];
   return definitions.find(([, , markers]) =>
-    markers.some((marker) => title.includes(marker))
-  ) || null;
+    markers.some((marker) => normalizedTitle.includes(marker))
+  ) || (normalizedTitle
+    ? [`custom:${normalizedTitle}`, normalizedTitle, [normalizedTitle]]
+    : null);
 }
 
 function roundedHalfHour(value) {
@@ -1611,6 +1646,29 @@ function recordBehaviorHistory(data) {
   renderPersonalizationState();
 }
 
+function recordManualScheduleBehavior(item) {
+  if (!item?.id || !item?.title || !item?.location_name) return;
+  const topic = behaviorTopic(item.title);
+  if (!topic) return;
+  const existing = readLocalSnapshot(behaviorHistoryKey, [])
+    .filter((entry) => entry.plan_id !== `agenda:${item.id}`);
+  const addition = {
+    plan_id: `agenda:${item.id}`,
+    date: agendaItemDate(item),
+    campus_id: currentCampusProfile?.campus_id || null,
+    topic: topic[0],
+    task_title: topic[1],
+    start_time: timePart(item.start_at),
+    duration_min: Math.max(
+      5,
+      Math.round((new Date(item.end_at) - new Date(item.start_at)) / 60000),
+    ),
+    location_name: item.location_name,
+  };
+  writeLocalSnapshot(behaviorHistoryKey, [addition, ...existing].slice(0, 80));
+  renderPersonalizationState();
+}
+
 function buildBehaviorPatterns() {
   const history = readLocalSnapshot(behaviorHistoryKey, []);
   const feedback = readLocalSnapshot(suggestionFeedbackKey, {});
@@ -1661,16 +1719,129 @@ function personalizationSnapshot() {
   };
 }
 
+function locationPreferenceCandidates() {
+  const feedback = readLocalSnapshot(suggestionFeedbackKey, {});
+  const savedLocations = new Set(
+    loadedMemories
+      .filter((item) => item.key === "activity_location" && item.enabled)
+      .flatMap((item) => normalizeActivityLocations(item.value))
+      .map((item) => `${item.activity}|${item.location}`),
+  );
+  const groups = new Map();
+  readLocalSnapshot(behaviorHistoryKey, []).forEach((item) => {
+    if (!item.task_title || !item.location_name) return;
+    if (
+      currentCampusProfile?.campus_id
+      && item.campus_id
+      && item.campus_id !== currentCampusProfile.campus_id
+    ) return;
+    const key = [
+      item.campus_id || "current",
+      item.topic,
+      item.location_name,
+    ].join("|");
+    if (!groups.has(key)) groups.set(key, new Map());
+    groups.get(key).set(item.date, item);
+  });
+  return [...groups.entries()].flatMap(([key, byDate]) => {
+    const values = [...byDate.values()];
+    const candidate = values[0];
+    if (
+      values.length < 3
+      || savedLocations.has(`${candidate.task_title}|${candidate.location_name}`)
+      || feedback[`preference:${key}`]?.dismissed
+    ) return [];
+    return [{
+      key,
+      task_title: candidate.task_title,
+      location_name: candidate.location_name,
+      occurrences: values.length,
+    }];
+  }).sort((left, right) => right.occurrences - left.occurrences);
+}
+
+async function acceptLocationPreference(candidate) {
+  const existing = loadedMemories.find((item) => item.key === "activity_location");
+  const value = mergeActivityLocations(existing?.value, [{
+    activity: candidate.task_title,
+    location: candidate.location_name,
+  }]);
+  const response = await fetch(`/api/v1/users/${consoleUserId}/memories`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      category: "preference",
+      key: "activity_location",
+      label: "事项地点偏好",
+      value,
+      enabled: true,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw data;
+  const current = readLocalSnapshot(memorySnapshotKey, []);
+  writeLocalSnapshot(memorySnapshotKey, [
+    data,
+    ...current.filter((item) => item.key !== data.key),
+  ]);
+  await loadMemories();
+  renderPersonalizationState();
+}
+
+function renderPreferenceCandidates(enabled) {
+  if (!preferenceCandidates) return;
+  const candidates = enabled ? locationPreferenceCandidates() : [];
+  preferenceCandidates.hidden = candidates.length === 0;
+  preferenceCandidates.innerHTML = candidates.map((candidate, index) => `
+    <article class="preference-candidate">
+      <div>
+        <strong>把“${escapeHtml(candidate.task_title)}”的常用地点设为“${escapeHtml(candidate.location_name)}”吗？</strong>
+        <small>你已在 ${candidate.occurrences} 个不同日期这样安排。确认后才会保存，以后地点未说明时优先使用。</small>
+      </div>
+      <div class="preference-candidate-actions">
+        <button type="button" data-preference-accept="${index}">设为偏好</button>
+        <button type="button" data-preference-dismiss="${index}">暂不设置</button>
+      </div>
+    </article>
+  `).join("");
+  preferenceCandidates.querySelectorAll("[data-preference-accept]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const candidate = candidates[Number(button.dataset.preferenceAccept)];
+      if (!candidate) return;
+      button.disabled = true;
+      try {
+        await acceptLocationPreference(candidate);
+      } catch (error) {
+        renderDebug(error);
+        personalizationState.textContent = "偏好暂时没有保存成功，请稍后再试。";
+        button.disabled = false;
+      }
+    });
+  });
+  preferenceCandidates.querySelectorAll("[data-preference-dismiss]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const candidate = candidates[Number(button.dataset.preferenceDismiss)];
+      if (!candidate) return;
+      const feedback = readLocalSnapshot(suggestionFeedbackKey, {});
+      feedback[`preference:${candidate.key}`] = { dismissed: true };
+      writeLocalSnapshot(suggestionFeedbackKey, feedback);
+      renderPersonalizationState();
+    });
+  });
+}
+
 function renderPersonalizationState() {
   const enabled = localStorage.getItem(personalizationEnabledKey) === "true";
   const patterns = buildBehaviorPatterns();
+  const candidates = enabled ? locationPreferenceCandidates() : [];
   personalizationToggle.checked = enabled;
-  personalizationReset.hidden = patterns.length === 0;
+  personalizationReset.hidden = patterns.length === 0 && candidates.length === 0;
   personalizationState.textContent = enabled
-    ? patterns.length
-      ? `已开启，发现 ${patterns.length} 个稳定习惯；只询问，不会自动加入。`
+    ? patterns.length || candidates.length
+      ? `已开启，发现 ${patterns.length} 个稳定习惯、${candidates.length} 个待确认偏好。`
       : "已开启；同类行为在不同日期出现至少3次后，才会形成建议。"
     : "当前关闭。历史仍保存在本机，开启后才会用于生成建议。";
+  renderPreferenceCandidates(enabled);
 }
 
 personalizationToggle.addEventListener("change", () => {
@@ -3476,25 +3647,6 @@ function parseMemoryValue(key, rawValue) {
     if (!normalized) throw new Error("高效学习时段请填写：上午、下午或晚上。");
     return normalized;
   }
-  if ([
-    "usual_bedtime",
-    "usual_wake_time",
-    "usual_lunch_time",
-    "usual_dinner_time",
-  ].includes(key)) {
-    const matched = value.match(/^([01]?\d|2[0-3])[:：]([0-5]\d)$/);
-    if (!matched) {
-      throw new Error("请按24小时制填写，例如：23:30或07:00。");
-    }
-    return `${matched[1].padStart(2, "0")}:${matched[2]}`;
-  }
-  if (key === "sleep_goal_hours") {
-    const hours = Number(value.match(/\d+(?:\.\d+)?/)?.[0]);
-    if (!Number.isFinite(hours) || hours < 4 || hours > 12) {
-      throw new Error("希望睡眠时长请填写4到12小时。");
-    }
-    return hours;
-  }
   return value;
 }
 
@@ -3531,13 +3683,6 @@ function displayMemoryValue(key, value) {
       evening: "晚上",
     }[value] || value;
   }
-  if ([
-    "usual_bedtime",
-    "usual_wake_time",
-    "usual_lunch_time",
-    "usual_dinner_time",
-  ].includes(key)) return value;
-  if (key === "sleep_goal_hours") return `${value}小时`;
   if (Array.isArray(value)) return value.join("、");
   return String(value);
 }

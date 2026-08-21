@@ -67,6 +67,12 @@ class AgendaMutationResponse(BaseModel):
     item: AgendaItem | None = None
 
 
+class AgendaClearDayResponse(BaseModel):
+    status: Literal["cleared"] = "cleared"
+    cleared_count: int = Field(ge=0)
+    preserved_count: int = Field(ge=0)
+
+
 class ReminderSettings(BaseModel):
     enabled: bool = True
     browser_notifications: bool = False

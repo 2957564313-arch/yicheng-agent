@@ -268,3 +268,49 @@ def test_provider_failure_preserves_last_successful_source(tmp_path):
             ]
             == 1
         )
+
+
+def test_clear_day_preserves_hduhelp_fixed_schedule(tmp_path):
+    app = build_hduhelp_app(tmp_path)
+    fake = FakeHduHelp()
+    with TestClient(app) as client:
+        app.state.container.hduhelp = fake
+        connect(client)
+        sync(client)
+        personal = client.post(
+            "/api/v1/users/visitor-1/agenda/items",
+            json={
+                "title": "买生活用品",
+                "start_at": "2026-09-07T15:30:00+08:00",
+                "end_at": "2026-09-07T16:00:00+08:00",
+                "location_name": "生活区",
+                "kind": "task",
+            },
+        )
+        assert personal.status_code == 201, personal.text
+
+        before = client.get(
+            "/api/v1/users/visitor-1/agenda",
+            params={"start_date": "2026-09-07", "end_date": "2026-09-07"},
+        ).json()["items"]
+        fixed_before = [
+            item for item in before if item["source"] in {"course", "external"}
+        ]
+        assert {item["source"] for item in fixed_before} == {"course", "external"}
+
+        cleared = client.delete(
+            "/api/v1/users/visitor-1/agenda/day",
+            params={"target_date": "2026-09-07"},
+        )
+        assert cleared.status_code == 200, cleared.text
+        assert cleared.json() == {
+            "status": "cleared",
+            "cleared_count": 1,
+            "preserved_count": len(fixed_before),
+        }
+        after = client.get(
+            "/api/v1/users/visitor-1/agenda",
+            params={"start_date": "2026-09-07", "end_date": "2026-09-07"},
+        ).json()["items"]
+        assert {item["id"] for item in after} == {item["id"] for item in fixed_before}
+        assert all(item["locked"] for item in after)
