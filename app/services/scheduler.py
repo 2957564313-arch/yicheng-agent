@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from itertools import pairwise
+from time import perf_counter
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -386,6 +387,12 @@ class Scheduler:
     complete_search_task_limit = 8
     complete_search_node_limit = 6000
     complete_search_candidates_per_task = 24
+    # This fallback runs inside an online request.  A node count alone does
+    # not bound wall-clock time because every node may enumerate and rank
+    # hundreds of five-minute placements.  Keep the proof search short and
+    # return the best complete answer found so far; the beam result remains
+    # the safe fallback when the deadline is reached first.
+    complete_search_time_limit_seconds = 0.75
 
     def _solve_with_escalating_compression(
         self,
@@ -489,7 +496,14 @@ class Scheduler:
             item.task_id for item in initial_items if item.task_id
         }
         nodes = 0
+        deadline = perf_counter() + self.complete_search_time_limit_seconds
         best_complete: _BeamState | None = None
+
+        def exhausted() -> bool:
+            return (
+                nodes >= self.complete_search_node_limit
+                or perf_counter() >= deadline
+            )
 
         def candidate_rank(task: Task, candidate: _Candidate) -> tuple:
             has_dependents = any(task.id in other.depends_on for other in tasks)
@@ -517,6 +531,12 @@ class Scheduler:
             shortfall_minutes: int,
         ) -> None:
             nonlocal nodes, best_complete
+            # Candidate lists are ranked before recursion, so the first dry
+            # complete result is already a strong usable plan.  Continuing
+            # through thousands of alternatives only marginally improves
+            # soft preferences while making the HTTP request take minutes.
+            if best_complete is not None and best_complete.weather_breaches == 0:
+                return
             if not remaining:
                 result = _BeamState(
                     task_items=sorted(
@@ -539,7 +559,7 @@ class Scheduler:
                 ) < self._beam_score(best_complete, old_starts):
                     best_complete = result
                 return
-            if nodes >= self.complete_search_node_limit:
+            if exhausted():
                 return
 
             completed = {item.task_id for item in scheduled if item.task_id}
@@ -558,6 +578,8 @@ class Scheduler:
 
             choices: list[tuple[int, Task, list[_Candidate], set[tuple[str, str]]]] = []
             for task in eligible:
+                if exhausted():
+                    return
                 task_missing = set(missing_pairs)
                 candidates = list(
                     self._candidate_intervals(
@@ -572,6 +594,8 @@ class Scheduler:
                 # flexible-duration path.  Keep the cheaper representation.
                 unique: dict[tuple[datetime, datetime], _Candidate] = {}
                 for candidate in candidates:
+                    if exhausted():
+                        return
                     key = (candidate.start_at, candidate.end_at)
                     current = unique.get(key)
                     if current is None or candidate_rank(
@@ -633,9 +657,9 @@ class Scheduler:
             next_remaining = tuple(other for other in remaining if other.id != task.id)
             has_dependents = any(task.id in other.depends_on for other in tasks)
             for candidate in candidates:
-                nodes += 1
-                if nodes > self.complete_search_node_limit:
+                if exhausted():
                     break
+                nodes += 1
                 item = self._task_item(
                     task,
                     candidate.start_at,

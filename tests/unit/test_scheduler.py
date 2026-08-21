@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from time import perf_counter
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -749,6 +750,102 @@ def test_free_day_uses_daytime_for_repeated_study_instead_of_scattering_it(tz):
     assert min(scheduled["study_1"].start_at, scheduled["study_2"].start_at).hour < 12
     assert max(scheduled["study_1"].end_at, scheduled["study_2"].end_at).hour <= 18
     assert scheduled["mentor"].start_at.hour >= 18
+
+
+@pytest.mark.asyncio
+async def test_six_item_day_with_fixed_meeting_finishes_within_request_budget(tz):
+    """Regression for the 2026-08-24 request that took 232 seconds online."""
+
+    target_date = date(2026, 8, 24)
+    now = datetime(2026, 8, 21, 16, 0, tzinfo=tz)
+    tasks = [
+        Task(
+            id=f"study_{index}",
+            title=f"自习（第{index}次）",
+            date=target_date,
+            duration_min=90,
+            duration_source="explicit",
+            location_id="library",
+            min_gap_min=30,
+            tags=["study", "occurrence_of:study"],
+        )
+        for index in (1, 2)
+    ] + [
+        Task(
+            id="parcel",
+            title="取快递",
+            date=target_date,
+            duration_min=30,
+            duration_source="explicit",
+            location_id="parcel_station",
+            tags=["courier"],
+        ),
+        Task(
+            id="dinner",
+            title="吃晚饭",
+            date=target_date,
+            duration_min=45,
+            duration_source="explicit",
+            location_id="canteen",
+            tags=["meal"],
+        ),
+        Task(
+            id="run",
+            title="跑步",
+            date=target_date,
+            duration_min=30,
+            duration_source="explicit",
+            location_id="track",
+            tags=["outdoor"],
+        ),
+        Task(
+            id="mentor",
+            title="和导师碰头",
+            date=target_date,
+            duration_min=60,
+            duration_source="explicit",
+            location_id="teaching_building_6",
+            fixed_start=datetime(2026, 8, 24, 19, 30, tzinfo=tz),
+            fixed_end=datetime(2026, 8, 24, 20, 30, tzinfo=tz),
+            flexibility=TaskFlexibility.FIXED,
+            tags=["meeting"],
+        ),
+    ]
+    location_ids = [
+        "library",
+        "parcel_station",
+        "canteen",
+        "track",
+        "teaching_building_6",
+    ]
+    pairs = [
+        (origin, destination)
+        for index, origin in enumerate(location_ids)
+        for destination in location_ids[index + 1 :]
+    ]
+    context = await build_context(target_date, now, pairs)
+
+    started = perf_counter()
+    result = Scheduler().schedule(
+        user_id="performance_user",
+        thread_id="performance_thread",
+        tasks=tasks,
+        preferences=UserPreferences(buffer_min=15),
+        context=context,
+    )
+    elapsed = perf_counter() - started
+
+    scheduled = {
+        item.task_id: item
+        for item in result.plan.items
+        if item.item_type == "task" and item.task_id
+    }
+    assert not result.unscheduled_task_ids
+    assert set(scheduled) == {task.id for task in tasks}
+    assert scheduled["mentor"].start_at == datetime(
+        2026, 8, 24, 19, 30, tzinfo=tz
+    )
+    assert elapsed < 5.0
 
 
 @pytest.mark.asyncio

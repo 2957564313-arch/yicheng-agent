@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
-from itertools import permutations
+from itertools import pairwise, permutations
 from zoneinfo import ZoneInfo
 
 from app.container import AppContainer
@@ -79,7 +80,7 @@ def _plan_idle_minutes(plan: Plan) -> int:
             0,
             int((following.start_at - current.end_at).total_seconds() // 60),
         )
-        for current, following in zip(ordered, ordered[1:])
+        for current, following in pairwise(ordered)
     )
 
 
@@ -212,7 +213,8 @@ def make_plan_node(container: AppContainer):
             and old_plan
             and quick_strategy is None
         ):
-            result = container.replanner.replan(
+            result = await asyncio.to_thread(
+                container.replanner.replan,
                 user_id=state["user_id"],
                 thread_id=state["thread_id"],
                 tasks=tasks,
@@ -226,17 +228,23 @@ def make_plan_node(container: AppContainer):
                 if quick_strategy in {"travel", "waiting"}
                 else [tasks]
             )
-            candidates = [
-                container.scheduler.schedule(
-                    user_id=state["user_id"],
-                    thread_id=state["thread_id"],
-                    tasks=ordered_tasks,
-                    preferences=preferences,
-                    context=context,
-                    version=(old_plan.version + 1 if old_plan else 1),
-                )
-                for ordered_tasks in candidate_tasks
-            ]
+            def schedule_candidates():
+                return [
+                    container.scheduler.schedule(
+                        user_id=state["user_id"],
+                        thread_id=state["thread_id"],
+                        tasks=ordered_tasks,
+                        preferences=preferences,
+                        context=context,
+                        version=(old_plan.version + 1 if old_plan else 1),
+                    )
+                    for ordered_tasks in candidate_tasks
+                ]
+
+            # The scheduler performs CPU-heavy combinatorial search. Running
+            # it on the ASGI event-loop thread made one difficult plan block
+            # the homepage and health endpoint until the proxy timed out.
+            candidates = await asyncio.to_thread(schedule_candidates)
             if quick_strategy == "travel":
                 result = min(
                     candidates,
