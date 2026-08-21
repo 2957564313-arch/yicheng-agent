@@ -1048,7 +1048,7 @@ def test_hot_evening_plan_uses_weather_buffers_and_dormitory_rule(tmp_path):
         assert run["start_at"] >= "2026-08-21T17:00:00+08:00"
         assert payload["plan"]["metrics"]["buffer_minutes"] >= 15
         assert "补水" in payload["answer"]
-        assert "宿舍当天门禁至 24:00" in payload["answer"]
+        assert "今晚宿舍 24:00 关门" in payload["answer"]
         assert "23:45" in payload["answer"]
 
 
@@ -1716,6 +1716,28 @@ def test_saved_study_place_applies_to_daily_plan(tmp_path):
         if "自习" in item["title"]
     )
     assert study["location_id"] == "library_floor_6_12"
+
+
+def test_study_without_a_place_defaults_to_the_library(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "default_study_place_user",
+                "thread_id": "default_study_place_thread",
+                "query": "今天14点后自习1小时。",
+                "mode": "offline",
+                "client_context": {"now": "2026-07-24T13:00:00+08:00"},
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    study = next(
+        item
+        for item in task_items(response.json()).values()
+        if "自习" in item["title"]
+    )
+    assert study["location_id"] == "library"
 
 
 def test_saved_study_period_is_soft_daily_preference(tmp_path):

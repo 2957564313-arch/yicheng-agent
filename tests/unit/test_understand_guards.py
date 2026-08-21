@@ -5,7 +5,9 @@ from zoneinfo import ZoneInfo
 
 from app.nodes.understand import (
     _apply_activity_location_memories,
+    _apply_default_locations,
     _apply_memory_preferences,
+    _apply_preferred_locations,
     _apply_timetable_relative_constraints,
     _can_apply_rule_guard,
     _drop_journey_origin_marker_tasks,
@@ -171,6 +173,39 @@ def test_activity_location_memory_refines_generic_parser_location():
 
     assert adjusted[0].location_raw == "图书馆12层"
     assert adjusted[1].location_raw == "东操场"
+
+
+def test_saved_study_place_beats_default_even_when_time_is_fixed():
+    task = Task(
+        id="study",
+        title="自习",
+        date=NOW.date(),
+        duration_min=60,
+        fixed_start=NOW.replace(hour=14),
+        fixed_end=NOW.replace(hour=15),
+        flexibility=TaskFlexibility.FIXED,
+    )
+    preferred = _apply_preferred_locations(
+        [task],
+        preferences=UserPreferences(preferred_locations=["图书馆六层"]),
+        query="跑步改日，其他不动",
+    )
+    adjusted = _apply_default_locations(preferred)
+
+    assert adjusted[0].location_raw == "图书馆六层"
+
+
+def test_missing_study_place_gets_library_default_after_preferences():
+    task = Task(
+        id="study",
+        title="自习",
+        date=NOW.date(),
+        duration_min=60,
+    )
+
+    adjusted = _apply_default_locations([task])
+
+    assert adjusted[0].location_raw == "图书馆"
 
 
 def _parse(query: str) -> UnderstandResult:

@@ -558,15 +558,29 @@ def _success_answer(
         if opening_rules_available:
             verified_summary.append("开放时段")
         lines.append(f"{'、'.join(verified_summary)}已经核对过，可以按这份安排执行。")
-    reminder_context = " ".join([query, *task_titles])
+    reminder_context = " ".join(
+        [
+            *(task_titles if is_removal else [query, *task_titles]),
+            *[
+                item.location_raw or item.location_id or ""
+                for item in task_items
+            ],
+        ]
+    )
     reminders = _knowledge_reminders(
         [
             fact
             for fact in facts
-            if fact.id != "dormitory_access_and_lights"
+            if fact.id not in {
+                "dormitory_access_and_lights",
+                "sun_run_locations",
+            }
         ],
         query=reminder_context,
     )
+    sun_run_reminder = _sun_run_reminder(plan, facts=facts)
+    if sun_run_reminder:
+        reminders.insert(0, sun_run_reminder)
     timetable_reminder = _timetable_constraint_reminder(tasks or [])
     if timetable_reminder:
         reminders.insert(0, timetable_reminder)
@@ -724,6 +738,17 @@ def _weather_reminder(
     has_rain = "雨" in condition or (live.rain_probability or 0) >= 0.5
     has_snow = "雪" in condition
     has_wind = "风" in condition
+    user_reported_heat = any(
+        item.source == DataSource.USER
+        and (
+            (item.temperature_c is not None and item.temperature_c >= 32)
+            or any(
+                marker in (item.condition or "")
+                for marker in ("热", "高温", "炎热", "闷热")
+            )
+        )
+        for item in live_items
+    )
     if has_rain or has_snow or has_wind:
         if has_rain:
             care = "随身带把伞，雨后路面可能湿滑，步行或骑行都慢一点"
@@ -751,10 +776,18 @@ def _weather_reminder(
             "evening": "晚间",
         }.get(live.period, live.period)
         return (
-            f"{period_label}天气信息显示“{condition}”，目前只能精确到"
-            "日/夜时段；"
-            f"{care}。户外活动出发前请再看一次临近预报，变化时"
-            "我可以局部调整。"
+            f"{period_label}有{condition or '降水'}"
+            + ("，而且你提到天气偏热" if user_reported_heat else "")
+            + "，记得带伞"
+            + ("和补水" if user_reported_heat else "")
+            + "。"
+            + (
+                "雨后路滑，步行或骑车多留几分钟；"
+                if has_rain
+                else f"{care}；"
+            )
+            + "出发前如果天气有变化，我只调整受影响的户外安排，"
+            "不会动其他事项。"
         )
     has_heat = (
         (live.temperature_c is not None and live.temperature_c >= 32)
@@ -871,18 +904,55 @@ def _dormitory_return_reminder(
         else route.duration_min if route is not None else 15
     )
     depart_by = cutoff - timedelta(minutes=return_minutes)
-    source_label = (
-        "按高德路线"
-        if route is not None and route.source == DataSource.LIVE_API
-        else "按校园校准路线"
-        if route is not None
-        else "地点未完整说明，先按默认"
+    if last.location_id == "student_dormitory":
+        return (
+            f"今晚宿舍 {cutoff_label} 关门。最后一项在宿舍内于"
+            f" {last.end_at:%H:%M} 结束，不需要再预留返程。"
+        )
+    if route is not None:
+        route_label = (
+            "按高德路线"
+            if route.source == DataSource.LIVE_API
+            else "按校园路线"
+        )
+        return_note = f"{route_label}回宿舍约 {return_minutes} 分钟"
+    else:
+        return_note = "最后地点还没确定，我先按 15 分钟预留返程"
+    urgency = (
+        "时间比较紧，结束后建议直接回宿舍"
+        if last.end_at + timedelta(minutes=return_minutes + 30) >= cutoff
+        else "时间还算充足，不用一结束就赶着走"
     )
     return (
-        f"宿舍当天门禁至 {cutoff_label}；最后一项在 {last.end_at:%H:%M} "
-        f"结束，建议结束后直接返宿。{source_label} {return_minutes} 分钟返程；"
-        "如果之后还有临时安排，最晚应在"
-        f" {depart_by:%H:%M} 动身并于 {cutoff_label} 前回到宿舍。"
+        f"今晚宿舍 {cutoff_label} 关门。你最后一项在 {last.end_at:%H:%M} "
+        f"结束，{return_note}，{urgency}；如果临时再加安排，"
+        f"最晚 {depart_by:%H:%M} 往宿舍走。"
+    )
+
+
+def _sun_run_reminder(plan: Plan, *, facts: list[RetrievedFact]) -> str | None:
+    if not any(fact.id == "sun_run_locations" for fact in facts):
+        return None
+    run_items = [
+        item
+        for item in plan.items
+        if item.item_type == "task"
+        and (
+            item.location_id in {"track", "east_track", "northwest_track"}
+            or any(marker in item.title for marker in ("跑步", "长跑", "阳光长跑"))
+        )
+    ]
+    if not run_items:
+        return None
+    run = min(run_items, key=lambda item: item.start_at)
+    if run.location_id == "northwest_track" or "西北" in (run.location_raw or ""):
+        place, window = "西北田径场", "18:30—21:00"
+    else:
+        place, window = "东操场", "7:00—21:00"
+    return (
+        f"{place}的 {window} 是阳光长跑“可计入成绩”的时段，"
+        f"不是场地全天开放时间；这次安排在 {run.start_at:%H:%M}—"
+        f"{run.end_at:%H:%M}，处于计入时段内。"
     )
 
 

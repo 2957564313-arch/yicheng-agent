@@ -74,6 +74,10 @@ const hduhelpSyncForm = $("#hduhelp-sync-form");
 const hduhelpDataSummary = $("#hduhelp-data-summary");
 const timetableTermControls = $("#timetable-term-controls");
 const timetableTermView = $("#timetable-term-view");
+const campusDataWorkspace = $("#campus-data-workspace");
+const academicCalendarMonth = $("#academic-calendar-month");
+const academicCalendarToday = $("#academic-calendar-today");
+const academicCalendarSummary = $("#academic-calendar-summary");
 const campusName = $("#campus-name");
 const campusCity = $("#campus-city");
 const campusDiscover = $("#campus-discover");
@@ -227,6 +231,43 @@ function writeLocalSnapshot(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+function resultSnapshotStorageKey(threadId = consoleThreadId) {
+  return `yicheng_result_${consoleUserId}_${threadId}`;
+}
+
+function cacheResultSnapshot(data) {
+  if (!data?.plan) return;
+  try {
+    sessionStorage.setItem(
+      resultSnapshotStorageKey(),
+      JSON.stringify({ data, query: lastResultQuery }),
+    );
+  } catch {
+    // The in-memory result remains available even when browser storage is full.
+  }
+}
+
+function restoreResultSnapshot(threadId = consoleThreadId) {
+  try {
+    const snapshot = JSON.parse(
+      sessionStorage.getItem(resultSnapshotStorageKey(threadId)) || "null",
+    );
+    if (!snapshot?.data?.plan) return false;
+    lastResultData = snapshot.data;
+    lastResultQuery = snapshot.query || "";
+    resultRequestText.textContent = lastResultQuery;
+    resultRequestInput.value = lastResultQuery;
+    resultRequest.hidden = false;
+    resultDetails.hidden = false;
+    renderPlanPanels(lastResultData);
+    renderSuggestedActions(lastResultData.suggested_actions || []);
+    if (resultReopen) resultReopen.hidden = false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const dashboardIconPaths = {
   feasibility: '<path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="m9 11 3 3L22 4"/>',
   tasks: '<rect width="14" height="16" x="5" y="4" rx="2"/><path d="M9 4V2h6v2M9 9h6M9 13h6"/>',
@@ -274,9 +315,9 @@ function appendConversationMessage(role, text, { messageId = "" } = {}) {
   conversationStream.insertAdjacentHTML(
     "beforeend",
     `<article class="conversation-message ${isUser ? "user-message" : "assistant-message"}" ${messageId ? `data-message-id="${escapeHtml(messageId)}"` : ""}>
-      <span class="message-avatar" aria-hidden="true">${isUser ? "你" : "易"}</span>
+      ${isUser ? "" : '<img class="message-avatar assistant-message-avatar" src="/assets/yicheng-logo.png?v=20260821-1" alt="" aria-hidden="true" />'}
       <div class="message-body">
-        <p class="message-role">${isUser ? "你" : "易程智策"}</p>
+        ${isUser ? "" : '<p class="message-role">易程智策</p>'}
         <div class="message-content">${escapeHtml(String(text))}</div>
         ${isUser && messageId ? `<button class="message-branch-action" type="button" data-branch-message="${escapeHtml(messageId)}">修改并新建分支</button>` : ""}
       </div>
@@ -367,6 +408,9 @@ async function openConversationThread(threadId) {
   answer.textContent = finalAssistant?.content || "这条分支还没有回复。";
   answer.classList.toggle("muted", !finalAssistant);
   freshness.innerHTML = '<span class="source-tag">服务端对话记录</span>';
+  if (!restoreResultSnapshot(threadId) && resultReopen) {
+    resultReopen.hidden = true;
+  }
   renderConversationHistory();
   closeDrawers();
 }
@@ -400,7 +444,7 @@ function completeConversationTurn(answerText) {
 
 function moveToolPanelsIntoWorkspace() {
   if (!contentColumn) return;
-  [".hduhelp-panel", ".timetable-panel", ".memory-panel", ".execution-panel"]
+  ["#campus-data-workspace", ".memory-panel", ".execution-panel"]
     .map((selector) => document.querySelector(selector))
     .filter(Boolean)
     .forEach((panel) => {
@@ -414,7 +458,7 @@ function setPanelHidden(panel, hidden) {
 
 function setActiveWorkspaceView(view = "chat") {
   const supported = new Set([
-    "chat", "schedule", "hduhelp", "timetable", "preferences", "weekly-planner",
+    "chat", "schedule", "campus-data", "preferences", "weekly-planner",
   ]);
   activeWorkspaceView = supported.has(view) ? view : "chat";
   workspace?.setAttribute("data-active-view", activeWorkspaceView);
@@ -429,7 +473,8 @@ function setActiveWorkspaceView(view = "chat") {
   const hasPlanResult = document.body.classList.contains("has-plan-result");
   const isSchedule = activeWorkspaceView === "schedule";
   const isWeeklyPlanner = activeWorkspaceView === "weekly-planner";
-  const isToolPage = ["hduhelp", "timetable", "preferences"].includes(activeWorkspaceView);
+  const isCampusData = activeWorkspaceView === "campus-data";
+  const isToolPage = ["campus-data", "preferences"].includes(activeWorkspaceView);
 
   conversationOutline?.classList.toggle("is-workspace-hidden", !isChat);
 
@@ -443,11 +488,13 @@ function setActiveWorkspaceView(view = "chat") {
   setPanelHidden(schedulePanel, !isSchedule);
   setPanelHidden(agendaPanel, true);
   setPanelHidden(weeklyPanel, !isWeeklyPlanner);
-  setPanelHidden(document.querySelector(".hduhelp-panel"), activeWorkspaceView !== "hduhelp");
-  setPanelHidden(document.querySelector(".timetable-panel"), activeWorkspaceView !== "timetable");
+  setPanelHidden(campusDataWorkspace, !isCampusData);
   setPanelHidden(document.querySelector(".memory-panel"), activeWorkspaceView !== "preferences");
   setPanelHidden(document.querySelector(".execution-panel"), true);
   if (isSchedule) renderScheduleViews();
+  if (isCampusData && academicCalendarMonth && !academicCalendarMonth.value) {
+    academicCalendarMonth.value = shanghaiDateString().slice(0, 7);
+  }
   if (isToolPage) closeDrawers();
 }
 
@@ -541,7 +588,7 @@ conversationOutline.addEventListener("keydown", (event) => {
 });
 
 function conversationMessageLabel(message) {
-  const body = message.querySelector(".message-body, .message-bubble") || message;
+  const body = message.querySelector(".message-content, .message-bubble") || message;
   const text = body.textContent.replace(/\s+/g, " ").trim();
   return text.length > 34 ? `${text.slice(0, 34)}…` : text || "未命名提问";
 }
@@ -2310,6 +2357,7 @@ function renderResponse(data) {
   renderSuggestedActions(data.suggested_actions);
   renderDebug(data);
   if (data.plan) {
+    cacheResultSnapshot(data);
     setResultMode(true);
   } else if (shouldStayInDashboard) {
     resultRequestText.textContent = lastResultQuery;
@@ -2782,8 +2830,75 @@ async function runRequest(
   }
 }
 
+function baselineDateFromQuery(query) {
+  const explicit = query.match(/(20\d{2})[年/-](\d{1,2})[月/-](\d{1,2})日?/u);
+  if (explicit) {
+    return `${explicit[1]}-${explicit[2].padStart(2, "0")}-${explicit[3].padStart(2, "0")}`;
+  }
+  const today = shanghaiDateString();
+  if (query.includes("后天")) return addWeeklyDays(today, 2);
+  if (query.includes("明天")) return addWeeklyDays(today, 1);
+  return today;
+}
+
+async function publishedAgendaPlan(query) {
+  const targetDate = baselineDateFromQuery(query);
+  try {
+    const agendaResponse = await fetch(
+      `/api/v1/users/${consoleUserId}/agenda`
+        + `?start_date=${encodeURIComponent(targetDate)}`
+        + `&end_date=${encodeURIComponent(targetDate)}`,
+    );
+    const agenda = await agendaResponse.json();
+    if (!agendaResponse.ok) return null;
+    const planId = (agenda.items || []).find(
+      (item) => item.source === "plan" && item.plan_id,
+    )?.plan_id;
+    if (!planId) return null;
+    const planResponse = await fetch(
+      `/api/v1/plans/${encodeURIComponent(planId)}`,
+    );
+    const plan = await planResponse.json();
+    if (!planResponse.ok || plan?.user_id !== consoleUserId) return null;
+    localStorage.setItem(planPublishedKey, plan.id);
+    return plan;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveRequestBaseline(query) {
+  if (
+    document.body.classList.contains("has-plan-result")
+    && lastResultData?.plan
+  ) {
+    return lastResultData.plan;
+  }
+  const agendaPlan = await publishedAgendaPlan(query);
+  if (agendaPlan) return agendaPlan;
+  const publishedPlanId = localStorage.getItem(planPublishedKey);
+  if (publishedPlanId) {
+    try {
+      const response = await fetch(
+        `/api/v1/plans/${encodeURIComponent(publishedPlanId)}`,
+      );
+      const plan = await response.json();
+      if (response.ok && plan?.user_id === consoleUserId) return plan;
+    } catch {
+      // Fall through to the last browser snapshot.
+    }
+  }
+  return readLocalSnapshot(planSnapshotKey, null);
+}
+
 async function requestChat(query, { previewOnly = false, render = true } = {}) {
   const clientContext = clientContextSnapshot();
+  const baselinePlan = await resolveRequestBaseline(query);
+  clientContext.previous_plan = baselinePlan;
+  clientContext.previous_plan_published = Boolean(
+    baselinePlan?.id
+    && localStorage.getItem(planPublishedKey) === baselinePlan.id
+  );
   if (activePlanningNowOverride) clientContext.now = activePlanningNowOverride;
   return runRequest("/api/v1/chat", {
     method: "POST",
@@ -2792,7 +2907,7 @@ async function requestChat(query, { previewOnly = false, render = true } = {}) {
       user_id: consoleUserId,
       thread_id: consoleThreadId,
       query,
-      old_plan_id: clientContext.previous_plan?.id || null,
+      old_plan_id: baselinePlan?.id || null,
       mode: planningMode,
       publish_to_agenda: false,
       preview_only: previewOnly,
@@ -3655,6 +3770,7 @@ function hduhelpTermLabel(term) {
 
 function renderHduHelpConnection(data) {
   const connected = Boolean(data?.connected);
+  document.querySelector(".hduhelp-panel")?.classList.toggle("is-connected", connected);
   hduhelpBadge.textContent = connected ? "已连接" : "未连接";
   hduhelpBadge.classList.toggle("connected", connected);
   hduhelpConnectForm.hidden = connected;
@@ -3846,6 +3962,105 @@ function renderTimetable(data) {
 
 let hduhelpAvailableTerms = [];
 let syncedTimetableTerms = [];
+let academicCalendarItems = [];
+
+function academicCalendarTermForDate(dateValue) {
+  return syncedTimetableTerms.find((term) => (
+    term.term_start && term.term_end
+    && dateValue >= term.term_start
+    && dateValue <= term.term_end
+  ));
+}
+
+function academicCalendarWeek(dateValue) {
+  const term = academicCalendarTermForDate(dateValue);
+  if (!term) return null;
+  const start = scheduleDateValue(term.term_start);
+  const current = scheduleDateValue(dateValue);
+  return Math.floor((current - start) / (7 * 24 * 60 * 60 * 1000)) + 1;
+}
+
+function academicCalendarDayText(item) {
+  if (item.course_action === "makeup") {
+    return item.effective_weekday
+      ? `按周${"一二三四五六日"[Number(item.effective_weekday) - 1]}课表补课`
+      : "按学校通知补课";
+  }
+  if (item.course_action === "no_class" || item.day_type === "holiday") return "全天停课放假";
+  if (item.day_type === "adjusted_workday") return "调休工作日，补课安排以杭助为准";
+  if (item.day_type === "unknown") return "日期规则待核验";
+  return "正常教学日";
+}
+
+function renderAcademicCalendar(items = academicCalendarItems) {
+  if (!academicCalendarSummary || !academicCalendarMonth) return;
+  academicCalendarItems = Array.isArray(items) ? items : [];
+  if (!academicCalendarItems.length) {
+    academicCalendarSummary.textContent = "这个月的校历暂时没有读取成功。";
+    academicCalendarSummary.classList.add("muted");
+    return;
+  }
+  academicCalendarSummary.classList.remove("muted");
+  const today = shanghaiDateString();
+  const anchor = academicCalendarItems.find((item) => item.date === today)
+    || academicCalendarItems[0];
+  const anchorWeek = academicCalendarWeek(anchor.date);
+  const anchorTerm = academicCalendarTermForDate(anchor.date);
+  const adjusted = academicCalendarItems.filter((item) => (
+    item.day_type !== "normal" || item.course_action !== "normal"
+  ));
+  const firstDate = scheduleDateValue(academicCalendarItems[0].date);
+  const leadingBlanks = firstDate.getUTCDay();
+  const monthLabel = `${firstDate.getUTCFullYear()}年${firstDate.getUTCMonth() + 1}月`;
+  academicCalendarSummary.innerHTML = `
+    <div class="academic-calendar-overview">
+      <div><small>查看月份</small><strong>${monthLabel}</strong></div>
+      <div><small>${anchor.date === today ? "今天" : "月初"}</small><strong>${escapeHtml(academicCalendarDayText(anchor))}</strong></div>
+      <div><small>教学进度</small><strong>${anchorWeek ? `第${anchorWeek}教学周` : "假期或学期外"}</strong></div>
+      <div><small>本月特殊日期</small><strong>${adjusted.length}天</strong></div>
+    </div>
+    ${anchorTerm ? `<p class="academic-calendar-term">${escapeHtml(anchorTerm.name || hduhelpTermLabel(anchorTerm))} · ${escapeHtml(anchorTerm.term_start)}—${escapeHtml(anchorTerm.term_end)}</p>` : ""}
+    <div class="academic-calendar-weekdays" aria-hidden="true">
+      ${["日", "一", "二", "三", "四", "五", "六"].map((day) => `<span>周${day}</span>`).join("")}
+    </div>
+    <div class="academic-calendar-grid" aria-label="${monthLabel}校历">
+      ${Array.from({ length: leadingBlanks }, () => '<span class="academic-calendar-blank"></span>').join("")}
+      ${academicCalendarItems.map((item) => {
+        const week = academicCalendarWeek(item.date);
+        const day = Number(item.date.slice(-2));
+        const holiday = item.day_type === "holiday" || item.course_action === "no_class";
+        const adjustedWorkday = item.day_type === "adjusted_workday" || item.course_action === "makeup";
+        const label = item.label || (holiday ? "放假" : adjustedWorkday ? "调休" : "");
+        return `<article class="academic-calendar-day ${holiday ? "is-holiday" : ""} ${adjustedWorkday ? "is-workday" : ""} ${item.date === today ? "is-today" : ""}" title="${escapeHtml(`${item.date} ${academicCalendarDayText(item)}${label ? `：${label}` : ""}`)}">
+          <span>${day}</span>
+          ${label ? `<strong>${escapeHtml(label)}</strong>` : ""}
+          ${week && scheduleDateValue(item.date).getUTCDay() === 1 ? `<small>第${week}周</small>` : ""}
+        </article>`;
+      }).join("")}
+    </div>
+    <div class="academic-calendar-notes">
+      <strong>本月校历提醒</strong>
+      ${adjusted.length ? adjusted.map((item) => `<p><time>${escapeHtml(item.date.slice(5).replace("-", "月"))}日</time><span>${escapeHtml(item.label || "校历调整")}：${escapeHtml(academicCalendarDayText(item))}</span></p>`).join("") : "<p><span>本月没有需要特别标注的放假或调休日期，课程仍按杭助课表执行。</span></p>"}
+    </div>
+  `;
+}
+
+async function loadAcademicCalendar(monthValue = shanghaiDateString().slice(0, 7)) {
+  if (!academicCalendarMonth || !academicCalendarSummary) return;
+  academicCalendarMonth.value = monthValue;
+  academicCalendarSummary.textContent = "正在读取本月校历。";
+  academicCalendarSummary.classList.add("muted");
+  const startDate = `${monthValue}-01`;
+  const endDate = scheduleMonthEnd(startDate);
+  const response = await fetch(
+    `/api/v1/users/${consoleUserId}/calendar-context`
+      + `?start_date=${encodeURIComponent(startDate)}`
+      + `&end_date=${encodeURIComponent(endDate)}`,
+  );
+  const data = await response.json();
+  if (!response.ok) throw data;
+  renderAcademicCalendar(data.items || []);
+}
 
 function timetableTermKey(term) {
   return `${term.school_year}|${term.semester}`;
@@ -3875,6 +4090,7 @@ function renderTimetableTerms(terms, preferredKey = "") {
     },
     entries: selected.entries || [],
   });
+  if (academicCalendarItems.length) renderAcademicCalendar();
 }
 
 timetableTermView?.addEventListener("change", () => {
@@ -3889,6 +4105,22 @@ timetableTermView?.addEventListener("change", () => {
       term_end: selected.term_end,
     },
     entries: selected.entries || [],
+  });
+  if (academicCalendarItems.length) renderAcademicCalendar();
+});
+
+academicCalendarMonth?.addEventListener("change", () => {
+  if (!academicCalendarMonth.value) return;
+  loadAcademicCalendar(academicCalendarMonth.value).catch((error) => {
+    academicCalendarSummary.textContent = "这个月的校历暂时没有读取成功，请稍后再试。";
+    renderDebug(error);
+  });
+});
+
+academicCalendarToday?.addEventListener("click", () => {
+  loadAcademicCalendar(shanghaiDateString().slice(0, 7)).catch((error) => {
+    academicCalendarSummary.textContent = "本月校历暂时没有读取成功，请稍后再试。";
+    renderDebug(error);
   });
 });
 
@@ -3957,6 +4189,8 @@ async function initializeApp() {
     await openConversationThread(requestedThreadId).catch((error) => {
       renderError(error);
     });
+  } else {
+    restoreResultSnapshot(consoleThreadId);
   }
   agendaDate.value = shanghaiDateString();
   scheduleCursorDate = agendaDate.value;
@@ -3974,6 +4208,12 @@ async function initializeApp() {
   loadMemories().catch((error) => renderDebug(error));
   loadHduHelpConnection().catch((error) => renderDebug(error));
   loadTimetable().catch((error) => renderDebug(error));
+  loadAcademicCalendar(shanghaiDateString().slice(0, 7)).catch((error) => {
+    if (academicCalendarSummary) {
+      academicCalendarSummary.textContent = "本月校历暂时没有读取成功，请稍后再试。";
+    }
+    renderDebug(error);
+  });
 }
 
 initializeApp();

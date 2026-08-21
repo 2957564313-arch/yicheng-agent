@@ -301,10 +301,12 @@ def make_understand_node(container: AppContainer):
         )
         result = result.model_copy(
             update={
-                "tasks": _apply_preferred_locations(
-                    tasks_with_activity_locations,
-                    preferences=preferences,
-                    query=state["query"],
+                "tasks": _apply_default_locations(
+                    _apply_preferred_locations(
+                        tasks_with_activity_locations,
+                        preferences=preferences,
+                        query=state["query"],
+                    )
                 )
             }
         )
@@ -913,9 +915,6 @@ def _apply_preferred_locations(
     }
     adjusted: list[Task] = []
     for task in tasks:
-        if task.flexibility.value != "movable":
-            adjusted.append(task)
-            continue
         if "memory_activity_location" in task.tags:
             adjusted.append(task)
             continue
@@ -981,9 +980,6 @@ def _apply_activity_location_memories(
 
     adjusted: list[Task] = []
     for task in tasks:
-        if task.flexibility.value != "movable":
-            adjusted.append(task)
-            continue
         normalized_title = _normalize_task_text(task.title)
         choice = next(
             (
@@ -1029,6 +1025,20 @@ def _apply_activity_location_memories(
             )
         )
     return adjusted
+
+
+def _apply_default_locations(tasks: list[Task]) -> list[Task]:
+    """Fill only harmless defaults after explicit choices and memories."""
+    return [
+        task.model_copy(update={"location_raw": "图书馆"})
+        if (
+            not task.location_id
+            and not (task.location_raw or "").strip()
+            and _task_kind(task.title, task.location_raw) == "study"
+        )
+        else task
+        for task in tasks
+    ]
 
 
 def _task_kind(title: str, location_raw: str | None) -> str | None:
@@ -1442,7 +1452,11 @@ def _merge_task_constraints(
     }
     use_rule_location = bool(
         rule_task.location_raw
-        and ("hard_constraint" in rule_task.tags or rule_task.location_raw in query)
+        and (
+            "hard_constraint" in rule_task.tags
+            or rule_task.location_raw in query
+            or not model_task.location_raw
+        )
     )
     tags = list(dict.fromkeys([*model_task.tags, *rule_task.tags]))
     notes = model_task.notes

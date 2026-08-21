@@ -8,7 +8,7 @@
       content="面向杭电学生的个性化日程、校园规划与生活关怀助手"
     />
     <title>易程智策 · 我的校园日程</title>
-    <link rel="stylesheet" href="/styles.css?v=20260821-5" />
+    <link rel="stylesheet" href="/styles.css?v=20260821-6" />
     <link rel="icon" href="/favicon.ico?v=20260821-1" sizes="any" />
     <link rel="icon" type="image/png" href="/assets/icon-192.png?v=20260821-1" sizes="192x192" />
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=20260821-1" />
@@ -104,14 +104,11 @@
             <button type="button" class="workspace-nav-button" data-view="schedule">
               <span class="nav-icon">▦</span><span>日程</span><small>日 · 周 · 月</small>
             </button>
-            <button type="button" class="workspace-nav-button" data-view="hduhelp">
-              <span class="nav-icon">联</span><span>杭电助手</span><small>账号与校园数据</small>
-            </button>
-            <button type="button" class="workspace-nav-button" data-view="timetable">
-              <span class="nav-icon">▤</span><span>课程与校历</span><small>杭助同步结果</small>
-            </button>
             <button type="button" class="workspace-nav-button" data-view="preferences">
               <span class="nav-icon">♡</span><span>偏好</span><small>让安排越来越懂你</small>
+            </button>
+            <button type="button" class="workspace-nav-button" data-view="campus-data">
+              <span class="nav-icon">▤</span><span>校园数据</span><small>杭助 · 课表 · 校历</small>
             </button>
           </nav>
           <div class="history-section-label">
@@ -138,14 +135,19 @@
             ></textarea>
             <div class="composer-footer">
               <span>按你的课表、时间和地点安排</span>
-              <button id="submit" class="primary">发送给易程智策</button>
+              <div class="composer-footer-actions">
+                <button id="result-reopen" type="button" class="ghost" hidden>
+                  返回刚才方案
+                </button>
+                <button id="submit" class="primary">发送给易程智策</button>
+              </div>
             </div>
           </article>
 
           <nav class="quick-access" aria-label="快捷入口">
             <span class="quick-access-label">快速查看</span>
             <button type="button" data-view="schedule">日程总览</button>
-            <button type="button" data-view="timetable">我的课表</button>
+            <button type="button" data-view="campus-data">校园数据</button>
             <button type="button" data-view="preferences">偏好设置</button>
           </nav>
 
@@ -204,6 +206,7 @@
             </div>
           </article>
 
+          <section id="campus-data-workspace" class="campus-data-workspace" hidden>
           <article class="panel hduhelp-panel tool-collapsible">
             <div class="panel-heading compact">
               <div>
@@ -256,7 +259,24 @@
             <div id="timetable-summary" class="timetable-summary muted">
               当前还没有同步个人课表。
             </div>
+            <section class="academic-calendar" aria-labelledby="academic-calendar-title">
+              <div class="academic-calendar-heading">
+                <div>
+                  <p class="step">校历</p>
+                  <h3 id="academic-calendar-title">教学周与放假调休</h3>
+                </div>
+                <div class="academic-calendar-controls">
+                  <label for="academic-calendar-month">查看月份</label>
+                  <input id="academic-calendar-month" type="month" />
+                  <button id="academic-calendar-today" type="button" class="ghost">本月</button>
+                </div>
+              </div>
+              <div id="academic-calendar-summary" class="academic-calendar-summary muted">
+                正在读取本月校历。
+              </div>
+            </section>
           </article>
+          </section>
 
           <article class="panel memory-panel tool-collapsible">
             <div class="panel-heading compact">
@@ -368,9 +388,6 @@
                   <h2>我帮你把时间和路程一起想清楚</h2>
                 </div>
               </div>
-              <button id="result-reopen" type="button" class="ghost" hidden>
-                查看刚才方案 →
-              </button>
             </div>
             <div id="answer" class="answer muted">
               把课程、自习、取快递、吃饭或运动告诉我，我会先判断能否
@@ -706,6 +723,6 @@
       <span>易程智策 · 杭电个性化校园日程助手</span>
       <span>对话负责理解与修改，长期日程、提醒和校园规则负责陪伴执行</span>
     </footer>
-    <script src="/app.js?v=20260821-5" defer></script>
+    <script src="/app.js?v=20260821-6" defer></script>
   </body>
 </html>

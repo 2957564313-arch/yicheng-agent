@@ -113,6 +113,28 @@ def test_sidebar_prioritizes_workspace_navigation_before_history() -> None:
     assert "margin: 24px 6px 10px" in styles
 
 
+def test_sidebar_merges_hduhelp_timetable_and_calendar_after_preferences() -> None:
+    html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+
+    nav_start = html.index('class="workspace-nav"')
+    nav_end = html.index("</nav>", nav_start)
+    nav = html[nav_start:nav_end]
+    assert nav.index("对话") < nav.index("日程") < nav.index("偏好") < nav.index("校园数据")
+    assert 'data-view="hduhelp"' not in nav
+    assert 'data-view="timetable"' not in nav
+    assert 'data-view="campus-data"' in nav
+    assert "杭助 · 课表 · 校历" in nav
+    assert 'id="campus-data-workspace"' in html
+    assert 'id="academic-calendar-month"' in html
+    assert 'id="academic-calendar-summary"' in html
+    assert '"chat", "schedule", "campus-data", "preferences"' in javascript
+    assert "async function loadAcademicCalendar" in javascript
+    assert "function renderAcademicCalendar" in javascript
+    assert "教学进度" in javascript
+    assert "本月校历提醒" in javascript
+
+
 def test_self_hosted_accounts_replace_external_login_choices() -> None:
     html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
@@ -205,7 +227,13 @@ def test_result_dashboard_has_icons_sources_and_four_quick_actions() -> None:
     assert "const hasPreviousPlan = Boolean(data.previous_plan);" in javascript
     assert "const removalOnly = changes.length > 0" in javascript
     assert "if (waitingDelta && !removalOnly)" in javascript
-    assert "old_plan_id: clientContext.previous_plan?.id || null" in javascript
+    assert "async function resolveRequestBaseline(query)" in javascript
+    assert "async function publishedAgendaPlan(query)" in javascript
+    assert 'item.source === "plan" && item.plan_id' in javascript
+    assert "old_plan_id: baselinePlan?.id || null" in javascript
+    assert "publishedPlanId" in javascript
+    assert "function cacheResultSnapshot(data)" in javascript
+    assert "function restoreResultSnapshot(" in javascript
     assert 'updatesPublishedAgenda' in javascript
     assert '"更新日程"' in javascript
     assert '"调整方案已保存，确认后更新日程"' in javascript
@@ -254,6 +282,21 @@ def test_current_conversation_has_a_right_side_quick_outline() -> None:
     assert ".history-item-menu[hidden]" in styles
     assert "async function renameConversationThread" in javascript
     assert "async function deleteConversationThread" in javascript
+    assert 'message.querySelector(".message-content, .message-bubble")' in javascript
+    assert "right: 34px" in styles
+
+
+def test_conversation_uses_one_brand_logo_and_omits_user_role_badges() -> None:
+    html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+    styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
+
+    assert '/assets/yicheng-logo.png?v=20260821-1' in html
+    assert 'class="assistant-avatar" src="/assets/yicheng-logo.png?v=20260821-1"' in html
+    assert 'class="message-avatar assistant-message-avatar" src="/assets/yicheng-logo.png?v=20260821-1"' in javascript
+    assert '${isUser ? "你" : "易"}' not in javascript
+    assert '${isUser ? "你" : "易程智策"}' not in javascript
+    assert ".assistant-message-avatar" in styles
 
 
 def test_schedule_marks_verified_holidays_and_pending_makeup_days() -> None:
@@ -298,10 +341,10 @@ def test_day_schedule_allows_manual_edits_but_locks_authoritative_items() -> Non
     assert '<svg viewBox="0 0 24 24" aria-hidden="true">' in javascript
     assert 'title="调整时间或删除">•••' not in javascript
     assert ".schedule-event-lock" in styles
-    assert 'app.js?v=20260821-5' in (WEB_ROOT / "index.html").read_text(
+    assert 'app.js?v=20260821-6' in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
-    assert "styles.css?v=20260821-5" in (WEB_ROOT / "index.html").read_text(
+    assert "styles.css?v=20260821-6" in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
     assert 'term.current ? "（当前）"' not in javascript

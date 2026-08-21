@@ -11,6 +11,7 @@ from app.nodes.respond import (
     _plain_text_answer,
     _polished_answer_is_grounded,
     _success_answer,
+    _sun_run_reminder,
     _weather_reminder,
 )
 from app.schemas.common import DataSource, PlanStatus
@@ -412,9 +413,10 @@ def test_late_friday_plan_proactively_explains_dormitory_return_time():
     )
 
     assert reminder is not None
-    assert "门禁至 24:00" in reminder
-    assert "默认 15 分钟返程" in reminder
-    assert "23:45 动身" in reminder
+    assert "今晚宿舍 24:00 关门" in reminder
+    assert "先按 15 分钟预留返程" in reminder
+    assert "最晚 23:45 往宿舍走" in reminder
+    assert "时间还算充足" in reminder
 
 
 def test_weather_reminder_checks_night_forecast_not_only_first_period():
@@ -442,7 +444,46 @@ def test_weather_reminder_checks_night_forecast_not_only_first_period():
     assert reminder is not None
     assert "夜间" in reminder
     assert "小雨" in reminder
-    assert "带把伞" in reminder
+    assert "记得带伞" in reminder
+    assert "不会动其他事项" in reminder
+
+
+def test_sun_run_reminder_explains_what_the_hours_mean():
+    plan = Plan(
+        id="run_plan",
+        user_id="user",
+        thread_id="thread",
+        date=datetime(2026, 8, 21, tzinfo=TZ).date(),
+        status=PlanStatus.VALID,
+        items=[
+            PlanItem(
+                id="run_item",
+                task_id="run",
+                item_type="task",
+                title="跑步",
+                start_at=datetime(2026, 8, 21, 18, 15, tzinfo=TZ),
+                end_at=datetime(2026, 8, 21, 18, 45, tzinfo=TZ),
+                location_id="track",
+                source=DataSource.USER,
+            )
+        ],
+        created_at=datetime(2026, 8, 21, 13, 0, tzinfo=TZ),
+    )
+    reminder = _sun_run_reminder(
+        plan,
+        facts=[
+            RetrievedFact(
+                id="sun_run_locations",
+                content="东操场07:00—21:00。",
+                source=DataSource.STRUCTURED,
+            )
+        ],
+    )
+
+    assert reminder is not None
+    assert "可计入成绩" in reminder
+    assert "不是场地全天开放时间" in reminder
+    assert "18:15—18:45" in reminder
 
 
 def test_custom_campus_without_rules_never_claims_opening_hours_checked():
