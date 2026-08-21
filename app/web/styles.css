@@ -2050,7 +2050,15 @@ body {
 
 header, main, footer { width: min(1480px, calc(100% - 48px)); }
 .masthead { padding: 24px 0 18px; }
-.assistant-avatar { background: linear-gradient(145deg, #4f46e5, #7c3aed); box-shadow: 0 12px 24px rgba(79, 70, 229, .2); }
+/* The avatar is the product mark itself, so it carries no plate of its own —
+   the badge already has an edge and a glow baked into the artwork. */
+.assistant-avatar {
+  display: block;
+  background: none;
+  box-shadow: none;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 14px rgba(88, 57, 214, .18));
+}
 .brand-mark { width: 52px; height: 52px; }
 h1 { font: 820 34px/1 serif; }
 h2 { font-family: "PingFang SC", "Noto Sans SC", system-ui, sans-serif; }
