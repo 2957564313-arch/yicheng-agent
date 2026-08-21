@@ -4,6 +4,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
+from itertools import pairwise
 from pathlib import Path
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -1440,10 +1441,11 @@ class RuleBasedRequirementParser:
         if not fixed_tasks or not movable_tasks:
             return movable_tasks
 
-        def position(task: Task) -> int:
+        def span(task: Task) -> tuple[int, int]:
             candidates = list(TASK_KEYWORDS.get(task.id, ()))
             compact_title = re.sub(
-                r"^(?:参加|进行|前往|去)",
+                r"^(?:(?:然后|之后|再|接着|随后)(?:参加|进行|前往|去)?|"
+                r"(?:参加|进行|前往|去))",
                 "",
                 task.title,
             )
@@ -1453,45 +1455,62 @@ class RuleBasedRequirementParser:
                 for candidate in candidates
                 if candidate and query.find(candidate) >= 0
             ]
-            return min(positions) if positions else len(query)
+            start = min(positions) if positions else len(query)
+            matched = next(
+                (
+                    candidate
+                    for candidate in candidates
+                    if candidate and query.find(candidate) == start
+                ),
+                "",
+            )
+            return start, start + len(matched)
 
         sequence = sorted(
             [*fixed_tasks, *movable_tasks],
-            key=position,
+            key=lambda task: span(task)[0],
         )
-        previous_id: str | None = None
-        updates: dict[str, Task] = {}
-        for index, task in enumerate(sequence):
-            if task.flexibility == TaskFlexibility.MOVABLE:
-                next_fixed = next(
-                    (
-                        candidate
-                        for candidate in sequence[index + 1 :]
-                        if (
-                            candidate.flexibility
-                            in {
-                                TaskFlexibility.FIXED,
-                                TaskFlexibility.LOCKED,
-                            }
-                            and candidate.fixed_start is not None
-                        )
-                    ),
-                    None,
-                )
-                latest_end = task.latest_end
-                if next_fixed is not None:
-                    latest_end = min(
-                        value
-                        for value in (latest_end, next_fixed.fixed_start)
-                        if value is not None
-                    )
-                updates[task.id] = task.model_copy(
+        updates = {task.id: task for task in movable_tasks}
+        sequence_markers = re.compile(
+            r"然后|再去|再到|接着|随后|之后|完成后|结束后"
+        )
+        for previous, current in pairwise(sequence):
+            previous_start, previous_end = span(previous)
+            current_start, _ = span(current)
+            if previous_start >= len(query) or current_start >= len(query):
+                continue
+            between = query[previous_end:current_start]
+            if not sequence_markers.search(between):
+                continue
+
+            if current.flexibility == TaskFlexibility.MOVABLE:
+                current_task = updates[current.id]
+                updates[current.id] = current_task.model_copy(
                     update={
-                        "depends_on": [previous_id] if previous_id else [],
-                        "latest_end": latest_end,
+                        "depends_on": list(
+                            dict.fromkeys(
+                                [*current_task.depends_on, previous.id]
+                            )
+                        )
                     }
                 )
-            previous_id = task.id
+            elif (
+                previous.flexibility == TaskFlexibility.MOVABLE
+                and current.fixed_start is not None
+            ):
+                previous_task = updates[previous.id]
+                updates[previous.id] = previous_task.model_copy(
+                    update={
+                        "latest_end": min(
+                            value
+                            for value in (
+                                previous_task.latest_end,
+                                current.fixed_start,
+                            )
+                            if value is not None
+                        )
+                    }
+                )
         return [updates.get(task.id, task) for task in movable_tasks]
 
     def _fixed_point_tasks(

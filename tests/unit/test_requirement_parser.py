@@ -34,6 +34,34 @@ def test_occurrence_count_stays_with_its_own_task_across_list_punctuation():
     assert counts["meeting"] == 1
 
 
+def test_enumerated_tasks_are_not_chained_around_fixed_meeting():
+    result = parse(
+        "请根据杭助课表安排2026年8月24日。当天要自习两次，每次90分钟；"
+        "去菜鸟驿站取快递30分钟；吃晚饭45分钟；跑步30分钟；"
+        "19:30—20:30和导师碰头。自习和跑步都不指定地点，"
+        "其他时间尽量宽松，所有事项都要完成。"
+    )
+    movable = [task for task in result.tasks if task.flexibility == "movable"]
+
+    assert len(result.tasks) == 5
+    assert all(not task.depends_on for task in movable)
+    run = next(task for task in movable if task.id == "run")
+    assert run.latest_end.hour == 22
+
+
+def test_explicit_sequence_across_fixed_meeting_is_preserved():
+    result = parse(
+        "2026年8月24日先自习90分钟，然后19:30—20:30和导师碰头，"
+        "之后跑步30分钟。"
+    )
+    study = next(task for task in result.tasks if task.id == "study")
+    run = next(task for task in result.tasks if task.id == "run")
+    meeting = next(task for task in result.tasks if task.flexibility == "fixed")
+
+    assert study.latest_end == meeting.fixed_start
+    assert meeting.id in run.depends_on
+
+
 def test_explicit_same_day_completion_becomes_a_hard_day_deadline():
     result = parse("今天必须完成：自习2次、取快递、跑步，晚上和导师碰头2小时")
 
