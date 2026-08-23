@@ -19,6 +19,13 @@ def test_location_alias_resolution():
     assert repository.resolve("不存在的地点") is None
 
 
+def test_short_generic_alias_does_not_capture_named_library_room():
+    repository = LocationRepository(DATA_DIR / "locations.json")
+
+    assert repository.resolve("芯灵驿站（十二楼）") is None
+    assert repository.resolve("驿站").id == "parcel_station"
+
+
 def test_location_aliases_are_isolated_by_campus():
     repository = LocationRepository(DATA_DIR / "locations.json")
     other_library = repository.register_runtime(

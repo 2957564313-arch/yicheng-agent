@@ -107,6 +107,35 @@ class AmapGeocodingProvider:
             CampusLocation | None,
         ] = {}
 
+    def _near_known_campus(
+        self,
+        *,
+        campus_id: str,
+        longitude: float,
+        latitude: float,
+        max_distance_m: int = 2500,
+    ) -> bool:
+        known_points = [
+            (float(location.longitude), float(location.latitude))
+            for location in self.locations.all(campus_id=campus_id)
+            if location.longitude is not None and location.latitude is not None
+        ]
+        if not known_points:
+            return False
+        longitude_radians = math.radians(longitude)
+        latitude_radians = math.radians(latitude)
+        for known_longitude, known_latitude in known_points:
+            delta_longitude = math.radians(known_longitude) - longitude_radians
+            delta_latitude = math.radians(known_latitude) - latitude_radians
+            latitude_mean = (
+                math.radians(known_latitude) + latitude_radians
+            ) / 2
+            x = delta_longitude * math.cos(latitude_mean)
+            distance_m = math.hypot(x, delta_latitude) * 6_371_000
+            if distance_m <= max_distance_m:
+                return True
+        return False
+
     async def resolve(
         self,
         raw_name: str,
@@ -119,6 +148,10 @@ class AmapGeocodingProvider:
         if not name:
             return None
         active_campus_id = campus_id or self.locations.campus_id
+        known_location = self.locations.resolve(
+            name,
+            campus_id=active_campus_id,
+        )
         active_campus_query = (
             self.campus_query
             if campus_query is None
@@ -218,6 +251,31 @@ class AmapGeocodingProvider:
         except (TypeError, ValueError):
             self._cache[cache_key] = None
             return None
+        if (
+            known_location is not None
+            and (
+                known_location.longitude is None
+                or known_location.latitude is None
+            )
+        ):
+            candidate_text = _compact_text(
+                f"{result.get('name', '')} {result.get('address', '')} "
+                f"{result.get('formatted_address', '')}"
+            )
+            campus_named = any(
+                token in candidate_text
+                for token in _campus_match_tokens(active_campus_query)
+            )
+            if not campus_named and not self._near_known_campus(
+                campus_id=active_campus_id,
+                longitude=longitude,
+                latitude=latitude,
+            ):
+                # Do not upgrade a verified campus venue name with an
+                # unrelated same-name city POI. The route layer can retain the
+                # local rule and use its explicit estimated fallback instead.
+                self._cache[cache_key] = None
+                return None
         location = CampusLocation(
             id=(
                 "amap_"

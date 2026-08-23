@@ -11,6 +11,8 @@ from app.nodes.understand import (
     _apply_timetable_relative_constraints,
     _can_apply_rule_guard,
     _drop_journey_origin_marker_tasks,
+    _drop_redundant_provider_schedule_clarifications,
+    _drop_schedule_avoidance_marker_tasks,
     _expand_occurrences,
     _merge_llm_with_rule_constraints,
     _release_destination_from_departure_anchor,
@@ -282,6 +284,111 @@ def test_open_ended_request_still_allows_a_real_clarification():
         llm_result=llm_result,
         rule_result=rule_result,
     )
+
+
+def test_synced_timetable_suppresses_false_missing_provider_clarification():
+    result = _parse("2026年9月8日下午安排自习90分钟").model_copy(
+        update={
+            "clarifications": [
+                "未获取到测试空间中的课表与二课安排，请提供具体时间段。",
+                "你希望在图书馆哪一层自习？",
+            ]
+        }
+    )
+    context = [
+        {
+            "source": "hduhelp_authoritative",
+            "value": {
+                "authoritative_timetable": True,
+                "items": [],
+            },
+        }
+    ]
+
+    resolved = _drop_redundant_provider_schedule_clarifications(
+        result=result,
+        provider_schedule_context=context,
+    )
+
+    assert resolved.clarifications == ["你希望在图书馆哪一层自习？"]
+
+
+def test_synced_timetable_suppresses_false_not_found_clarification():
+    result = _parse("2026年9月8日下午安排自习90分钟").model_copy(
+        update={
+            "clarifications": [
+                "当前同步的杭助课表中未查询到2026-09-08的课程或二课安排。"
+            ]
+        }
+    )
+    context = [
+        {
+            "source": "hduhelp_authoritative",
+            "value": {
+                "authoritative_timetable": True,
+                "items": [{"title": "体育-户外拓展(男)"}],
+            },
+        }
+    ]
+
+    resolved = _drop_redundant_provider_schedule_clarifications(
+        result=result,
+        provider_schedule_context=context,
+    )
+
+    assert resolved.clarifications == []
+
+
+def test_avoidance_markers_are_removed_before_authoritative_schedule_merge():
+    tasks = [
+        Task(
+            id="study",
+            title="自习",
+            date=NOW.date(),
+            duration_min=90,
+            tags=["study"],
+        ),
+        Task(
+            id="second_course",
+            title="参加第二课堂活动",
+            date=NOW.date(),
+            duration_min=90,
+            tags=["activity", "second_course"],
+        ),
+        Task(
+            id="hduhelp_course_2026_1",
+            title="体育-户外拓展(男)",
+            date=NOW.date(),
+            duration_min=95,
+            tags=["course"],
+        ),
+    ]
+
+    filtered = _drop_schedule_avoidance_marker_tasks(
+        query="下午安排自习，必须避开已有课程和二课",
+        tasks=tasks,
+        protected_task_ids={"study"},
+    )
+
+    assert [task.id for task in filtered] == ["study"]
+
+
+def test_positive_second_course_task_is_protected_from_avoidance_cleanup():
+    task = Task(
+        id="second_course",
+        title="参加第二课堂活动",
+        date=NOW.date(),
+        duration_min=90,
+        tags=["activity", "second_course"],
+    )
+
+    filtered = _drop_schedule_avoidance_marker_tasks(
+        query="参加二课活动，并避开已有课程",
+        tasks=[task],
+        protected_task_ids={"second_course"},
+    )
+
+    assert filtered == [task]
 
 
 def test_departure_point_is_not_kept_as_a_model_task():

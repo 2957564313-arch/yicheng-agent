@@ -6,6 +6,7 @@ from app.nodes.respond import (
     _direct_calendar_answer,
     _dormitory_return_reminder,
     _ensure_query_guardrails,
+    _ensure_requested_preference_disclosure,
     _fact_source_label,
     _facts_answer,
     _plain_text_answer,
@@ -83,6 +84,35 @@ def _tasks() -> list[Task]:
             duration_min=30,
         ),
     ]
+
+
+def test_requested_preference_disclosure_lists_only_applied_values():
+    answer = _ensure_requested_preference_disclosure(
+        "已完成安排。",
+        query="请说明实际采用了哪些长期偏好。",
+        plan=_plan(),
+        memories=[
+            {
+                "key": "preferred_study_period",
+                "value": "afternoon",
+                "enabled": True,
+            },
+            {
+                "key": "transport_mode",
+                "value": "walk",
+                "enabled": True,
+            },
+            {
+                "key": "activity_location",
+                "value": [{"activity": "跑步", "location": "东操场"}],
+                "enabled": True,
+            },
+        ],
+    )
+
+    assert "高效学习时段：下午" in answer
+    assert "常用出行方式：步行" in answer
+    assert "跑步地点：东操场" not in answer
 
 
 def test_peak_avoidance_claim_is_rejected_when_route_crosses_peak():

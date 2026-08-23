@@ -171,6 +171,50 @@ async def test_amap_geocoder_prefers_active_campus_over_first_same_name_poi(
 
 
 @pytest.mark.asyncio
+async def test_amap_geocoder_rejects_far_same_name_upgrade_for_known_venue(
+    monkeypatch,
+    tmp_path: Path,
+):
+    fake = type("FarSameNameClient", (FakeAsyncClient,), {})
+    fake.payload = {
+        "status": "1",
+        "pois": [
+            {
+                "name": "顺丰速运钱塘营业点",
+                "address": "钱塘区远端商业区",
+                "location": "121.000000,31.000000",
+            }
+        ],
+    }
+    fake.calls = []
+    monkeypatch.setattr("app.providers.amap.httpx.AsyncClient", fake)
+    locations = build_locations(tmp_path)
+    locations.register_runtime(
+        CampusLocation(
+            id="sf_express",
+            campus_id="test",
+            name="顺丰快递点",
+            aliases=["顺丰快递"],
+            category="service",
+            longitude=None,
+            latitude=None,
+            source=SourceMetadata(type="verified_name", reference="fixture"),
+        )
+    )
+    provider = AmapGeocodingProvider(
+        locations=locations,
+        api_key="test-key",
+        campus_query="测试大学中心校区",
+        search_city="杭州",
+    )
+
+    result = await provider.resolve("顺丰快递")
+
+    assert result is None
+    assert locations.get("sf_express").longitude is None
+
+
+@pytest.mark.asyncio
 async def test_amap_geocoder_retries_after_transient_qps_limit(
     monkeypatch,
     tmp_path: Path,

@@ -134,6 +134,15 @@ def test_sidebar_merges_hduhelp_and_timetable_after_preferences() -> None:
     assert "记录取消后，下次同步会从日程中移除" not in html
 
 
+def test_hduhelp_term_selection_feeds_the_planning_snapshot() -> None:
+    javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+
+    assert "function preferredTimetableTerm(" in javascript
+    assert "function activateTimetableTerm(term)" in javascript
+    assert "writeLocalSnapshot(timetableSnapshotKey, data);" in javascript
+    assert "localStorage.removeItem(timetableSnapshotKey);" in javascript
+
+
 def test_personal_preferences_omit_meal_and_sleep_fields() -> None:
     html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     javascript = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
@@ -392,7 +401,7 @@ def test_day_schedule_allows_manual_edits_but_locks_authoritative_items() -> Non
     assert '<svg viewBox="0 0 24 24" aria-hidden="true">' in javascript
     assert 'title="调整时间或删除">•••' not in javascript
     assert ".schedule-event-lock" in styles
-    assert 'app.js?v=20260821-9' in (WEB_ROOT / "index.html").read_text(
+    assert 'app.js?v=20260822-1' in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
     assert "styles.css?v=20260821-9" in (WEB_ROOT / "index.html").read_text(

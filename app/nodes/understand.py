@@ -43,6 +43,12 @@ def make_understand_node(container: AppContainer):
             now=datetime.fromisoformat(state["now_iso"]),
             old_plan=old_plan,
         )
+        provider_schedule_context = _hduhelp_schedule_context(
+            container=container,
+            user_id=state["user_id"],
+            target_date=rule_result.requested_date,
+            client_calendar_overrides=state.get("client_calendar_overrides", []),
+        )
         # Policy/handbook questions are grounded by the scoped knowledge
         # repository.  They do not need the requirement-extraction model and
         # must not fail merely because a test double only implements answer
@@ -107,7 +113,8 @@ def make_understand_node(container: AppContainer):
                         }
                         for memory in memories
                     ]
-                    + container.external_data.planning_context(state["user_id"]),
+                    + container.external_data.planning_context(state["user_id"])
+                    + provider_schedule_context,
                 )
                 result = _merge_llm_with_rule_constraints(
                     query=state["query"],
@@ -135,6 +142,32 @@ def make_understand_node(container: AppContainer):
             query=state["query"],
             result=result,
             rule_result=rule_result,
+        )
+        resolved_provider_schedule_context = (
+            provider_schedule_context
+            if result.requested_date == rule_result.requested_date
+            else _hduhelp_schedule_context(
+                container=container,
+                user_id=state["user_id"],
+                target_date=result.requested_date,
+                client_calendar_overrides=state.get(
+                    "client_calendar_overrides",
+                    [],
+                ),
+            )
+        )
+        result = _drop_redundant_provider_schedule_clarifications(
+            result=result,
+            provider_schedule_context=resolved_provider_schedule_context,
+        )
+        result = result.model_copy(
+            update={
+                "tasks": _drop_schedule_avoidance_marker_tasks(
+                    query=state["query"],
+                    tasks=result.tasks,
+                    protected_task_ids={task.id for task in rule_result.tasks},
+                )
+            }
         )
         # Both readings converge here, so “三次自习” becomes three real tasks
         # whichever path recognised the count.
@@ -361,6 +394,165 @@ def make_understand_node(container: AppContainer):
         }
 
     return understand
+
+
+def _hduhelp_schedule_context(
+    *,
+    container: AppContainer,
+    user_id: str,
+    target_date: date,
+    client_calendar_overrides: list[dict],
+) -> list[dict]:
+    """Give the requirement model bounded, date-specific provider facts.
+
+    HDUHelp data is stored server-side and must remain usable when a fresh
+    browser has no local timetable snapshot.  The model sees only the fixed
+    items for the requested day; the planner still resolves and enforces the
+    authoritative tasks independently below.
+    """
+
+    timetable_snapshot = container.external_data.get(user_id, "timetable_terms")
+    external_tasks = container.external_agenda.tasks_for_date(user_id, target_date)
+    if timetable_snapshot is None and not external_tasks:
+        return []
+    authoritative_timetable = bool(
+        isinstance(timetable_snapshot, list)
+        and any(
+            isinstance(term, dict)
+            and str(term.get("term_start", ""))
+            <= target_date.isoformat()
+            <= str(term.get("term_end", ""))
+            for term in timetable_snapshot
+        )
+    )
+    calendar_context = container.academic_calendar.resolve(
+        user_id=user_id,
+        target_date=target_date,
+        client_overrides=[
+            CalendarOverrideCreate.model_validate(raw)
+            for raw in client_calendar_overrides
+        ],
+    )
+    course_tasks = container.external_data.timetable_tasks_for_date(
+        user_id=user_id,
+        target_date=target_date,
+        class_periods=container.parser.class_periods,
+        timezone_name=container.settings.app_timezone,
+        effective_weekday=calendar_context.effective_weekday,
+    )
+    fixed_tasks = [*(course_tasks or []), *external_tasks]
+    return [
+        {
+            "category": "hduhelp",
+            "label": f"{target_date.isoformat()} 杭助固定安排",
+            "key": "hduhelp_target_date_schedule",
+            "value": {
+                "date": target_date.isoformat(),
+                "authoritative_timetable": authoritative_timetable,
+                "items": [
+                    {
+                        "title": task.title,
+                        "start_at": (
+                            task.fixed_start.isoformat()
+                            if task.fixed_start is not None
+                            else None
+                        ),
+                        "end_at": (
+                            task.fixed_end.isoformat()
+                            if task.fixed_end is not None
+                            else None
+                        ),
+                        "location": task.location_raw,
+                        "kind": (
+                            "course" if "course" in task.tags else "campus_event"
+                        ),
+                    }
+                    for task in fixed_tasks[:30]
+                ],
+            },
+            "source": "hduhelp_authoritative",
+        }
+    ]
+
+
+def _drop_redundant_provider_schedule_clarifications(
+    *,
+    result: UnderstandResult,
+    provider_schedule_context: list[dict],
+) -> UnderstandResult:
+    """Do not ask the student to re-enter an already synced timetable."""
+
+    has_authoritative_timetable = any(
+        bool((record.get("value") or {}).get("authoritative_timetable"))
+        for record in provider_schedule_context
+    )
+    if not has_authoritative_timetable or not result.clarifications:
+        return result
+    provider_terms = re.compile(r"杭助|课表|课程|二课|第二课堂")
+    missing_terms = re.compile(
+        r"未获取|没有获取|无法获取|未查询|未查到|没有查到|缺少|"
+        r"未提供|信息不足|无法确认|"
+        r"请(?:补充|提供).{0,24}(?:时间|时段|安排)"
+    )
+    clarifications = [
+        message
+        for message in result.clarifications
+        if not (
+            provider_terms.search(message)
+            and missing_terms.search(message)
+        )
+    ]
+    if clarifications == result.clarifications:
+        return result
+    return result.model_copy(update={"clarifications": clarifications})
+
+
+def _drop_schedule_avoidance_marker_tasks(
+    *,
+    query: str,
+    tasks: list[Task],
+    protected_task_ids: set[str] | None = None,
+) -> list[Task]:
+    """Remove model-created course/activity markers used only as blockers.
+
+    The actual synced course and second-classroom items are merged as fixed
+    authoritative tasks later.  Keeping a model copy here makes the API report
+    them as user-requested work and can trigger a false clarification.
+    """
+
+    protected = protected_task_ids or set()
+    avoidance = re.search(
+        r"(?:避开|避让|绕开|排除|避免(?:与)?|不与|不和|不要和|"
+        r"不能和|不得与)[^，。；]{0,24}"
+        r"(?:已有)?(?:课程|课表|二课|第二课堂|固定安排)",
+        query,
+    ) or re.search(
+        r"(?:课程|课表|二课|第二课堂|固定安排)[^，。；]{0,12}"
+        r"(?:要避开|需避开|作为冲突|仅作冲突)",
+        query,
+    )
+    if avoidance is None:
+        return tasks
+
+    def is_marker(task: Task) -> bool:
+        marker_tags = {
+            "course",
+            "second_course",
+            "personal_timetable",
+            "verified_timetable",
+            "browser_snapshot",
+        }
+        return bool(marker_tags.intersection(task.tags)) or (
+            task.id.startswith(("hduhelp_course_", "external_"))
+        ) or bool(
+            re.search(r"第二课堂|二课", task.title)
+        )
+
+    return [
+        task
+        for task in tasks
+        if task.id in protected or not is_marker(task)
+    ]
 
 
 def _roll_over_exhausted_day(

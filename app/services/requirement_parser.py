@@ -1156,6 +1156,15 @@ class RuleBasedRequirementParser:
             matches = [keyword for keyword in spec.keywords if keyword in query]
             if not matches:
                 continue
+            if spec.id == "second_course" and any(
+                self._is_avoidance_reference(query, keyword)
+                for keyword in matches
+            ):
+                # “避开已有课程和二课” describes conflicts to avoid; it is
+                # not a request to schedule a new second-classroom activity.
+                # The authoritative activity, when one exists, is merged from
+                # the synced agenda later in the pipeline.
+                continue
             if any(keyword in fixed_text for keyword in spec.keywords):
                 # A concrete clock interval already owns this task.
                 continue
@@ -1242,6 +1251,27 @@ class RuleBasedRequirementParser:
                 )
             )
         return tasks
+
+    @staticmethod
+    def _is_avoidance_reference(query: str, keyword: str) -> bool:
+        """Return true when a task word names a conflict, not an action."""
+
+        for match in re.finditer(re.escape(keyword), query):
+            before = query[max(0, match.start() - 24):match.start()]
+            after = query[match.end():match.end() + 16]
+            if re.search(
+                r"(?:避开|避让|绕开|排除|避免(?:与)?|不与|不和|"
+                r"不要和|不能和|不得与)[^，。；、]{0,16}$",
+                before,
+            ):
+                return True
+            if re.match(
+                r"[^，。；、]{0,6}(?:仅作冲突|作为冲突|要避开|"
+                r"需避开|不参加|不用参加)",
+                after,
+            ):
+                return True
+        return False
 
     @staticmethod
     def _clause_around_keyword(query: str, keyword: str) -> str:

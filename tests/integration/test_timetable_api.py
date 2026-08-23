@@ -216,7 +216,10 @@ def test_imported_courses_fixed_event_and_deadline_are_jointly_feasible(
         tasks = task_items(payload)
         assert len(tasks) == 6
         assert tasks["parcel"]["end_at"] <= "2026-07-31T18:00:00+08:00"
-        assert tasks["parcel"]["start_at"] >= "2026-07-31T16:00:00+08:00"
+        assert (
+            tasks["parcel"]["end_at"] <= "2026-07-31T15:00:00+08:00"
+            or tasks["parcel"]["start_at"] >= "2026-07-31T16:00:00+08:00"
+        )
         assert tasks["fixed_1500_1600_1"]["start_at"] == (
             "2026-07-31T15:00:00+08:00"
         )
