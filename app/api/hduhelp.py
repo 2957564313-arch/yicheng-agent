@@ -124,6 +124,7 @@ def disconnect(user_id: str, request: Request) -> Response:
     container = request.app.state.container
     container.external_agenda.clear_provider(user_id, "hduhelp")
     container.external_data.clear_provider(user_id, "hduhelp")
+    container.timetables.clear(user_id)
     container.external_connections.delete(user_id, "hduhelp")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

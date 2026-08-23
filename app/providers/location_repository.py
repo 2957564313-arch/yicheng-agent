@@ -56,12 +56,20 @@ class LocationRepository:
 
         # Timetable cells normally contain a room suffix, for example
         # “第6教学科研楼北204”.  Resolve the longest known building alias as
-        # a prefix/substring while keeping exact aliases authoritative.
+        # a prefix/substring while keeping exact aliases authoritative. Very
+        # short generic aliases such as “驿站” must not capture a different
+        # named room such as “芯灵驿站（十二楼）”.
         candidates = [
             (len(index_key.rsplit(":", 1)[-1]), candidate_id)
             for index_key, candidate_id in self._alias_index.items()
             if index_key.startswith(f"{active_campus_id}:")
-            and len(index_key.rsplit(":", 1)[-1]) >= 2
+            and (
+                len(index_key.rsplit(":", 1)[-1]) >= 3
+                or (
+                    len(index_key.rsplit(":", 1)[-1]) >= 2
+                    and self._locations[candidate_id].category == "teaching"
+                )
+            )
             and index_key.rsplit(":", 1)[-1] in normalized
         ]
         if not candidates:

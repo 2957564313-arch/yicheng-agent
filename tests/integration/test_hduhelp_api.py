@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.config import BASE_DIR, Settings
 from app.errors import AppError
 from app.main import create_app
+from app.services.requirement_parser import RuleBasedRequirementParser
 
 TOKEN = "test-hduhelp-personal-token"
 TIMEZONE = ZoneInfo("Asia/Shanghai")
@@ -119,6 +120,35 @@ class FakeHduHelp:
                 "classroom": "第6教研楼北204",
             }
         ]
+
+
+class CapturingScheduleLLM:
+    configured = True
+
+    def __init__(self) -> None:
+        self.memory_context: list[dict] = []
+        self.parser = RuleBasedRequirementParser("Asia/Shanghai")
+
+    async def parse_requirement(
+        self,
+        *,
+        query: str,
+        now_iso: str,
+        memory_context=None,
+        history=None,
+    ):
+        self.memory_context = list(memory_context or [])
+        parsed = self.parser.parse(
+            query=query,
+            now=datetime.fromisoformat(now_iso),
+        )
+        return parsed.model_copy(
+            update={
+                "clarifications": [
+                    "未获取到测试空间中的课表与二课安排，请提供具体时间段。"
+                ]
+            }
+        )
 
 
 def build_hduhelp_app(tmp_path: Path, *, access_enabled: bool = False):
@@ -249,6 +279,52 @@ def test_connect_sync_authoritative_cancellation_and_disconnect(tmp_path):
         assert disconnected.status_code == 204
         status = client.get("/api/v1/users/visitor-1/connections/hduhelp")
         assert status.json()["connected"] is False
+        timetable = client.get("/api/v1/users/visitor-1/timetable")
+        assert timetable.json()["entries"] == []
+
+
+def test_chat_uses_synced_hduhelp_schedule_without_browser_snapshot(tmp_path):
+    app = build_hduhelp_app(tmp_path)
+    fake = FakeHduHelp()
+    llm = CapturingScheduleLLM()
+    with TestClient(app) as client:
+        app.state.container.hduhelp = fake
+        connect(client)
+        sync(client)
+        app.state.container.llm = llm
+
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "visitor-1",
+                "thread_id": "hduhelp-planning-thread",
+                "query": (
+                    "根据杭助课表安排2026年9月7日下午自习90分钟，"
+                    "避开已有课程。"
+                ),
+                "mode": "auto",
+                "publish_to_agenda": False,
+                "client_context": {
+                    "now": "2026-08-22T15:00:00+08:00",
+                    "timetable": None,
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["status"] != "needs_clarification"
+        assert body["plan"] is not None
+        provider_context = [
+            item
+            for item in llm.memory_context
+            if item.get("key") == "hduhelp_target_date_schedule"
+        ]
+        assert provider_context
+        assert any(
+            event["title"] == "高等数学A2"
+            for event in provider_context[0]["value"]["items"]
+        )
 
 
 def test_provider_failure_preserves_last_successful_source(tmp_path):

@@ -148,6 +148,21 @@ def test_second_course_registration_and_fixed_activity_are_parsed():
     assert "activity" in activity.tags
 
 
+def test_second_course_named_only_as_conflict_is_not_a_requested_task():
+    result = parse(
+        "请根据课表为2026年9月8日下午安排90分钟自习，"
+        "必须避开已有课程和二课。"
+    )
+
+    assert [task.id for task in result.tasks] == ["study"]
+
+
+def test_positive_second_course_request_is_still_kept():
+    result = parse("明天下午参加二课活动，避开已有课程。")
+
+    assert any(task.id == "second_course" for task in result.tasks)
+
+
 def test_task_scoped_deadline_does_not_leak_to_evening_run():
     result = parse(
         "明天下课后去图书馆学习90分钟，18点前到菜鸟驿站取快递，晚上去东操场跑步30分钟。"

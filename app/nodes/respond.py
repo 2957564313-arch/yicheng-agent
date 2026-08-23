@@ -240,6 +240,12 @@ def make_respond_node(container: AppContainer):
 
         if rollover_notice and rollover_notice not in answer:
             answer = f"{rollover_notice}\n\n{answer}"
+        answer = _ensure_requested_preference_disclosure(
+            answer,
+            query=state.get("query", ""),
+            plan=plan,
+            memories=state.get("user_memories", []),
+        )
 
         return {
             "final_answer": answer,
@@ -261,6 +267,91 @@ def make_respond_node(container: AppContainer):
         }
 
     return respond
+
+
+def _ensure_requested_preference_disclosure(
+    answer: str,
+    *,
+    query: str,
+    plan: Plan,
+    memories: list[dict],
+) -> str:
+    """Name the saved values that materially shaped a plan when asked."""
+
+    if "偏好" not in query or not any(
+        marker in query for marker in ("采用", "使用", "用到", "哪些", "实际")
+    ):
+        return answer
+
+    task_items = [item for item in plan.items if item.item_type == "task"]
+    travel_items = [item for item in plan.items if item.item_type == "travel"]
+    buffer_items = [item for item in plan.items if item.item_type == "buffer"]
+    applied: list[str] = []
+
+    for memory in memories:
+        if not memory.get("enabled", True):
+            continue
+        key = str(memory.get("key", ""))
+        value = memory.get("value")
+        if key == "preferred_study_period" and isinstance(value, str):
+            ranges = {
+                "morning": (5, 12, "上午"),
+                "afternoon": (12, 18, "下午"),
+                "evening": (18, 24, "晚上"),
+            }
+            period = ranges.get(value)
+            if period and any(
+                any(word in item.title for word in ("自习", "学习", "复习"))
+                and period[0] <= item.start_at.hour < period[1]
+                for item in task_items
+            ):
+                applied.append(f"高效学习时段：{period[2]}")
+        elif key == "transport_mode" and isinstance(value, str):
+            labels = {"walk": "步行", "bicycle": "自行车", "electrobike": "电瓶车"}
+            if any(item.travel_mode == value for item in travel_items):
+                applied.append(f"常用出行方式：{labels.get(value, value)}")
+        elif key == "buffer_min" and isinstance(value, int):
+            if any(
+                int((item.end_at - item.start_at).total_seconds() // 60) == value
+                for item in buffer_items
+            ):
+                applied.append(f"日程缓冲：{value}分钟")
+        elif key == "schedule_pace" and value in {"compact", "relaxed"}:
+            if buffer_items:
+                applied.append(
+                    f"日程节奏：{'紧凑' if value == 'compact' else '宽松'}"
+                )
+        elif key == "walking_speed" and value in {"slow", "fast"}:
+            if any(item.travel_mode == "walk" for item in travel_items):
+                applied.append(
+                    f"步行节奏：{'偏慢' if value == 'slow' else '偏快'}"
+                )
+        elif key == "avoid_congestion" and value is True and travel_items:
+            applied.append("通勤偏好：尽量错峰")
+        elif key == "activity_location" and isinstance(value, list):
+            for mapping in value:
+                if not isinstance(mapping, dict):
+                    continue
+                activity = str(mapping.get("activity", "")).strip()
+                location = str(mapping.get("location", "")).strip()
+                if not activity or not location:
+                    continue
+                if any(
+                    activity in item.title
+                    and location in f"{item.location_raw or ''} {item.location_id or ''}"
+                    for item in task_items
+                ):
+                    applied.append(f"{activity}地点：{location}")
+
+    applied = list(dict.fromkeys(applied))
+    if applied and all(item in answer for item in applied):
+        return answer
+    disclosure = (
+        "本次实际采用的长期偏好：" + "；".join(applied) + "。"
+        if applied
+        else "本次没有实际用到已保存的长期偏好；其余安排来自本轮要求和固定日程。"
+    )
+    return f"{answer.rstrip()}\n\n{disclosure}"
 
 
 def _clarification_answer(

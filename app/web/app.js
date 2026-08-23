@@ -3987,6 +3987,8 @@ hduhelpDisconnect.addEventListener("click", async () => {
       throw data;
     }
     renderHduHelpConnection({ connected: false, available_terms: [] });
+    localStorage.removeItem(timetableSnapshotKey);
+    renderTimetableTerms([]);
   } catch (error) {
     hduhelpState.textContent = error?.error?.message || "暂时无法断开连接。";
     hduhelpState.classList.add("error");
@@ -4087,6 +4089,41 @@ function timetableTermKey(term) {
   return `${term.school_year}|${term.semester}`;
 }
 
+function timetableDataForTerm(term) {
+  return {
+    timetable: {
+      name: term.name,
+      term_start: term.term_start,
+      term_end: term.term_end,
+      enabled: true,
+    },
+    entries: term.entries || [],
+  };
+}
+
+function preferredTimetableTerm(terms, preferredKey = "", referenceDate = shanghaiDateString()) {
+  const exact = terms.find((term) => timetableTermKey(term) === preferredKey);
+  if (exact) return exact;
+  const covering = terms.find(
+    (term) => term.term_start <= referenceDate && referenceDate <= term.term_end,
+  );
+  if (covering) return covering;
+  const upcoming = [...terms]
+    .filter((term) => term.term_start > referenceDate)
+    .sort((left, right) => left.term_start.localeCompare(right.term_start));
+  if (upcoming.length) return upcoming[0];
+  return terms.find((term) => term.current)
+    || [...terms].sort((left, right) => right.term_end.localeCompare(left.term_end))[0]
+    || null;
+}
+
+function activateTimetableTerm(term) {
+  if (!term) return;
+  const data = timetableDataForTerm(term);
+  writeLocalSnapshot(timetableSnapshotKey, data);
+  renderTimetable(data);
+}
+
 function renderTimetableTerms(terms, preferredKey = "") {
   syncedTimetableTerms = Array.isArray(terms) ? terms : [];
   timetableTermControls.hidden = syncedTimetableTerms.length === 0;
@@ -4099,33 +4136,16 @@ function renderTimetableTerms(terms, preferredKey = "") {
       ${escapeHtml(hduhelpTermLabel(term))}
     </option>
   `).join("");
-  const selected = syncedTimetableTerms.find(
-    (term) => timetableTermKey(term) === preferredKey,
-  ) || syncedTimetableTerms.find((term) => term.current) || syncedTimetableTerms[0];
+  const selected = preferredTimetableTerm(syncedTimetableTerms, preferredKey);
   timetableTermView.value = timetableTermKey(selected);
-  renderTimetable({
-    timetable: {
-      name: selected.name,
-      term_start: selected.term_start,
-      term_end: selected.term_end,
-    },
-    entries: selected.entries || [],
-  });
+  activateTimetableTerm(selected);
 }
 
 timetableTermView?.addEventListener("change", () => {
   const selected = syncedTimetableTerms.find(
     (term) => timetableTermKey(term) === timetableTermView.value,
   );
-  if (!selected) return;
-  renderTimetable({
-    timetable: {
-      name: selected.name,
-      term_start: selected.term_start,
-      term_end: selected.term_end,
-    },
-    entries: selected.entries || [],
-  });
+  activateTimetableTerm(selected);
 });
 
 async function loadTimetable() {
