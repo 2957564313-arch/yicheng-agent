@@ -707,6 +707,64 @@ def test_online_merge_does_not_force_rule_defaults_over_model_semantics():
     assert result.tasks[0].location_raw == "宿舍"
 
 
+def test_online_merge_rebuilds_full_explicit_route_order_and_exact_study():
+    query = (
+        "明天下午先去顺丰取快递，再到芯灵驿站（十二楼），"
+        "最后去图书馆自习90分钟，18:00前结束。"
+    )
+    rule_result = _parse(query)
+    target_date = rule_result.requested_date
+    rule_tasks = {task.id: task for task in rule_result.tasks}
+    llm_result = UnderstandResult(
+        intent=Intent.PLAN,
+        requested_date=target_date,
+        tasks=[
+            rule_tasks["parcel"].model_copy(
+                update={
+                    "title": "去顺丰取快递",
+                    "location_raw": "顺丰快递",
+                }
+            ),
+            Task(
+                id="visit_campus_stop",
+                title="到芯灵驿站（十二楼）",
+                date=target_date,
+                duration_min=15,
+                duration_source="default",
+                location_raw="芯灵驿站（十二楼）",
+            ),
+            rule_tasks["study"].model_copy(
+                update={
+                    "title": "图书馆自习",
+                    # Realistic model contamination seen online: a location
+                    # from the preceding task was copied onto study.
+                    "location_raw": "芯灵驿站（十二楼）",
+                }
+            ),
+        ],
+        confidence=0.95,
+    )
+
+    result = _merge_llm_with_rule_constraints(
+        query=query,
+        llm_result=llm_result,
+        rule_result=rule_result,
+    )
+
+    assert [task.id for task in result.tasks] == [
+        "parcel",
+        "visit_campus_stop",
+        "study",
+    ]
+    tasks = {task.id: task for task in result.tasks}
+    assert tasks["visit_campus_stop"].depends_on == ["parcel"]
+    assert "visit_campus_stop" in tasks["study"].depends_on
+    assert tasks["study"].location_raw == "图书馆"
+    assert tasks["study"].duration_min == 90
+    assert tasks["study"].min_duration_min is None
+    assert tasks["study"].shortest_acceptable_min() == 90
+
+
 def test_enumerated_request_keeps_every_explicit_task_and_occurrence():
     query = (
         "今天很空，能帮我安排一下吗？自习2次，还要取快递、跑步，"
