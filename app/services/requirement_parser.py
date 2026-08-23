@@ -751,10 +751,9 @@ class RuleBasedRequirementParser:
                 duration,
                 study_duration_explicit,
             )
-            # Preserve the stated duration as the ideal total, while allowing
-            # a useful self-study sitting to shrink to one hour when that is
-            # what keeps it in the free morning or afternoon.
-            if duration >= 60:
+            # Only a system-filled study duration is elastic.  A number the
+            # student typed must remain exact even when the day is crowded.
+            if not study_duration_explicit and duration >= 60:
                 study_min = min(duration, 60)
             tasks.append(
                 self._movable_task(
@@ -786,7 +785,10 @@ class RuleBasedRequirementParser:
                     min_duration_min=study_min,
                     duration_source=study_source,
                     importance=5,
-                    tags=["study", "elastic_duration"],
+                    tags=[
+                        "study",
+                        *(["elastic_duration"] if study_min is not None else []),
+                    ],
                 )
             )
         if not any(

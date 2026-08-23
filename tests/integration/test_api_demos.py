@@ -1110,10 +1110,17 @@ def test_infeasible_plan_keeps_every_requested_task_visible(tmp_path):
             for item in payload["task_statuses"]
         }
         assert set(statuses) == {"study", "parcel", "run"}
-        assert statuses["study"]["status"] == "scheduled"
+        # The student explicitly asked for two hours.  Keep that promise
+        # visible as unscheduled instead of silently publishing a 45-minute
+        # substitute; the shorter version remains an opt-in suggestion below.
+        assert statuses["study"]["status"] == "needs_adjustment"
+        assert "未能安排" in statuses["study"]["message"]
         assert statuses["parcel"]["status"] == "scheduled"
-        assert statuses["run"]["status"] == "needs_adjustment"
-        assert "未能安排" in statuses["run"]["message"]
+        assert statuses["run"]["status"] == "scheduled"
+        assert not any(
+            item.get("task_id") == "study"
+            for item in payload["plan"]["items"]
+        )
 
         actions = payload["suggested_actions"]
         assert [action["id"] for action in actions] == [

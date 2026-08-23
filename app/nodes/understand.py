@@ -1366,7 +1366,11 @@ def _split_long_study_blocks(tasks: list[Task]) -> list[Task]:
                         "id": segment_id,
                         "title": f"{task.title}（第{index + 1}段）",
                         "duration_min": duration,
-                        "min_duration_min": min(60, duration),
+                        "min_duration_min": (
+                            None
+                            if task.duration_source == "explicit"
+                            else min(60, duration)
+                        ),
                         "splittable": False,
                         "min_gap_min": max(task.min_gap_min, 30),
                         "depends_on": dependencies,
@@ -1473,6 +1477,7 @@ def _merge_llm_with_rule_constraints(
             ),
         )
     ]
+    merged = _apply_merged_explicit_order(query, merged)
     clarifications = list(
         dict.fromkeys(
             [
@@ -1642,12 +1647,16 @@ def _merge_task_constraints(
         TaskFlexibility.FIXED,
         TaskFlexibility.LOCKED,
     }
+    model_location_is_explicit = _location_explicit_for_task(
+        query,
+        model_task,
+    )
     use_rule_location = bool(
         rule_task.location_raw
         and (
             "hard_constraint" in rule_task.tags
             or rule_task.location_raw in query
-            or not model_task.location_raw
+            or not model_location_is_explicit
         )
     )
     tags = list(dict.fromkeys([*model_task.tags, *rule_task.tags]))
@@ -1700,7 +1709,7 @@ def _merge_task_constraints(
         # an explicit “和导师碰头2h” must remain two hours.
         "min_duration_min": (
             rule_task.min_duration_min
-            if (not rule_has_explicit_duration or "elastic_duration" in rule_task.tags)
+            if not rule_has_explicit_duration
             else None
         ),
         "max_duration_min": (
@@ -1760,8 +1769,18 @@ def _merge_task_constraints(
     return model_task.model_copy(update=update)
 
 
-def _task_query_position(query: str, task: Task) -> int:
-    candidates = [task.title, task.location_raw or ""]
+def _task_query_span(query: str, task: Task) -> tuple[int, int]:
+    # Prefer the task's own title/location.  Broad kind words are only a
+    # fallback: otherwise both "顺丰取件" and "芯灵驿站" match the first
+    # occurrence of "快递/驿站" and their user-stated order is lost.
+    if task.title and query.find(task.title) >= 0:
+        position = query.find(task.title)
+        return position, position + len(task.title)
+    if task.location_raw and query.find(task.location_raw) >= 0:
+        position = query.find(task.location_raw)
+        return position, position + len(task.location_raw)
+
+    candidates: list[str] = []
     kind = _task_kind(task.title, task.location_raw)
     candidates.extend(
         values for candidate, values in _TASK_KIND_KEYWORDS if candidate == kind
@@ -1772,10 +1791,85 @@ def _task_query_position(query: str, task: Task) -> int:
             flattened.extend(value)
         elif value:
             flattened.append(value)
-    positions = [
-        query.find(value) for value in flattened if value and query.find(value) >= 0
+    spans = [
+        (query.find(value), query.find(value) + len(value))
+        for value in flattened
+        if value and query.find(value) >= 0
     ]
-    return min(positions, default=len(query) + 1)
+    return min(spans, default=(len(query) + 1, len(query) + 1))
+
+
+def _task_query_position(query: str, task: Task) -> int:
+    return _task_query_span(query, task)[0]
+
+
+def _location_explicit_for_task(query: str, task: Task) -> bool:
+    """Return whether the named place belongs to this task's query clause."""
+    location = (task.location_raw or "").strip()
+    location_position = query.find(location) if location else -1
+    if location_position < 0:
+        return False
+
+    title_position = query.find(task.title) if task.title else -1
+    if title_position < 0:
+        kind = _task_kind(task.title, task.location_raw)
+        markers = next(
+            (values for candidate, values in _TASK_KIND_KEYWORDS if candidate == kind),
+            (),
+        )
+        positions = [query.find(value) for value in markers if query.find(value) >= 0]
+        title_position = min(positions, default=-1)
+    if title_position < 0:
+        # With no separate semantic anchor, the explicit place is the best
+        # available evidence for this model-only task.
+        return True
+
+    separators = "，,。；;：:\n"
+    clause_start = max(
+        (query.rfind(separator, 0, title_position) for separator in separators),
+        default=-1,
+    ) + 1
+    next_separators = [
+        position
+        for separator in separators
+        if (position := query.find(separator, title_position)) >= 0
+    ]
+    clause_end = min(next_separators, default=len(query))
+    return clause_start <= location_position < clause_end
+
+
+def _apply_merged_explicit_order(query: str, tasks: list[Task]) -> list[Task]:
+    """Reapply explicit sequence words after rule/model task reconciliation.
+
+    The deterministic parser may not own a model-recognised intermediate
+    campus stop.  Its dependencies therefore cannot express the complete
+    ``先...再...最后...`` chain until both task lists have been merged.
+    """
+    if len(tasks) < 2:
+        return tasks
+    sequence_marker = re.compile(
+        r"(?:^|[，,。；;：:\s])"
+        r"(?:然后|再(?:去|到)?|接着|随后|最后(?:去|到)?|之后|完成后|结束后)"
+    )
+    ordered = list(tasks)
+    for index in range(1, len(ordered)):
+        previous = ordered[index - 1]
+        current = ordered[index]
+        previous_span = _task_query_span(query, previous)
+        current_span = _task_query_span(query, current)
+        if current_span[0] <= previous_span[0] or current_span[0] > len(query):
+            continue
+        between = query[previous_span[1] : current_span[0]]
+        if not sequence_marker.search(between):
+            continue
+        ordered[index] = current.model_copy(
+            update={
+                "depends_on": list(
+                    dict.fromkeys([*current.depends_on, previous.id])
+                )
+            }
+        )
+    return ordered
 
 
 def _normalize_task_text(value: str) -> str:

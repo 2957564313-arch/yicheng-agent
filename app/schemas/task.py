@@ -121,12 +121,10 @@ class Task(BaseModel):
 
     def shortest_acceptable_min(self) -> int:
         """How short this task may be cut before it stops being worth doing."""
-        # An explicit study length is an ideal target, not necessarily an
-        # indivisible appointment.  Only tasks deliberately tagged elastic
-        # may use their shorter useful duration; meetings and classes remain
-        # exact even when both have an explicit duration.
-        if "elastic_duration" in self.tags and self.min_duration_min:
-            return min(self.min_duration_min, self.duration_min)
+        # A number the student typed is a promise.  Task-category tags must
+        # never weaken it: "自习90分钟" is just as exact as a 90-minute
+        # meeting.  Elastic shortening is reserved for durations filled in by
+        # the product when the request did not state one.
         if self.duration_source == "explicit":
             return self.duration_min
         return min(self.min_duration_min or self.duration_min, self.duration_min)

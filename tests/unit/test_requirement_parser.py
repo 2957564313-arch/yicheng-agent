@@ -560,6 +560,17 @@ def test_common_daily_life_and_activity_tasks_keep_explicit_order():
     assert tasks["club"].depends_on == ["laundry"]
 
 
+def test_explicit_study_duration_is_not_marked_compressible():
+    result = parse("明天下午去图书馆自习90分钟，18点前结束。")
+
+    study = next(task for task in result.tasks if task.id == "study")
+    assert study.duration_min == 90
+    assert study.duration_source == "explicit"
+    assert study.min_duration_min is None
+    assert "elastic_duration" not in study.tags
+    assert study.shortest_acceptable_min() == 90
+
+
 def test_fixed_common_task_is_not_duplicated_by_fallback_catalog():
     result = parse("明天下午3点到4点开组会，然后在图书馆复习2小时。")
 
