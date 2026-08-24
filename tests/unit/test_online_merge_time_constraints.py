@@ -5,7 +5,6 @@ from zoneinfo import ZoneInfo
 from app.nodes.understand import _merge_llm_with_rule_constraints
 from app.services.requirement_parser import RuleBasedRequirementParser
 
-
 TZ = ZoneInfo("Asia/Shanghai")
 NOW = datetime(2026, 7, 24, 13, 0, tzinfo=TZ)
 
@@ -43,6 +42,64 @@ def test_explicit_start_anchor_beats_model_inferred_evening_preference():
     assert merged_run.deadline == rule_run.deadline
     assert merged_run.preferred_period is None
     assert merged.preferences.buffer_min == 0
+
+
+def test_model_cannot_replace_explicit_duration_of_non_study_task():
+    query = "明天下午去东操场跑步45分钟，18点前结束。"
+    parsed = RuleBasedRequirementParser("Asia/Shanghai").parse(
+        query=query,
+        now=NOW,
+    )
+    rule_run = next(task for task in parsed.tasks if task.id == "run")
+    model_run = rule_run.model_copy(
+        update={
+            "duration_min": 30,
+            "duration_source": "default",
+        }
+    )
+    llm_result = parsed.model_copy(update={"tasks": [model_run]})
+
+    merged = _merge_llm_with_rule_constraints(
+        query=query,
+        llm_result=llm_result,
+        rule_result=parsed,
+    )
+    merged_run = next(task for task in merged.tasks if task.id == "run")
+
+    assert rule_run.duration_source == "explicit"
+    assert merged_run.duration_min == 45
+    assert merged_run.duration_source == "explicit"
+    assert merged_run.shortest_acceptable_min() == 45
+
+
+def test_model_cannot_replace_user_duration_band():
+    query = "明天去图书馆自习，不超过90分钟。"
+    parsed = RuleBasedRequirementParser("Asia/Shanghai").parse(
+        query=query,
+        now=NOW,
+    )
+    rule_study = next(task for task in parsed.tasks if task.id == "study")
+    model_study = rule_study.model_copy(
+        update={
+            "duration_min": 120,
+            "min_duration_min": 30,
+            "max_duration_min": None,
+            "duration_source": "default",
+        }
+    )
+    llm_result = parsed.model_copy(update={"tasks": [model_study]})
+
+    merged = _merge_llm_with_rule_constraints(
+        query=query,
+        llm_result=llm_result,
+        rule_result=parsed,
+    )
+    study = next(task for task in merged.tasks if task.id == "study")
+
+    assert study.duration_min == 90
+    assert study.min_duration_min == 60
+    assert study.max_duration_min == 90
+    assert study.duration_source == "bounded"
 
 
 def test_course_merge_keeps_canonical_course_titles():

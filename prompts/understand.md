@@ -67,8 +67,10 @@
 6. 常见任务未给时长时直接用默认值，不要追问：
    取快递 30 分钟、吃饭 45 分钟、跑步 30 分钟、自习 120 分钟。
    默认自习是理想 120 分钟、最短 60 分钟，设置
-   `duration_source=default`、`min_duration_min=60`；只有用户明确说了时长才设置
-   `duration_source=explicit`，明确时长不可擅自压缩。
+   `duration_source=default`、`min_duration_min=60`。用户说了精确时长时设置
+   `duration_source=explicit`，不可擅自压缩；用户说“至少/最多/不超过/60到90分钟”时
+   设置 `duration_source=bounded`，把下限和上限分别写入
+   `min_duration_min`、`max_duration_min`，且 `duration_min` 必须位于该范围内。
 
 ## 偏好
 
@@ -83,6 +85,9 @@
 9. 校园常用名称原样保留在 `location_raw`，例如“图书馆”“菜鸟驿站”
    “东操场”，不要因为没有经纬度就追问。
 10. 用户没有说“当前所在地点”时不要追问，规划器会自行生成任务之间的路线。
+11. 用户明确说“不要去/避开/不考虑”某地点时，把该地点写入对应任务的
+    `excluded_locations`；不得再把它写入 `location_raw`。没有替代地点时
+    `location_raw` 留空，历史偏好和默认地点都不能覆盖本轮排除。
 
 ## 边界
 

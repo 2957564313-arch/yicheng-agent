@@ -1124,10 +1124,17 @@ def _apply_preferred_locations(
                 location
                 for location in preferred
                 if any(keyword in location for keyword in keywords)
+                and not _location_is_excluded(
+                    location,
+                    task.excluded_locations,
+                )
             ),
             None,
         )
         if choice is None:
+            adjusted.append(task)
+            continue
+        if _location_is_excluded(choice, task.excluded_locations):
             adjusted.append(task)
             continue
         adjusted.append(
@@ -1187,6 +1194,9 @@ def _apply_activity_location_memories(
         if choice is None:
             adjusted.append(task)
             continue
+        if _location_is_excluded(choice, task.excluded_locations):
+            adjusted.append(task)
+            continue
         # A detailed location named in the current request wins. Generic
         # parser defaults such as “图书馆” or “操场” may be refined by the
         # user's saved mapping (for example, 图书馆12层 or 东操场).
@@ -1227,6 +1237,7 @@ def _apply_default_locations(tasks: list[Task]) -> list[Task]:
             not task.location_id
             and not (task.location_raw or "").strip()
             and _task_kind(task.title, task.location_raw) == "study"
+            and not _location_is_excluded("图书馆", task.excluded_locations)
         )
         else task
         for task in tasks
@@ -1335,8 +1346,10 @@ def _split_long_study_blocks(tasks: list[Task]) -> list[Task]:
     block, so the old scheduler either shortened it drastically or failed to
     publish a full day.  Study is naturally pausable: blocks of at most three
     hours preserve the requested total while allowing meals, classes and
-    short recovery gaps between them.  Explicit multi-session requests have
-    already been expanded and are left exactly as the user described.
+    short recovery gaps between them. Explicit multi-session requests have
+    already been expanded and are left exactly as the user described. A
+    user-stated duration band also stays intact because splitting its total
+    min/max across sittings would change the constraint's meaning.
     """
 
     split: list[Task] = []
@@ -1344,6 +1357,7 @@ def _split_long_study_blocks(tasks: list[Task]) -> list[Task]:
         if (
             "study" not in task.tags
             or task.duration_min < 240
+            or task.duration_source == "bounded"
             or any(tag.startswith("occurrence_of:") for tag in task.tags)
             or task.flexibility.value != "movable"
         ):
@@ -1661,14 +1675,17 @@ def _merge_task_constraints(
     )
     tags = list(dict.fromkeys([*model_task.tags, *rule_task.tags]))
     notes = model_task.notes
-    if "hard_constraint" in rule_task.tags and rule_task.notes:
+    if (
+        {"hard_constraint", "location_exclusion"}.intersection(rule_task.tags)
+        and rule_task.notes
+    ):
         notes = (
             rule_task.notes
             if not notes or notes == rule_task.notes
             else f"{notes}；{rule_task.notes}"
         )
 
-    rule_has_explicit_duration = rule_task.duration_source == "explicit"
+    rule_has_user_duration = rule_task.duration_source in {"explicit", "bounded"}
     rule_has_explicit_period = (
         rule_task.constraint_source == "user" and rule_task.preferred_period is not None
     )
@@ -1699,7 +1716,7 @@ def _merge_task_constraints(
             if (
                 fixed_by_rule
                 or "split_segment" in rule_task.tags
-                or rule_has_explicit_duration
+                or rule_has_user_duration
             )
             else model_task.duration_min
         ),
@@ -1709,23 +1726,25 @@ def _merge_task_constraints(
         # an explicit “和导师碰头2h” must remain two hours.
         "min_duration_min": (
             rule_task.min_duration_min
-            if not rule_has_explicit_duration
+            if rule_task.duration_source != "explicit"
             else None
         ),
         "max_duration_min": (
             rule_task.max_duration_min
-            if rule_task.max_duration_min is not None
+            if rule_task.duration_source == "bounded"
+            or rule_task.max_duration_min is not None
             else model_task.max_duration_min
         ),
         "duration_source": rule_task.duration_source,
         "occurrence_count": rule_task.occurrence_count,
         "splittable": rule_task.splittable or model_task.splittable,
         "min_gap_min": max(rule_task.min_gap_min, model_task.min_gap_min),
-        "location_id": (
-            rule_task.location_id if use_rule_location else model_task.location_id
-        ),
-        "location_raw": (
-            rule_task.location_raw if use_rule_location else model_task.location_raw
+        "location_id": None,
+        "location_raw": None,
+        "excluded_locations": list(
+            dict.fromkeys(
+                [*model_task.excluded_locations, *rule_task.excluded_locations]
+            )
         ),
         # Explicit time anchors from the deterministic parser are hard user
         # constraints. The model may infer a preference (for example,
@@ -1766,6 +1785,18 @@ def _merge_task_constraints(
         "tags": tags,
         "notes": notes,
     }
+    selected_location_id = (
+        rule_task.location_id if use_rule_location else model_task.location_id
+    )
+    selected_location_raw = (
+        rule_task.location_raw if use_rule_location else model_task.location_raw
+    )
+    if not _location_is_excluded(
+        selected_location_raw,
+        update["excluded_locations"],
+    ):
+        update["location_id"] = selected_location_id
+        update["location_raw"] = selected_location_raw
     return model_task.model_copy(update=update)
 
 
@@ -1874,6 +1905,20 @@ def _apply_merged_explicit_order(query: str, tasks: list[Task]) -> list[Task]:
 
 def _normalize_task_text(value: str) -> str:
     return re.sub(r"[\s，。；、,:：！？!?（）()\-—_]", "", value)
+
+
+def _location_is_excluded(
+    location: str | None,
+    excluded_locations: list[str],
+) -> bool:
+    normalized = _normalize_task_text(location or "")
+    if not normalized:
+        return False
+    return any(
+        (candidate := _normalize_task_text(excluded))
+        and (candidate in normalized or normalized in candidate)
+        for excluded in excluded_locations
+    )
 
 
 def _later_datetime(
