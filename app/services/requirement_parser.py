@@ -66,6 +66,16 @@ class CommonTaskSpec:
     redundant_with_location: str | None = None
 
 
+@dataclass(frozen=True)
+class ParsedDuration:
+    """One task's desired length and any user-stated duration band."""
+
+    duration_min: int
+    min_duration_min: int | None = None
+    max_duration_min: int | None = None
+    source: str = "default"
+
+
 COMMON_TASK_SPECS = (
     CommonTaskSpec(
         "breakfast",
@@ -339,6 +349,10 @@ COMMON_LOCATION_ALIASES = (
     ("寝室", "学生公寓"),
     ("六教", "第六教学楼"),
     ("食堂", "食堂"),
+    ("自习室", "自习室"),
+    ("教学楼", "教学楼"),
+    ("操场", "操场"),
+    ("驿站", "驿站"),
 )
 
 
@@ -733,28 +747,21 @@ class RuleBasedRequirementParser:
                 ("自习", "学习"),
             )
             study_limit = study_deadline or overall_deadline
-            duration, study_duration_explicit = self._duration_with_source(
+            study_duration = self._duration_constraint_near(
                 query,
                 study_keyword,
                 default=120,
+                default_min_duration_min=60,
             )
             # An explicit clock anchor in the request outranks the period
             # phrase, so the period only applies when the user gave none.
             effective_period = study_period if overall_start is None else None
-            study_min, study_source = self._flexible_duration(
-                duration,
-                study_duration_explicit,
-            )
-            # Only a system-filled study duration is elastic.  A number the
-            # student typed must remain exact even when the day is crowded.
-            if not study_duration_explicit and duration >= 60:
-                study_min = min(duration, 60)
             tasks.append(
                 self._movable_task(
                     task_id="study",
                     title="图书馆自习",
                     target_date=target_date,
-                    duration=duration,
+                    duration=study_duration.duration_min,
                     location_raw=self._study_location(query),
                     earliest=(
                         overall_start or self._period_start(study_period) or time(8, 0)
@@ -776,12 +783,20 @@ class RuleBasedRequirementParser:
                     deadline=(study_limit.time() if study_limit else None),
                     preferred_period=effective_period,
                     period_source="user" if study_period else "rule",
-                    min_duration_min=study_min,
-                    duration_source=study_source,
+                    min_duration_min=study_duration.min_duration_min,
+                    max_duration_min=study_duration.max_duration_min,
+                    duration_source=study_duration.source,
                     importance=5,
                     tags=[
                         "study",
-                        *(["elastic_duration"] if study_min is not None else []),
+                        *(
+                            ["elastic_duration"]
+                            if study_duration.min_duration_min
+                            is not None
+                            and study_duration.min_duration_min
+                            < study_duration.duration_min
+                            else []
+                        ),
                     ],
                 )
             )
@@ -839,7 +854,7 @@ class RuleBasedRequirementParser:
                 "快递",
             )
             parcel_clause = self._clause_around_keyword(query, parcel_keyword)
-            parcel_duration, parcel_duration_explicit = self._duration_with_source(
+            parcel_duration = self._duration_constraint_near(
                 query,
                 parcel_keyword,
                 default=30,
@@ -849,7 +864,7 @@ class RuleBasedRequirementParser:
                     task_id="parcel",
                     title=parcel_title,
                     target_date=target_date,
-                    duration=parcel_duration,
+                    duration=parcel_duration.duration_min,
                     location_raw=parcel_location,
                     earliest=(
                         overall_start
@@ -857,9 +872,9 @@ class RuleBasedRequirementParser:
                     ),
                     latest=parcel_latest,
                     deadline=parcel_deadline,
-                    duration_source=(
-                        "explicit" if parcel_duration_explicit else "default"
-                    ),
+                    min_duration_min=parcel_duration.min_duration_min,
+                    max_duration_min=parcel_duration.max_duration_min,
+                    duration_source=parcel_duration.source,
                     importance=4,
                 )
             )
@@ -889,7 +904,7 @@ class RuleBasedRequirementParser:
                 self._clause_around_keyword(query, meal_keyword),
                 meal_keyword,
             )
-            meal_duration, meal_duration_explicit = self._duration_with_source(
+            meal_duration = self._duration_constraint_near(
                 query,
                 meal_keyword,
                 default=45,
@@ -899,15 +914,15 @@ class RuleBasedRequirementParser:
                     task_id=meal_id,
                     title=meal_title,
                     target_date=target_date,
-                    duration=meal_duration,
+                    duration=meal_duration.duration_min,
                     location_raw="食堂",
                     earliest=meal_earliest,
                     latest=meal_latest,
                     preferred_period=meal_period,
                     period_source="user",
-                    duration_source=(
-                        "explicit" if meal_duration_explicit else "default"
-                    ),
+                    min_duration_min=meal_duration.min_duration_min,
+                    max_duration_min=meal_duration.max_duration_min,
+                    duration_source=meal_duration.source,
                     importance=3,
                 )
             )
@@ -927,7 +942,7 @@ class RuleBasedRequirementParser:
                 ("校医院", "看医生", "就诊", "医务室"),
             )
             clinic_limit = clinic_deadline or overall_deadline
-            clinic_duration, clinic_duration_explicit = self._duration_with_source(
+            clinic_duration = self._duration_constraint_near(
                 query,
                 clinic_keyword,
                 default=30,
@@ -937,7 +952,7 @@ class RuleBasedRequirementParser:
                     task_id="clinic",
                     title="前往校医院就诊",
                     target_date=target_date,
-                    duration=clinic_duration,
+                    duration=clinic_duration.duration_min,
                     location_raw="校医院",
                     earliest=(
                         overall_start
@@ -945,9 +960,9 @@ class RuleBasedRequirementParser:
                     ),
                     latest=(clinic_limit.time() if clinic_limit else time(20, 0)),
                     deadline=(clinic_limit.time() if clinic_limit else None),
-                    duration_source=(
-                        "explicit" if clinic_duration_explicit else "default"
-                    ),
+                    min_duration_min=clinic_duration.min_duration_min,
+                    max_duration_min=clinic_duration.max_duration_min,
+                    duration_source=clinic_duration.source,
                     importance=5,
                 )
             )
@@ -979,7 +994,7 @@ class RuleBasedRequirementParser:
                 ("洗澡", "洗漱", "用热水", "打热水"),
             )
             bath_limit = bath_deadline or overall_deadline
-            bath_duration, bath_duration_explicit = self._duration_with_source(
+            bath_duration = self._duration_constraint_near(
                 query,
                 bath_keyword,
                 default=30,
@@ -989,7 +1004,7 @@ class RuleBasedRequirementParser:
                     task_id="bath",
                     title="回宿舍洗澡" if "洗澡" in query else "宿舍洗漱",
                     target_date=target_date,
-                    duration=bath_duration,
+                    duration=bath_duration.duration_min,
                     location_raw="学生公寓",
                     earliest=(
                         overall_start
@@ -1003,9 +1018,9 @@ class RuleBasedRequirementParser:
                     deadline=(bath_limit.time() if bath_limit else None),
                     preferred_period="evening" if "晚上" in query else None,
                     period_source="user",
-                    duration_source=(
-                        "explicit" if bath_duration_explicit else "default"
-                    ),
+                    min_duration_min=bath_duration.min_duration_min,
+                    max_duration_min=bath_duration.max_duration_min,
+                    duration_source=bath_duration.source,
                     importance=3,
                 )
             )
@@ -1040,7 +1055,7 @@ class RuleBasedRequirementParser:
                 (sport_keyword,),
             )
             sport_limit = sport_deadline or overall_deadline
-            sport_duration, sport_duration_explicit = self._duration_with_source(
+            sport_duration = self._duration_constraint_near(
                 query,
                 sport_keyword,
                 default=60,
@@ -1050,7 +1065,7 @@ class RuleBasedRequirementParser:
                     task_id=sport_id,
                     title=sport_title,
                     target_date=target_date,
-                    duration=sport_duration,
+                    duration=sport_duration.duration_min,
                     location_raw=sport_location,
                     earliest=(
                         overall_start
@@ -1060,9 +1075,9 @@ class RuleBasedRequirementParser:
                     deadline=(sport_limit.time() if sport_limit else None),
                     preferred_period="evening" if "晚上" in query else None,
                     period_source="user",
-                    duration_source=(
-                        "explicit" if sport_duration_explicit else "default"
-                    ),
+                    min_duration_min=sport_duration.min_duration_min,
+                    max_duration_min=sport_duration.max_duration_min,
+                    duration_source=sport_duration.source,
                     importance=3,
                 )
             )
@@ -1104,7 +1119,7 @@ class RuleBasedRequirementParser:
                 ("阳光长跑", "长跑", "跑步", "运动", "锻炼", "健身"),
             )
             run_limit = run_deadline or overall_deadline
-            run_duration, run_duration_explicit = self._duration_with_source(
+            run_duration = self._duration_constraint_near(
                 query,
                 run_keyword,
                 default=30,
@@ -1118,7 +1133,7 @@ class RuleBasedRequirementParser:
                         else ("锻炼" if run_keyword in ("锻炼", "健身") else "跑步")
                     ),
                     target_date=target_date,
-                    duration=run_duration,
+                    duration=run_duration.duration_min,
                     location_raw=self._run_location(query),
                     earliest=(
                         overall_start or self._period_start(run_period) or time(8, 0)
@@ -1127,9 +1142,9 @@ class RuleBasedRequirementParser:
                     deadline=(run_limit.time() if run_limit else None),
                     preferred_period=run_period,
                     period_source="user" if run_period else "rule",
-                    duration_source=(
-                        "explicit" if run_duration_explicit else "default"
-                    ),
+                    min_duration_min=run_duration.min_duration_min,
+                    max_duration_min=run_duration.max_duration_min,
+                    duration_source=run_duration.source,
                     importance=3,
                 )
             )
@@ -1157,6 +1172,7 @@ class RuleBasedRequirementParser:
                 overall_deadline=overall_deadline,
             )
         )
+        tasks = self._apply_location_exclusions(query, tasks)
         tasks = self._apply_explicit_order(query, tasks)
         tasks = self._link_movables_across_fixed_tasks(
             query,
@@ -1221,11 +1237,17 @@ class RuleBasedRequirementParser:
                 clause=clause,
             )
             location = self._location_from_clause(clause) or spec.default_location
-            duration, duration_was_explicit = self._duration_with_source(
+            default_min_duration, _ = self._flexible_duration(
+                spec.default_duration_min,
+                False,
+            )
+            duration_constraint = self._duration_constraint_near(
                 query,
                 keyword,
                 default=spec.default_duration_min,
+                default_min_duration_min=default_min_duration,
             )
+            duration_was_stated = duration_constraint.source != "default"
             spec_title = next(
                 (title for marker, title in spec.title_overrides if marker in query),
                 spec.title,
@@ -1234,7 +1256,7 @@ class RuleBasedRequirementParser:
                 task_id=spec.id,
                 title=spec_title,
                 target_date=target_date,
-                duration=duration,
+                duration=duration_constraint.duration_min,
                 location_raw=location,
                 earliest=(
                     overall_start
@@ -1252,12 +1274,9 @@ class RuleBasedRequirementParser:
                 deadline=(task_limit.time() if task_limit else None),
                 preferred_period=preferred_period or spec.preferred_period,
                 period_source="user" if preferred_period else "rule",
-                **dict(
-                    zip(
-                        ("min_duration_min", "duration_source"),
-                        self._flexible_duration(duration, duration_was_explicit),
-                    )
-                ),
+                min_duration_min=duration_constraint.min_duration_min,
+                max_duration_min=duration_constraint.max_duration_min,
+                duration_source=duration_constraint.source,
                 importance=spec.importance,
             )
             tasks.append(
@@ -1266,14 +1285,15 @@ class RuleBasedRequirementParser:
                         "tags": [
                             "common_task_fallback",
                             *spec.tags,
-                            *([] if duration_was_explicit else ["duration_estimated"]),
+                            *([] if duration_was_stated else ["duration_estimated"]),
                         ],
                         "notes": (
                             "在线模型不可用时由高频校园任务目录识别；"
                             + (
-                                f"未说明时长，暂按{duration}分钟，可随时修改"
-                                if not duration_was_explicit
-                                else "时长来自本句中的明确说明"
+                                "未说明时长，暂按"
+                                f"{duration_constraint.duration_min}分钟，可随时修改"
+                                if not duration_was_stated
+                                else "时长边界来自本句中的明确说明"
                             )
                         ),
                     }
@@ -1301,6 +1321,115 @@ class RuleBasedRequirementParser:
             ):
                 return True
         return False
+
+    @staticmethod
+    def _apply_location_exclusions(query: str, tasks: list[Task]) -> list[Task]:
+        """Attach each explicitly rejected place to its nearest task."""
+
+        mentions: list[tuple[int, str]] = []
+        occupied: list[tuple[int, int]] = []
+        for alias, canonical in sorted(
+            COMMON_LOCATION_ALIASES,
+            key=lambda item: len(item[0]),
+            reverse=True,
+        ):
+            for match in re.finditer(re.escape(alias), query):
+                if any(
+                    match.start() < end and match.end() > start
+                    for start, end in occupied
+                ):
+                    continue
+                before = query[max(0, match.start() - 18) : match.start()]
+                after = query[match.end() : match.end() + 20]
+                rejected_before = re.search(
+                    r"(?:不要|别|不想|不希望|不愿意|无需|不用)"
+                    r"(?:再)?(?:去|到|在|安排在|安排到)?[^，。；、]{0,4}$|"
+                    r"不(?:再)?去[^，。；、]{0,4}$|"
+                    r"(?:避开|绕开|排除|不考虑)(?:去|到|在)?"
+                    r"[^，。；、]{0,4}$",
+                    before,
+                )
+                rejected_after = re.match(
+                    r"[^，。；、]{0,8}(?:，|,)?\s*"
+                    r"(?:不要去|别去|不去(?:了)?|不要安排|别安排|不考虑)",
+                    after,
+                )
+                if not rejected_before and not rejected_after:
+                    continue
+                mentions.append((match.start(), canonical))
+                occupied.append(match.span())
+
+        if not mentions or not tasks:
+            return tasks
+
+        def task_position(task: Task) -> int:
+            positions = [
+                query.find(keyword)
+                for keyword in TASK_KEYWORDS.get(task.id, ())
+                if query.find(keyword) >= 0
+            ]
+            return min(positions, default=len(query))
+
+        exclusions_by_id: dict[str, list[str]] = {}
+        for position, location in mentions:
+            task = min(
+                tasks,
+                key=lambda candidate: abs(task_position(candidate) - position),
+            )
+            exclusions_by_id.setdefault(task.id, []).append(location)
+
+        adjusted: list[Task] = []
+        for task in tasks:
+            new_exclusions = exclusions_by_id.get(task.id, [])
+            if not new_exclusions:
+                adjusted.append(task)
+                continue
+            excluded = list(
+                dict.fromkeys([*task.excluded_locations, *new_exclusions])
+            )
+            location_is_excluded = RuleBasedRequirementParser._location_matches_any(
+                task.location_raw,
+                excluded,
+            )
+            note = f"本轮已排除：{'、'.join(new_exclusions)}"
+            adjusted.append(
+                task.model_copy(
+                    update={
+                        "location_id": (
+                            None if location_is_excluded else task.location_id
+                        ),
+                        "location_raw": (
+                            None if location_is_excluded else task.location_raw
+                        ),
+                        "excluded_locations": excluded,
+                        "tags": list(
+                            dict.fromkeys([*task.tags, "location_exclusion"])
+                        ),
+                        "notes": (
+                            note if not task.notes else f"{task.notes}；{note}"
+                        ),
+                    }
+                )
+            )
+        return adjusted
+
+    @staticmethod
+    def _location_matches_any(
+        location: str | None,
+        excluded_locations: list[str],
+    ) -> bool:
+        normalized = re.sub(r"[\s，。；、,:：！？!?（）()\-—_]", "", location or "")
+        if not normalized:
+            return False
+        return any(
+            (candidate := re.sub(
+                r"[\s，。；、,:：！？!?（）()\-—_]",
+                "",
+                excluded,
+            ))
+            and (candidate in normalized or normalized in candidate)
+            for excluded in excluded_locations
+        )
 
     @staticmethod
     def _clause_around_keyword(query: str, keyword: str) -> str:
@@ -3098,7 +3227,9 @@ class RuleBasedRequirementParser:
         preferred_period: str | None = None,
         period_source: str = "rule",
         min_duration_min: int | None = None,
+        max_duration_min: int | None = None,
         duration_source: str = "default",
+        excluded_locations: list[str] | None = None,
         tags: list[str] | None = None,
     ) -> Task:
         return Task(
@@ -3128,10 +3259,150 @@ class RuleBasedRequirementParser:
             if period_source == "user"
             else "rule",
             min_duration_min=min_duration_min,
+            max_duration_min=max_duration_min,
             duration_source=duration_source,
+            excluded_locations=list(excluded_locations or []),
             importance=importance,
             tags=list(tags or []),
         )
+
+    @staticmethod
+    def _duration_constraint_near(
+        query: str,
+        keyword: str,
+        default: int,
+        *,
+        default_min_duration_min: int | None = None,
+    ) -> ParsedDuration:
+        """Parse exact, lower-bound, upper-bound, and ranged durations."""
+
+        context = RuleBasedRequirementParser._duration_context(query, keyword)
+        separator = r"(?:到|至|—|－|-|~|～)"
+        minute_range = re.search(
+            rf"(\d+)\s*{separator}\s*(\d+)\s*分钟",
+            context,
+        )
+        hour_range = re.search(
+            rf"([0-9]+(?:\.[0-9]+)?)\s*{separator}\s*"
+            r"([0-9]+(?:\.[0-9]+)?)\s*个?小时",
+            context,
+        )
+        if minute_range or hour_range:
+            if minute_range:
+                lower = int(minute_range.group(1))
+                upper = int(minute_range.group(2))
+            else:
+                assert hour_range is not None
+                lower = round(float(hour_range.group(1)) * 60)
+                upper = round(float(hour_range.group(2)) * 60)
+            if 5 <= lower <= upper <= 720:
+                return ParsedDuration(
+                    duration_min=min(max(default, lower), upper),
+                    min_duration_min=lower,
+                    max_duration_min=upper,
+                    source="bounded",
+                )
+
+        value_pattern = (
+            r"(?P<amount>[0-9]+(?:\.[0-9]+)?|"
+            + "|".join(map(re.escape, CHINESE_NUMBER_HOURS))
+            + r")\s*(?P<unit>分钟|个?小时|h(?:ours?)?)"
+        )
+        after_value_pattern = value_pattern.replace(
+            "?P<amount>",
+            "?P<amount_after>",
+        ).replace(
+            "?P<unit>",
+            "?P<unit_after>",
+        )
+        lower_match = re.search(
+            rf"(?:至少|最少|不少于|不低于|起码)\s*{value_pattern}"
+            rf"|{after_value_pattern}\s*(?:以上|起)",
+            context,
+        )
+        upper_match = re.search(
+            rf"(?:最多|至多|不超过|不多于|上限(?:为|是)?)\s*{value_pattern}"
+            rf"|{after_value_pattern}\s*(?:以内|以下)",
+            context,
+        )
+        if lower_match:
+            lower = RuleBasedRequirementParser._duration_match_minutes(lower_match)
+            if lower is not None:
+                return ParsedDuration(
+                    duration_min=max(default, lower),
+                    min_duration_min=lower,
+                    source="bounded",
+                )
+        if upper_match:
+            upper = RuleBasedRequirementParser._duration_match_minutes(upper_match)
+            if upper is not None:
+                target = min(default, upper)
+                floor = (
+                    min(default_min_duration_min, target)
+                    if default_min_duration_min is not None
+                    else None
+                )
+                return ParsedDuration(
+                    duration_min=target,
+                    min_duration_min=floor,
+                    max_duration_min=upper,
+                    source="bounded",
+                )
+
+        duration, explicit = RuleBasedRequirementParser._duration_with_source(
+            context,
+            keyword,
+            default,
+        )
+        if explicit:
+            return ParsedDuration(duration_min=duration, source="explicit")
+        return ParsedDuration(
+            duration_min=default,
+            min_duration_min=default_min_duration_min,
+            source="default",
+        )
+
+    @staticmethod
+    def _duration_match_minutes(match: re.Match[str]) -> int | None:
+        raw = match.groupdict().get("amount") or match.groupdict().get("amount_after")
+        unit = match.groupdict().get("unit") or match.groupdict().get("unit_after")
+        if not raw or not unit:
+            return None
+        value = (
+            float(raw)
+            if re.fullmatch(r"[0-9.]+", raw)
+            else CHINESE_NUMBER_HOURS[raw]
+        )
+        minutes = round(value if unit == "分钟" else value * 60)
+        return minutes if 5 <= minutes <= 720 else None
+
+    @staticmethod
+    def _duration_context(query: str, keyword: str) -> str:
+        """Keep a following bound-only clause attached to its task."""
+
+        segments = [
+            match.group(0)
+            for match in re.finditer(r"[^，。；、]+", query)
+            if match.group(0).strip()
+        ]
+        index = next(
+            (
+                position
+                for position, segment in enumerate(segments)
+                if keyword in segment
+            ),
+            None,
+        )
+        if index is None:
+            return query
+        selected = [segments[index]]
+        if index + 1 < len(segments) and re.match(
+            r"\s*(?:至少|最少|不少于|不低于|起码|最多|至多|"
+            r"不超过|不多于|上限)",
+            segments[index + 1],
+        ):
+            selected.append(segments[index + 1])
+        return "，".join(selected)
 
     @staticmethod
     def _duration_with_source(
@@ -3148,7 +3419,7 @@ class RuleBasedRequirementParser:
         # Match inside this task's semantic clause.  Searching the whole
         # sentence let ``导师碰头2h`` overwrite an earlier run or study whose
         # duration the student never specified.
-        query = RuleBasedRequirementParser._clause_around_keyword(
+        query = RuleBasedRequirementParser._duration_context(
             query,
             keyword,
         )
