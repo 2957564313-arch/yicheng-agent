@@ -596,6 +596,69 @@ def test_daily_tasks_keep_their_own_explicit_durations():
     )
 
 
+def test_study_duration_upper_bound_is_preserved():
+    result = parse("明天去图书馆自习，不超过90分钟。")
+    study = next(task for task in result.tasks if task.id == "study")
+
+    assert study.duration_min == 90
+    assert study.min_duration_min == 60
+    assert study.max_duration_min == 90
+    assert study.duration_source == "bounded"
+    assert study.shortest_acceptable_min() == 60
+
+
+def test_study_duration_lower_bound_is_preserved():
+    result = parse("明天去图书馆自习，至少90分钟。")
+    study = next(task for task in result.tasks if task.id == "study")
+
+    assert study.duration_min == 120
+    assert study.min_duration_min == 90
+    assert study.max_duration_min is None
+    assert study.duration_source == "bounded"
+    assert study.shortest_acceptable_min() == 90
+
+
+def test_duration_range_stays_with_its_own_task():
+    result = parse("明天自习，不超过90分钟；跑步30到45分钟。")
+    tasks = {task.id: task for task in result.tasks}
+
+    assert tasks["study"].duration_min == 90
+    assert tasks["study"].min_duration_min == 60
+    assert tasks["study"].max_duration_min == 90
+    assert tasks["run"].duration_min == 30
+    assert tasks["run"].min_duration_min == 30
+    assert tasks["run"].max_duration_min == 45
+    assert tasks["run"].duration_source == "bounded"
+
+
+def test_rejected_study_location_is_not_selected():
+    result = parse("明天下午自习90分钟，不要去图书馆。")
+    study = next(task for task in result.tasks if task.id == "study")
+
+    assert study.location_raw is None
+    assert study.location_id is None
+    assert study.excluded_locations == ["图书馆"]
+    assert "location_exclusion" in study.tags
+
+
+def test_location_rejection_before_task_is_recognized():
+    result = parse("图书馆太远不要去，明天下午自习90分钟。")
+    study = next(task for task in result.tasks if task.id == "study")
+
+    assert study.location_raw is None
+    assert study.excluded_locations == ["图书馆"]
+
+
+def test_location_rejection_is_scoped_to_nearest_task():
+    result = parse("先取快递，不要去菜鸟驿站，再到图书馆自习90分钟。")
+    tasks = {task.id: task for task in result.tasks}
+
+    assert tasks["parcel"].location_raw is None
+    assert tasks["parcel"].excluded_locations == ["菜鸟驿站"]
+    assert tasks["study"].location_raw == "图书馆"
+    assert tasks["study"].excluded_locations == []
+
+
 def test_global_avoid_evening_boundary_applies_to_each_flexible_task():
     result = parse("明天别排晚上，安排90分钟自习和30分钟跑步。")
     tasks = {task.id: task for task in result.tasks}
