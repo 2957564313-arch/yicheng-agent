@@ -264,6 +264,7 @@ def test_online_merge_clears_model_location_rejected_by_rule_parser():
     rule_study = next(task for task in rule_result.tasks if task.id == "study")
     model_study = rule_study.model_copy(
         update={
+            "title": "图书馆自习",
             "location_raw": "图书馆六层",
             "excluded_locations": [],
         }
@@ -277,6 +278,7 @@ def test_online_merge_clears_model_location_rejected_by_rule_parser():
     )
     study = next(task for task in merged.tasks if task.id == "study")
 
+    assert study.title == "自习"
     assert study.location_raw is None
     assert study.location_id is None
     assert study.excluded_locations == ["图书馆"]
