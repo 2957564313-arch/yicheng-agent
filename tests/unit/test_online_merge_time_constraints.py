@@ -72,6 +72,36 @@ def test_model_cannot_replace_explicit_duration_of_non_study_task():
     assert merged_run.shortest_acceptable_min() == 45
 
 
+def test_model_cannot_replace_user_duration_band():
+    query = "明天去图书馆自习，不超过90分钟。"
+    parsed = RuleBasedRequirementParser("Asia/Shanghai").parse(
+        query=query,
+        now=NOW,
+    )
+    rule_study = next(task for task in parsed.tasks if task.id == "study")
+    model_study = rule_study.model_copy(
+        update={
+            "duration_min": 120,
+            "min_duration_min": 30,
+            "max_duration_min": None,
+            "duration_source": "default",
+        }
+    )
+    llm_result = parsed.model_copy(update={"tasks": [model_study]})
+
+    merged = _merge_llm_with_rule_constraints(
+        query=query,
+        llm_result=llm_result,
+        rule_result=parsed,
+    )
+    study = next(task for task in merged.tasks if task.id == "study")
+
+    assert study.duration_min == 90
+    assert study.min_duration_min == 60
+    assert study.max_duration_min == 90
+    assert study.duration_source == "bounded"
+
+
 def test_course_merge_keeps_canonical_course_titles():
     query = "今天第1、3节有课，第四节以后去图书馆自习1小时。"
     parsed = RuleBasedRequirementParser(
