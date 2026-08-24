@@ -210,6 +210,78 @@ def test_missing_study_place_gets_library_default_after_preferences():
     assert adjusted[0].location_raw == "图书馆"
 
 
+def test_location_exclusion_blocks_saved_and_default_study_places():
+    task = Task(
+        id="study",
+        title="自习",
+        date=NOW.date(),
+        duration_min=90,
+        duration_source="explicit",
+        excluded_locations=["图书馆"],
+    )
+    preferred = _apply_preferred_locations(
+        [task],
+        preferences=UserPreferences(preferred_locations=["图书馆六层"]),
+        query="明天下午自习90分钟，不要去图书馆。",
+    )
+    adjusted = _apply_default_locations(preferred)
+
+    assert adjusted[0].location_raw is None
+    assert adjusted[0].excluded_locations == ["图书馆"]
+
+
+def test_location_exclusion_blocks_activity_location_memory():
+    task = Task(
+        id="study",
+        title="自习",
+        date=NOW.date(),
+        duration_min=90,
+        duration_source="explicit",
+        excluded_locations=["图书馆"],
+    )
+    memories = [
+        MemoryCreate(
+            category="preference",
+            key="activity_location",
+            label="事项地点偏好",
+            value=[{"activity": "自习", "location": "图书馆12层"}],
+        )
+    ]
+
+    adjusted = _apply_activity_location_memories(
+        [task],
+        memories=memories,
+        query="明天下午自习90分钟，不要去图书馆。",
+    )
+
+    assert adjusted[0].location_raw is None
+    assert "memory_activity_location" not in adjusted[0].tags
+
+
+def test_online_merge_clears_model_location_rejected_by_rule_parser():
+    query = "明天下午自习90分钟，不要去图书馆。"
+    rule_result = _parse(query)
+    rule_study = next(task for task in rule_result.tasks if task.id == "study")
+    model_study = rule_study.model_copy(
+        update={
+            "location_raw": "图书馆六层",
+            "excluded_locations": [],
+        }
+    )
+    llm_result = rule_result.model_copy(update={"tasks": [model_study]})
+
+    merged = _merge_llm_with_rule_constraints(
+        query=query,
+        llm_result=llm_result,
+        rule_result=rule_result,
+    )
+    study = next(task for task in merged.tasks if task.id == "study")
+
+    assert study.location_raw is None
+    assert study.location_id is None
+    assert study.excluded_locations == ["图书馆"]
+
+
 def _parse(query: str) -> UnderstandResult:
     return RuleBasedRequirementParser("Asia/Shanghai").parse(
         query=query,
