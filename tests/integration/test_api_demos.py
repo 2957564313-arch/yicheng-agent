@@ -50,6 +50,32 @@ class MisleadingKnowledgeLLM:
         )
 
 
+class LocationRestoringLLM:
+    configured = True
+
+    def __init__(self, parser):
+        self.parser = parser
+
+    async def parse_requirement(self, *, query, now_iso, **_kwargs):
+        result = self.parser.parse(
+            query=query,
+            now=datetime.fromisoformat(now_iso),
+        )
+        tasks = [
+            task.model_copy(
+                update={
+                    "title": "图书馆自习",
+                    "location_raw": "图书馆六层",
+                    "excluded_locations": [],
+                }
+            )
+            if task.id == "study"
+            else task
+            for task in result.tasks
+        ]
+        return result.model_copy(update={"tasks": tasks})
+
+
 def test_health_and_demo_catalog(tmp_path):
     with TestClient(build_test_app(tmp_path)) as client:
         home = client.get("/")
@@ -207,6 +233,61 @@ def test_client_time_is_normalized_to_campus_timezone(tmp_path):
         )
         assert payload["time_context"]["target_date"] == "2026-07-25"
         assert payload["time_context"]["weekday"] == "星期六"
+
+
+def test_rejected_study_location_is_absent_from_plan_and_answer(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "location_exclusion_user",
+                "thread_id": "location_exclusion_thread",
+                "query": "2026年8月25日下午自习90分钟，不要去图书馆。",
+                "mode": "offline",
+                "publish_to_agenda": False,
+                "preview_only": True,
+                "client_context": {
+                    "now": "2026-08-24T15:35:00+08:00"
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        study = task_items(payload)["study"]
+        assert study["title"] == "自习"
+        assert study["location_id"] is None
+        assert study["location_raw"] is None
+        assert "图书馆" not in payload["answer"]
+
+
+def test_live_model_cannot_restore_rejected_location_in_title_or_plan(tmp_path):
+    with TestClient(build_test_app(tmp_path)) as client:
+        client.app.state.container.llm = LocationRestoringLLM(
+            client.app.state.container.parser
+        )
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "user_id": "live_location_exclusion_user",
+                "thread_id": "live_location_exclusion_thread",
+                "query": "2026年8月25日下午自习90分钟，不要去图书馆。",
+                "mode": "live",
+                "publish_to_agenda": False,
+                "preview_only": True,
+                "client_context": {
+                    "now": "2026-08-24T15:35:00+08:00"
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        study = task_items(payload)["study"]
+        assert study["title"] == "自习"
+        assert study["location_id"] is None
+        assert study["location_raw"] is None
+        assert "图书馆" not in payload["answer"]
 
 
 def test_requirement_change_uses_current_plan_and_returns_diff(tmp_path):

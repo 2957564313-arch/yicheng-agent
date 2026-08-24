@@ -635,6 +635,7 @@ def test_rejected_study_location_is_not_selected():
     result = parse("明天下午自习90分钟，不要去图书馆。")
     study = next(task for task in result.tasks if task.id == "study")
 
+    assert study.title == "自习"
     assert study.location_raw is None
     assert study.location_id is None
     assert study.excluded_locations == ["图书馆"]
@@ -645,6 +646,7 @@ def test_location_rejection_before_task_is_recognized():
     result = parse("图书馆太远不要去，明天下午自习90分钟。")
     study = next(task for task in result.tasks if task.id == "study")
 
+    assert study.title == "自习"
     assert study.location_raw is None
     assert study.excluded_locations == ["图书馆"]
 

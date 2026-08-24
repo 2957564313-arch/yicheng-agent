@@ -1391,10 +1391,16 @@ class RuleBasedRequirementParser:
                 task.location_raw,
                 excluded,
             )
+            title = (
+                RuleBasedRequirementParser._title_after_location_exclusion(task)
+                if location_is_excluded
+                else task.title
+            )
             note = f"本轮已排除：{'、'.join(new_exclusions)}"
             adjusted.append(
                 task.model_copy(
                     update={
+                        "title": title,
                         "location_id": (
                             None if location_is_excluded else task.location_id
                         ),
@@ -1412,6 +1418,22 @@ class RuleBasedRequirementParser:
                 )
             )
         return adjusted
+
+    @staticmethod
+    def _title_after_location_exclusion(task: Task) -> str:
+        """Keep a rejected venue from surviving in the task's display title."""
+        generic_titles = {
+            "study": "自习",
+            "parcel": "取快递",
+        }
+        if task.id in generic_titles:
+            return generic_titles[task.id]
+        location = (task.location_raw or "").strip()
+        if location and location in task.title:
+            cleaned = task.title.replace(location, "").strip(" -—（）()")
+            if len(cleaned) >= 2:
+                return cleaned
+        return task.title
 
     @staticmethod
     def _location_matches_any(

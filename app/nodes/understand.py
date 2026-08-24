@@ -1699,7 +1699,11 @@ def _merge_task_constraints(
         # canonical title (including the ``课程`` marker) so the API and UI
         # can identify course items consistently even when the LLM calls the
         # same block ``第1节课`` or another free-form variant.
-        "title": (rule_task.title if "course" in rule_task.tags else model_task.title),
+        "title": (
+            rule_task.title
+            if {"course", "location_exclusion"}.intersection(rule_task.tags)
+            else model_task.title
+        ),
         "date": rule_task.date,
         # Whether a task is fixed is a hard scheduling fact, not a wording
         # choice. The deterministic parser is the final authority here; an
