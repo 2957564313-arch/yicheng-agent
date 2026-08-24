@@ -598,9 +598,13 @@ def make_enrich_node(container: AppContainer):
             uses_default_campus_pack
             and not (is_knowledge_query and state.get("timetable_summary"))
         ):
+            retrieval_query = _query_without_excluded_locations(
+                state["query"],
+                tasks,
+            )
             rag_facts = await container.rag.retrieve(
                 [
-                    state["query"],
+                    retrieval_query,
                     *[task.title for task in tasks],
                     *location_ids,
                 ],
@@ -682,6 +686,20 @@ def make_enrich_node(container: AppContainer):
         }
 
     return enrich
+
+
+def _query_without_excluded_locations(query: str, tasks: list[Task]) -> str:
+    """Do not retrieve venue guidance for a location the user rejected."""
+    sanitized = query
+    excluded_locations = {
+        location.strip()
+        for task in tasks
+        for location in task.excluded_locations
+        if location.strip()
+    }
+    for location in sorted(excluded_locations, key=len, reverse=True):
+        sanitized = sanitized.replace(location, "")
+    return sanitized
 
 
 def _opening_conflict_issues(
