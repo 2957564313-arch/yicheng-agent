@@ -571,6 +571,50 @@ def test_explicit_study_duration_is_not_marked_compressible():
     assert study.shortest_acceptable_min() == 90
 
 
+def test_duration_before_task_keyword_is_also_explicit():
+    result = parse("明天下午安排90分钟自习，18点前结束。")
+
+    study = next(task for task in result.tasks if task.id == "study")
+    assert study.duration_min == 90
+    assert study.duration_source == "explicit"
+    assert study.min_duration_min is None
+    assert study.shortest_acceptable_min() == 90
+
+
+def test_daily_tasks_keep_their_own_explicit_durations():
+    result = parse(
+        "明天下午先取快递15分钟，然后吃晚饭30分钟，最后跑步45分钟。"
+    )
+    tasks = {task.id: task for task in result.tasks}
+
+    assert tasks["parcel"].duration_min == 15
+    assert tasks["dinner"].duration_min == 30
+    assert tasks["run"].duration_min == 45
+    assert all(
+        tasks[task_id].duration_source == "explicit"
+        for task_id in ("parcel", "dinner", "run")
+    )
+
+
+def test_global_avoid_evening_boundary_applies_to_each_flexible_task():
+    result = parse("明天别排晚上，安排90分钟自习和30分钟跑步。")
+    tasks = {task.id: task for task in result.tasks}
+
+    assert tasks["study"].preferred_period == "day"
+    assert tasks["run"].preferred_period == "day"
+    assert tasks["study"].constraint_source == "user"
+    assert tasks["run"].constraint_source == "user"
+
+
+def test_explicit_afternoon_still_wins_over_global_avoid_evening():
+    result = parse("明天不要安排到晚上，下午自习90分钟。")
+    study = next(task for task in result.tasks if task.id == "study")
+
+    assert study.preferred_period == "afternoon"
+    assert study.earliest_start.hour == 13
+    assert study.latest_end.hour == 18
+
+
 def test_fixed_common_task_is_not_duplicated_by_fallback_catalog():
     result = parse("明天下午3点到4点开组会，然后在图书馆复习2小时。")
 
