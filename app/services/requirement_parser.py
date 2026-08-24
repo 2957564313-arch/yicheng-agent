@@ -723,14 +723,17 @@ class RuleBasedRequirementParser:
         ):
             study_keyword = "自习" if "自习" in query else "学习"
             study_clause = self._clause_around_keyword(query, study_keyword)
-            study_period = self._period_from_clause(study_clause)
+            study_period = self._period_for_task(
+                query=query,
+                clause=study_clause,
+            )
             study_deadline = self._task_deadline(
                 query,
                 target_date,
                 ("自习", "学习"),
             )
             study_limit = study_deadline or overall_deadline
-            duration = self._duration_near(
+            duration, study_duration_explicit = self._duration_with_source(
                 query,
                 study_keyword,
                 default=120,
@@ -738,15 +741,6 @@ class RuleBasedRequirementParser:
             # An explicit clock anchor in the request outranks the period
             # phrase, so the period only applies when the user gave none.
             effective_period = study_period if overall_start is None else None
-            study_duration_explicit = bool(
-                re.search(
-                    rf"{re.escape(study_keyword)}[^，。；、]{{0,8}}?"
-                    rf"(?:\d+\s*分钟|\d+(?:\.\d+)?\s*(?:个?小时|h(?:ours?)?)"
-                    rf"|(?:{'|'.join(map(re.escape, CHINESE_NUMBER_HOURS))})"
-                    rf"\s*个?小时)",
-                    study_clause,
-                )
-            )
             study_min, study_source = self._flexible_duration(
                 duration,
                 study_duration_explicit,
@@ -836,13 +830,26 @@ class RuleBasedRequirementParser:
                     else (service_close if parcel_location != "快递站" else None)
                 )
             )
-            parcel_clause = self._clause_around_keyword(query, "快递")
+            parcel_keyword = next(
+                (
+                    keyword
+                    for keyword in TASK_KEYWORDS["parcel"]
+                    if keyword in query
+                ),
+                "快递",
+            )
+            parcel_clause = self._clause_around_keyword(query, parcel_keyword)
+            parcel_duration, parcel_duration_explicit = self._duration_with_source(
+                query,
+                parcel_keyword,
+                default=30,
+            )
             tasks.append(
                 self._movable_task(
                     task_id="parcel",
                     title=parcel_title,
                     target_date=target_date,
-                    duration=30,
+                    duration=parcel_duration,
                     location_raw=parcel_location,
                     earliest=(
                         overall_start
@@ -850,6 +857,9 @@ class RuleBasedRequirementParser:
                     ),
                     latest=parcel_latest,
                     deadline=parcel_deadline,
+                    duration_source=(
+                        "explicit" if parcel_duration_explicit else "default"
+                    ),
                     importance=4,
                 )
             )
@@ -879,17 +889,25 @@ class RuleBasedRequirementParser:
                 self._clause_around_keyword(query, meal_keyword),
                 meal_keyword,
             )
+            meal_duration, meal_duration_explicit = self._duration_with_source(
+                query,
+                meal_keyword,
+                default=45,
+            )
             tasks.append(
                 self._movable_task(
                     task_id=meal_id,
                     title=meal_title,
                     target_date=target_date,
-                    duration=45,
+                    duration=meal_duration,
                     location_raw="食堂",
                     earliest=meal_earliest,
                     latest=meal_latest,
                     preferred_period=meal_period,
                     period_source="user",
+                    duration_source=(
+                        "explicit" if meal_duration_explicit else "default"
+                    ),
                     importance=3,
                 )
             )
@@ -909,16 +927,17 @@ class RuleBasedRequirementParser:
                 ("校医院", "看医生", "就诊", "医务室"),
             )
             clinic_limit = clinic_deadline or overall_deadline
+            clinic_duration, clinic_duration_explicit = self._duration_with_source(
+                query,
+                clinic_keyword,
+                default=30,
+            )
             tasks.append(
                 self._movable_task(
                     task_id="clinic",
                     title="前往校医院就诊",
                     target_date=target_date,
-                    duration=self._duration_near(
-                        query,
-                        clinic_keyword,
-                        default=30,
-                    ),
+                    duration=clinic_duration,
                     location_raw="校医院",
                     earliest=(
                         overall_start
@@ -926,6 +945,9 @@ class RuleBasedRequirementParser:
                     ),
                     latest=(clinic_limit.time() if clinic_limit else time(20, 0)),
                     deadline=(clinic_limit.time() if clinic_limit else None),
+                    duration_source=(
+                        "explicit" if clinic_duration_explicit else "default"
+                    ),
                     importance=5,
                 )
             )
@@ -957,16 +979,17 @@ class RuleBasedRequirementParser:
                 ("洗澡", "洗漱", "用热水", "打热水"),
             )
             bath_limit = bath_deadline or overall_deadline
+            bath_duration, bath_duration_explicit = self._duration_with_source(
+                query,
+                bath_keyword,
+                default=30,
+            )
             tasks.append(
                 self._movable_task(
                     task_id="bath",
                     title="回宿舍洗澡" if "洗澡" in query else "宿舍洗漱",
                     target_date=target_date,
-                    duration=self._duration_near(
-                        query,
-                        bath_keyword,
-                        default=30,
-                    ),
+                    duration=bath_duration,
                     location_raw="学生公寓",
                     earliest=(
                         overall_start
@@ -980,6 +1003,9 @@ class RuleBasedRequirementParser:
                     deadline=(bath_limit.time() if bath_limit else None),
                     preferred_period="evening" if "晚上" in query else None,
                     period_source="user",
+                    duration_source=(
+                        "explicit" if bath_duration_explicit else "default"
+                    ),
                     importance=3,
                 )
             )
@@ -1014,16 +1040,17 @@ class RuleBasedRequirementParser:
                 (sport_keyword,),
             )
             sport_limit = sport_deadline or overall_deadline
+            sport_duration, sport_duration_explicit = self._duration_with_source(
+                query,
+                sport_keyword,
+                default=60,
+            )
             tasks.append(
                 self._movable_task(
                     task_id=sport_id,
                     title=sport_title,
                     target_date=target_date,
-                    duration=self._duration_near(
-                        query,
-                        sport_keyword,
-                        default=60,
-                    ),
+                    duration=sport_duration,
                     location_raw=sport_location,
                     earliest=(
                         overall_start
@@ -1033,6 +1060,9 @@ class RuleBasedRequirementParser:
                     deadline=(sport_limit.time() if sport_limit else None),
                     preferred_period="evening" if "晚上" in query else None,
                     period_source="user",
+                    duration_source=(
+                        "explicit" if sport_duration_explicit else "default"
+                    ),
                     importance=3,
                 )
             )
@@ -1063,7 +1093,10 @@ class RuleBasedRequirementParser:
                 if keyword in query
             )
             run_clause = self._clause_around_keyword(query, run_keyword)
-            run_period = self._period_from_clause(run_clause)
+            run_period = self._period_for_task(
+                query=query,
+                clause=run_clause,
+            )
             is_sunshine_run = "阳光长跑" in query
             run_deadline = self._task_deadline(
                 query,
@@ -1071,6 +1104,11 @@ class RuleBasedRequirementParser:
                 ("阳光长跑", "长跑", "跑步", "运动", "锻炼", "健身"),
             )
             run_limit = run_deadline or overall_deadline
+            run_duration, run_duration_explicit = self._duration_with_source(
+                query,
+                run_keyword,
+                default=30,
+            )
             tasks.append(
                 self._movable_task(
                     task_id="run",
@@ -1080,11 +1118,7 @@ class RuleBasedRequirementParser:
                         else ("锻炼" if run_keyword in ("锻炼", "健身") else "跑步")
                     ),
                     target_date=target_date,
-                    duration=self._duration_near(
-                        query,
-                        run_keyword,
-                        default=30,
-                    ),
+                    duration=run_duration,
                     location_raw=self._run_location(query),
                     earliest=(
                         overall_start or self._period_start(run_period) or time(8, 0)
@@ -1093,6 +1127,9 @@ class RuleBasedRequirementParser:
                     deadline=(run_limit.time() if run_limit else None),
                     preferred_period=run_period,
                     period_source="user" if run_period else "rule",
+                    duration_source=(
+                        "explicit" if run_duration_explicit else "default"
+                    ),
                     importance=3,
                 )
             )
@@ -1179,25 +1216,15 @@ class RuleBasedRequirementParser:
                 spec.keywords,
             )
             task_limit = task_deadline or overall_deadline
-            preferred_period = self._period_from_clause(clause)
+            preferred_period = self._period_for_task(
+                query=query,
+                clause=clause,
+            )
             location = self._location_from_clause(clause) or spec.default_location
-            duration = self._duration_near(
+            duration, duration_was_explicit = self._duration_with_source(
                 query,
                 keyword,
                 default=spec.default_duration_min,
-            )
-            duration_was_explicit = bool(
-                re.search(
-                    rf"(?:{re.escape(keyword)}[^，。；、]{{0,8}}?"
-                    rf"(?:\d+\s*分钟|(?:[0-9]+(?:\.[0-9]+)?|"
-                    rf"{'|'.join(map(re.escape, CHINESE_NUMBER_HOURS))})\s*"
-                    rf"(?:个?小时|h(?:ours?)?))"
-                    rf"|(?:\d+\s*分钟|(?:[0-9]+(?:\.[0-9]+)?|"
-                    rf"{'|'.join(map(re.escape, CHINESE_NUMBER_HOURS))})\s*"
-                    rf"(?:个?小时|h(?:ours?)?))"
-                    rf"[^，。；、]{{0,8}}?{re.escape(keyword)})",
-                    clause,
-                )
             )
             spec_title = next(
                 (title for marker, title in spec.title_overrides if marker in query),
@@ -1424,6 +1451,8 @@ class RuleBasedRequirementParser:
 
     @staticmethod
     def _period_from_clause(clause: str) -> str | None:
+        if RuleBasedRequirementParser._avoids_evening(clause):
+            return "day"
         # A half-day phrase is more specific than “白天”, so it is matched
         # first: “白天上午” means the morning, not the whole daytime.
         for marker, period in (
@@ -1443,6 +1472,30 @@ class RuleBasedRequirementParser:
             if marker in clause:
                 return period
         return None
+
+    @staticmethod
+    def _period_for_task(*, query: str, clause: str) -> str | None:
+        period = RuleBasedRequirementParser._period_from_clause(clause)
+        if period is not None:
+            return period
+        # “别排晚上，安排自习和跑步” states one request-wide boundary in
+        # a short leading clause. Carry it to each task instead of losing it
+        # at the comma.
+        if RuleBasedRequirementParser._avoids_evening(query):
+            return "day"
+        return None
+
+    @staticmethod
+    def _avoids_evening(text: str) -> bool:
+        return bool(
+            re.search(
+                r"(?:(?:别|不要|不想|不希望|避免|尽量别)"
+                r"[^，。；、]{0,10}(?:晚上|晚间|夜里|夜间|太晚)"
+                r"|(?:晚上|晚间|夜里|夜间)[^，。；、]{0,8}"
+                r"(?:不行|不方便|没空))",
+                text,
+            )
+        )
 
     @staticmethod
     def _period_start(period: str | None) -> time | None:
@@ -3081,7 +3134,17 @@ class RuleBasedRequirementParser:
         )
 
     @staticmethod
-    def _duration_near(query: str, keyword: str, default: int) -> int:
+    def _duration_with_source(
+        query: str,
+        keyword: str,
+        default: int,
+    ) -> tuple[int, bool]:
+        """Return a task-local duration and whether the student stated it.
+
+        Both ordinary Chinese orders are supported: "自习90分钟" and
+        "90分钟自习". The online model may refine defaults but must not
+        replace a number the student typed.
+        """
         # Match inside this task's semantic clause.  Searching the whole
         # sentence let ``导师碰头2h`` overwrite an earlier run or study whose
         # duration the student never specified.
@@ -3097,7 +3160,7 @@ class RuleBasedRequirementParser:
         for pattern in minute_patterns:
             match = re.search(pattern, query)
             if match:
-                return max(5, int(match.group(1)))
+                return max(5, int(match.group(1))), True
 
         patterns = [
             rf"{keyword}[^，。；、]{{0,8}}?([0-9]+(?:\.[0-9]+)?)\s*个?小时",
@@ -3117,8 +3180,17 @@ class RuleBasedRequirementParser:
                 if re.fullmatch(r"[0-9.]+", raw)
                 else CHINESE_NUMBER_HOURS[raw]
             )
-            return max(5, round(hours * 60))
-        return default
+            return max(5, round(hours * 60)), True
+        return default, False
+
+    @staticmethod
+    def _duration_near(query: str, keyword: str, default: int) -> int:
+        duration, _ = RuleBasedRequirementParser._duration_with_source(
+            query,
+            keyword,
+            default,
+        )
+        return duration
 
     @staticmethod
     def _closing_hour(query: str) -> int | None:
