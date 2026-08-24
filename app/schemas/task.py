@@ -58,10 +58,11 @@ class Task(BaseModel):
         le=720,
         description="与同类任务之间至少间隔的分钟数。",
     )
-    duration_source: Literal["explicit", "default"] = Field(
+    duration_source: Literal["explicit", "bounded", "default"] = Field(
         default="default",
         description=(
             "explicit=用户明确说了时长，不可压缩；"
+            "bounded=用户给了至少/最多/范围，按 min/max 执行；"
             "default=系统按常识填的默认值，可压缩。"
         ),
     )
@@ -78,6 +79,14 @@ class Task(BaseModel):
         default=None,
         max_length=120,
         description="用户说的地点原文，例如“图书馆”“菜鸟驿站”“东操场”。",
+    )
+    excluded_locations: list[str] = Field(
+        default_factory=list,
+        max_length=12,
+        description=(
+            "用户本轮明确排除的地点。location_raw/location_id 不得再次选择"
+            "这些地点，长期偏好和默认地点也不能覆盖该约束。"
+        ),
     )
 
     earliest_start: datetime | None = Field(
@@ -135,6 +144,12 @@ class Task(BaseModel):
             raise ValueError("min_duration_min must not exceed duration_min")
         if self.max_duration_min and self.max_duration_min < self.duration_min:
             raise ValueError("max_duration_min must not be below duration_min")
+        if (
+            self.duration_source == "bounded"
+            and self.min_duration_min is None
+            and self.max_duration_min is None
+        ):
+            raise ValueError("bounded duration requires a minimum or maximum")
         return self
 
     @model_validator(mode="after")
