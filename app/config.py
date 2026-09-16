@@ -49,10 +49,12 @@ class Settings(BaseSettings):
 
     llm_enabled: bool = False
     llm_model: str = "qwen3.8-max"
+    # Ordered by measured latency among the models that actually return
+    # usable JSON; see reports/model_probe.json. Anything slower than the
+    # fallback budget in llm.py can never finish, so it does not belong here.
     llm_fallback_models: str = (
-        "deepseek-v4-flash-0731,glm-5.2-fast-preview,"
-        "qwen3.7-flash-2026-07-15,qwen3.6-plus,"
-        "qwen-plus-2025-12-01,glm-5.1,glm-5"
+        "qwen3.7-flash-2026-07-15,glm-5.2-fast-preview,"
+        "glm-5.2,deepseek-v4-pro-0813"
     )
     llm_base_url: str = ""
     llm_api_key: str = Field(default="", repr=False)

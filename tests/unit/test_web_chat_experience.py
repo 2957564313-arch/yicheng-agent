@@ -401,10 +401,10 @@ def test_day_schedule_allows_manual_edits_but_locks_authoritative_items() -> Non
     assert '<svg viewBox="0 0 24 24" aria-hidden="true">' in javascript
     assert 'title="调整时间或删除">•••' not in javascript
     assert ".schedule-event-lock" in styles
-    assert 'app.js?v=20260822-1' in (WEB_ROOT / "index.html").read_text(
+    assert 'app.js?v=20260916-1' in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
-    assert "styles.css?v=20260821-9" in (WEB_ROOT / "index.html").read_text(
+    assert "styles.css?v=20260916-1" in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
     assert 'term.current ? "（当前）"' not in javascript

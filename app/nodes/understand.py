@@ -886,6 +886,20 @@ def _timetable_summary(
             "通知为准。"
         )
     if not tasks:
+        if (
+            calendar_context.course_action == "makeup"
+            and calendar_context.effective_weekday
+        ):
+            # A make-up day is still a teaching day. Reporting only "no
+            # courses on record" reads as a free day and hides the notice.
+            effective_weekday = "一二三四五六日"[
+                int(calendar_context.effective_weekday) - 1
+            ]
+            return (
+                f"{target_date:%Y年%m月%d日}（星期{weekday}）是调休工作日，"
+                f"学校校历设置为当天按星期{effective_weekday}课表执行；"
+                "你的个人课表暂时没有可显示的课程记录。"
+            )
         return (
             f"你的个人课表在{target_date:%Y年%m月%d日}（星期{weekday}）"
             "没有已启用的课程记录。"

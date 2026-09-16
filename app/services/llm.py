@@ -4,6 +4,7 @@ import asyncio
 import json
 from contextvars import ContextVar
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 import requests
@@ -455,7 +456,24 @@ class OpenAICompatibleLLM:
         }
         last_error: Exception | None = None
         attempted_models: list[str] = []
+        # Every model that returns usable JSON measured 6.7-11s (see
+        # reports/model_probe.json), so the old flat 6s fallback budget
+        # guaranteed a timeout and made the chain decorative. Give a fallback
+        # room to actually answer, but bound the whole chain so a bad day
+        # cannot turn into a minute of waiting — the rule parser still works
+        # when every model fails.
+        started = monotonic()
+        primary_budget = min(self.timeout_seconds, 18)
+        fallback_budget = min(self.timeout_seconds, 12)
+        total_budget = primary_budget + 2 * fallback_budget
         for index, model in enumerate(self.models):
+            if index:
+                remaining = total_budget - (monotonic() - started)
+                if remaining < 4:
+                    break
+                attempt_budget = min(fallback_budget, remaining)
+            else:
+                attempt_budget = primary_budget
             attempted_models.append(model)
             body: dict[str, Any] = {
                 "model": model,
@@ -473,11 +491,7 @@ class OpenAICompatibleLLM:
                     url,
                     body,
                     headers,
-                    (
-                        min(self.timeout_seconds, 18)
-                        if index == 0
-                        else min(self.timeout_seconds, 6)
-                    ),
+                    attempt_budget,
                 )
                 content = payload["choices"][0]["message"]["content"]
                 if not isinstance(content, str) or not content.strip():

@@ -19,6 +19,7 @@ class AcademicCalendarRepository:
         self.database = database
         payload = json.loads(national_path.read_text(encoding="utf-8"))
         self._days = payload.get("days", {})
+        self._school_makeup = payload.get("school_makeup_days", {})
         raw_years = payload.get("calendar_years")
         if isinstance(raw_years, list):
             self._calendar_years = {int(value) for value in raw_years}
@@ -43,6 +44,22 @@ class AcademicCalendarRepository:
             self._source_refs = {
                 year: source.get("url") for year in self._calendar_years
             }
+
+    _WEEKDAY_NAMES = "一二三四五六日"
+
+    def _school_makeup_for(self, target_date: date) -> tuple[date, str] | None:
+        """Return the followed teaching day and its label, if published."""
+        raw = self._school_makeup.get(target_date.isoformat())
+        if not isinstance(raw, dict):
+            return None
+        try:
+            follows = date.fromisoformat(str(raw["follows"]))
+        except (KeyError, TypeError, ValueError):
+            return None
+        weekday_name = self._WEEKDAY_NAMES[follows.isoweekday() - 1]
+        return follows, (
+            f"补 {follows.month} 月 {follows.day} 日（周{weekday_name}）课程"
+        )
 
     def list_overrides(self, user_id: str) -> list[CalendarOverride]:
         with self.database.connect() as connection:
@@ -217,6 +234,22 @@ class AcademicCalendarRepository:
                 verified_at=self._verified_at,
             )
         if national and national.get("type") == "adjusted_workday":
+            # The national calendar only says the day is worked; which day's
+            # timetable it follows is a school notice. Use ours when the school
+            # has published one, and keep waiting when it has not.
+            notice = self._school_makeup_for(target_date)
+            if notice is not None:
+                follows, label = notice
+                return AcademicDayContext(
+                    date=target_date,
+                    day_type="adjusted_workday",
+                    course_action="makeup",
+                    label=label,
+                    effective_weekday=follows.isoweekday(),
+                    source=DataSource.STRUCTURED,
+                    source_ref=self._source_refs.get(target_date.year),
+                    verified_at=self._verified_at,
+                )
             return AcademicDayContext(
                 date=target_date,
                 day_type="adjusted_workday",

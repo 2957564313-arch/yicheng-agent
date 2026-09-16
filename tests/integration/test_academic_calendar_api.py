@@ -16,7 +16,9 @@ def test_calendar_context_range_exposes_holidays_and_makeup_days(tmp_path):
     assert by_date["2026-10-01"]["course_action"] == "no_class"
     assert by_date["2026-10-01"]["label"] == "国庆节"
     assert by_date["2026-10-10"]["day_type"] == "adjusted_workday"
-    assert by_date["2026-10-10"]["course_action"] == "awaiting_school_notice"
+    # The school has published this one: it follows 2026-10-07, a Wednesday.
+    assert by_date["2026-10-10"]["course_action"] == "makeup"
+    assert by_date["2026-10-10"]["effective_weekday"] == 3
 
 
 def test_calendar_context_range_rejects_invalid_ranges(tmp_path):

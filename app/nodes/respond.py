@@ -9,6 +9,7 @@ from app.schemas.common import DataSource, Issue, IssueSeverity
 from app.schemas.context import RetrievedFact, TravelEstimate, WeatherContext
 from app.schemas.plan import Plan
 from app.schemas.task import Task
+from app.services.plan_diff import compare_plans
 from app.state import CampusAgentState
 
 
@@ -111,6 +112,15 @@ def make_respond_node(container: AppContainer):
             }
 
         plan = Plan.model_validate(state["candidate_plan"])
+        # Whether the requested edit actually landed. A follow-up can parse
+        # cleanly, survive scheduling and still move nothing — a relative
+        # order ("放到自习前面") that the edit contract cannot express, for
+        # one. The wording must not claim otherwise.
+        old_plan_raw = state.get("old_plan")
+        plan_unchanged = bool(old_plan_raw) and not compare_plans(
+            Plan.model_validate(old_plan_raw),
+            plan,
+        )
         tasks = [Task.model_validate(raw) for raw in state.get("tasks", [])]
         facts = [
             RetrievedFact.model_validate(raw)
@@ -176,6 +186,8 @@ def make_respond_node(container: AppContainer):
                     (state.get("academic_day_context") or {}).get("day_type")
                     == "holiday"
                 ),
+                plan_unchanged=plan_unchanged,
+                clarifications=state.get("clarifications", []),
             )
             suggested_actions = _congestion_suggested_actions(
                 plan,
@@ -395,6 +407,13 @@ def _timetable_answer(summary: str) -> str:
             "学校具体补课安排尚未从杭助同步到；在此之前，我不会擅自"
             "把某一天的课搬过来。同步后将以杭助中的实际课程为准。"
         )
+    if "是调休工作日，学校校历设置为" in summary:
+        return (
+            "我把个人课表和校历一起核对过了。\n\n"
+            f"{summary}\n\n"
+            "这一天要照常上课，按学校校历指定的那一天课表执行。"
+            "课表从杭助同步过来之后，我会把当天的具体课程直接排进去。"
+        )
     if "没有已启用的课程记录" in summary:
         return (
             "我帮你看过个人课表了。\n\n"
@@ -447,6 +466,8 @@ def _success_answer(
     congestion_windows: list[tuple[datetime, datetime]],
     routes: list[TravelEstimate] | None = None,
     academic_holiday: bool = False,
+    plan_unchanged: bool = False,
+    clarifications: list[str] | None = None,
 ) -> str:
     ordered_items = sorted(plan.items, key=lambda value: value.start_at)
     task_items = [item for item in ordered_items if item.item_type == "task"]
@@ -495,6 +516,20 @@ def _success_answer(
             f"安排思路：先避开风险时段完成户外任务，再衔接"
             f"{task_names}；这样既照顾安全，也不需要推翻整天的计划。"
         )
+    elif intent == "replan" and plan_unchanged:
+        # Announcing an adjustment in front of a day that did not move is the
+        # failure this branch exists to prevent: when the edit could not be
+        # applied, the reason leads instead of trailing as a footnote.
+        reason = "；".join(clarifications or [])
+        lines = [
+            "先说清楚：这次没有改动你的日程。"
+            + (reason if reason else "你说的调整我没能对应到具体的安排上。")
+        ]
+        if task_names:
+            lines.append(
+                f"下面{task_names}仍是原来的时间。"
+                "你可以直接说要改哪一项、改到几点，我再动手。"
+            )
     elif intent == "replan":
         lines = [
             "你刚刚强调的变化我记下了。"
@@ -648,7 +683,14 @@ def _success_answer(
             verified_summary.append("通勤")
         if opening_rules_available:
             verified_summary.append("开放时段")
-        lines.append(f"{'、'.join(verified_summary)}已经核对过，可以按这份安排执行。")
+        if plan_unchanged:
+            lines.append(
+                f"{'、'.join(verified_summary)}仍和之前一致；这一天没有被改动。"
+            )
+        else:
+            lines.append(
+                f"{'、'.join(verified_summary)}已经核对过，可以按这份安排执行。"
+            )
     reminder_context = " ".join(
         [
             *(task_titles if is_removal else [query, *task_titles]),

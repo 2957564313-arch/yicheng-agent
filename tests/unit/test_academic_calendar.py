@@ -26,9 +26,11 @@ def test_adjusted_workday_waits_for_school_notice(temp_database):
         temp_database,
         BASE_DIR / "data" / "academic_calendar.json",
     )
+    # 2026-05-09 is a national make-up workday the school has not published a
+    # timetable notice for, so the day must stay explicitly unresolved.
     context = repository.resolve(
         user_id="workday_user",
-        target_date=date(2026, 10, 10),
+        target_date=date(2026, 5, 9),
     )
     assert context.day_type == "adjusted_workday"
     assert context.course_action == "awaiting_school_notice"
@@ -51,7 +53,8 @@ def test_calendar_range_resolves_holiday_and_adjusted_workday(temp_database):
     assert contexts[0].day_type == "holiday"
     assert contexts[0].course_action == "no_class"
     assert contexts[-1].day_type == "adjusted_workday"
-    assert contexts[-1].course_action == "awaiting_school_notice"
+    assert contexts[-1].course_action == "makeup"
+    assert contexts[-1].effective_weekday == 3
 
 
 def test_school_makeup_override_has_priority_over_national_calendar(
@@ -124,3 +127,29 @@ def test_verified_2025_calendar_only_marks_real_holidays(temp_database):
     assert national_day.label == "国庆节、中秋节"
     assert makeup_day.day_type == "adjusted_workday"
     assert makeup_day.course_action == "awaiting_school_notice"
+
+
+def test_school_notice_resolves_makeup_without_any_user_override(
+    temp_database,
+):
+    """A campus-wide notice must not depend on per-user data.
+
+    Calendar overrides are owned by the browser copy and are wiped for any
+    date the client does not send, so a school-wide make-up day stored as a
+    user override would disappear the first time a clean browser syncs.
+    """
+    repository = AcademicCalendarRepository(
+        temp_database,
+        BASE_DIR / "data" / "academic_calendar.json",
+    )
+
+    context = repository.resolve(
+        user_id="user_who_never_entered_anything",
+        target_date=date(2026, 9, 20),
+    )
+
+    assert context.day_type == "adjusted_workday"
+    assert context.course_action == "makeup"
+    # 2026-10-06 is a Tuesday: the Sunday follows that day's timetable.
+    assert context.effective_weekday == 2
+    assert context.source.value == "structured"

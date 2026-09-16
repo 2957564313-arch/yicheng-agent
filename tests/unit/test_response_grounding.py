@@ -668,3 +668,45 @@ def test_fallback_knowledge_answer_cites_handbook_page_and_section():
 
     assert "第118页" in answer
     assert "学生申诉处理办法" in answer
+
+
+def test_replan_that_changed_nothing_does_not_claim_an_adjustment():
+    """A follow-up that moved nothing must say so before showing the day.
+
+    Announcing "只调整受影响的部分 … 可以按这份安排执行" in front of an
+    untouched day is how an unapplied edit used to look identical to a
+    successful one, with the real reason trailing as a footnote.
+    """
+    answer = _success_answer(
+        _plan(),
+        [],
+        intent="replan",
+        query="那个改一下",
+        facts=[],
+        weather=[],
+        congestion_windows=[],
+        plan_unchanged=True,
+        clarifications=["“那个”指代不明确，无法确定你想修改哪一项。"],
+    )
+
+    assert "先说清楚：这次没有改动你的日程" in answer
+    assert "指代不明确" in answer
+    assert "这一天没有被改动" in answer
+    assert "可以按这份安排执行" not in answer
+    assert "这次只调整受影响的部分" not in answer
+
+
+def test_replan_that_did_change_still_reads_as_an_adjustment():
+    answer = _success_answer(
+        _plan(),
+        [],
+        intent="replan",
+        query="把自习挪到下午三点",
+        facts=[],
+        weather=[],
+        congestion_windows=[],
+        plan_unchanged=False,
+    )
+
+    assert "这次只调整受影响的部分" in answer
+    assert "先说清楚：这次没有改动你的日程" not in answer

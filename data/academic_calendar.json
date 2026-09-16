@@ -17,6 +17,10 @@
       "url": "https://www.gov.cn/zhengce/content/202511/content_7047090.htm"
     }
   ],
+  "school_makeup_days": {
+    "2026-09-20": {"follows": "2026-10-06", "notice": "杭电国庆节调休安排"},
+    "2026-10-10": {"follows": "2026-10-07", "notice": "杭电国庆节调休安排"}
+  },
   "days": {
     "2025-01-01": {"type": "holiday", "name": "元旦"},
 

@@ -661,6 +661,10 @@ if (conversationStream) {
 function scheduleCalendarBadge(date, includeName = false) {
   const context = scheduleCalendarContexts[date];
   if (!context || !["holiday", "adjusted_workday"].includes(context.day_type)) return "";
+  // Once the school notice resolves which day is being made up, the courses
+  // themselves say it — a leftover "补" badge only repeats a pending state
+  // that no longer exists.
+  if (context.course_action === "makeup") return "";
   const holiday = context.day_type === "holiday";
   const label = context.label || (holiday ? "法定节假日" : "待确认补课安排");
   return `<span class="schedule-calendar-badge ${holiday ? "holiday" : "workday"}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"><span class="schedule-calendar-badge-mark">${holiday ? "休" : "补"}</span>${includeName ? `<small>${escapeHtml(label)}</small>` : ""}</span>`;
@@ -669,6 +673,7 @@ function scheduleCalendarBadge(date, includeName = false) {
 function scheduleCalendarNotice(date) {
   const context = scheduleCalendarContexts[date];
   if (!context || !["holiday", "adjusted_workday"].includes(context.day_type)) return "";
+  if (context.course_action === "makeup") return "";
   const holiday = context.day_type === "holiday";
   return `<div class="schedule-calendar-notice ${holiday ? "holiday" : "workday"}">${scheduleCalendarBadge(date)}<span><strong>${escapeHtml(context.label || (holiday ? "法定节假日" : "调休工作日"))}</strong>${holiday ? "法定节假日，常规课程不执行；如杭助同步到特殊安排，仍以杭助记录为准" : "调休工作日已标注，实际补课课程以杭助同步结果为准"}</span></div>`;
 }

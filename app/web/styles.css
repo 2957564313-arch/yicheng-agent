@@ -2158,7 +2158,10 @@ h2 { font-family: "PingFang SC", "Noto Sans SC", system-ui, sans-serif; }
 .schedule-week-day > header strong small { margin-left: 2px; font-size: 9px; font-weight: 500; }
 .schedule-week-day > header em { color: #9ca3af; font-size: 9px; font-style: normal; }
 .schedule-week-day > div { display: grid; gap: 6px; }
-.schedule-event.schedule-event { grid-template-columns: 1fr; gap: 3px; padding: 8px; border-width: 1px 1px 1px 3px; }
+/* minmax(0,…) not 1fr: a bare 1fr track keeps its content's min-content
+   width as a floor, so a long course title overflows the day card and
+   the ellipsis below never gets a chance to apply. */
+.schedule-event.schedule-event { grid-template-columns: minmax(0, 1fr); gap: 3px; padding: 8px; border-width: 1px 1px 1px 3px; }
 .schedule-event.schedule-event time { font-size: 9px; }
 .schedule-event.schedule-event strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .schedule-empty-mini { margin: 23px 0 0; color: #b1b7c1; font-size: 10px; line-height: 1.5; text-align: center; }
