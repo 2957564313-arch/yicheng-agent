@@ -540,7 +540,14 @@ function scheduleItemsByDate() {
 }
 
 function isAuthoritativeScheduleItem(item) {
-  return item?.source === "course" || item?.source === "external";
+  // Locked is the item saying so itself. Reading only the source left a
+  // locked course that arrived inside a plan looking editable, offering
+  // an edit the server would refuse.
+  return (
+    item?.locked === true
+    || item?.source === "course"
+    || item?.source === "external"
+  );
 }
 
 function adjustableScheduleItemsForDate(date) {

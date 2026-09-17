@@ -47,6 +47,7 @@ class OpenAICompatibleLLM:
         self.timeout_seconds = timeout_seconds
         self.prompt_dir = prompt_dir
         self.campus_context_path = campus_context_path
+        self._unavailable_models: set[str] = set()
         self._used_models: ContextVar[tuple[str, ...]] = ContextVar(
             f"used_llm_models_{id(self)}",
             default=(),
@@ -61,6 +62,28 @@ class OpenAICompatibleLLM:
     @property
     def model_chain_label(self) -> str:
         return " → ".join(self.models)
+
+    @property
+    def active_models(self) -> tuple[str, ...]:
+        """The chain as it stands now, minus models proven uncallable."""
+        live = tuple(
+            name for name in self.models if name not in self._unavailable_models
+        )
+        return live or self.models
+
+    @staticmethod
+    def _is_permanently_unavailable(exc: Exception) -> bool:
+        """Whether retrying this model on later requests is pointless.
+
+        404 means the account cannot see the model at all, and 403 is how the
+        provider reports an exhausted per-model quota. 400 covers a model that
+        rejects a parameter the planner always sends — a thinking-only model
+        refusing `enable_thinking: false`, for one. A 401 is a key problem
+        rather than a model problem, and 429 and 5xx are temporary, so none of
+        those retire a model.
+        """
+        response = getattr(exc, "response", None)
+        return getattr(response, "status_code", None) in {400, 403, 404}
 
     @property
     def used_model_label(self) -> str | None:
@@ -466,7 +489,16 @@ class OpenAICompatibleLLM:
         primary_budget = min(self.timeout_seconds, 18)
         fallback_budget = min(self.timeout_seconds, 12)
         total_budget = primary_budget + 2 * fallback_budget
-        for index, model in enumerate(self.models):
+        # A deployment's .env outlives the code that shipped with it, so the
+        # configured chain can name a model the account can no longer call.
+        # Retrying it on every request spends the budget on a certain failure;
+        # dropping it here lets a stale config heal itself without an edit on
+        # the server. The last candidate is never dropped — an empty chain
+        # would hide the outage instead of reporting it.
+        candidates = [
+            name for name in self.models if name not in self._unavailable_models
+        ] or list(self.models)
+        for index, model in enumerate(candidates):
             if index:
                 remaining = total_budget - (monotonic() - started)
                 if remaining < 4:
@@ -509,6 +541,8 @@ class OpenAICompatibleLLM:
                 # model, and malformed provider responses all move to the
                 # next configured model. No provider detail reaches the user.
                 last_error = exc
+                if self._is_permanently_unavailable(exc) and len(candidates) > 1:
+                    self._unavailable_models.add(model)
                 continue
         raise AppError(
             "LLM_PROVIDER_ERROR",

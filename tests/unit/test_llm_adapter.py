@@ -238,3 +238,82 @@ async def test_provider_failure_exposes_only_sanitized_diagnostics(
     assert "test-key" not in serialized
     assert "token=secret" not in serialized
     assert "quota failed" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_permanently_dead_model_is_dropped_from_later_requests(
+    monkeypatch,
+    tmp_path: Path,
+):
+    """A deployment's .env can name a model the account can no longer call.
+
+    Retrying it on every request spends the chain's budget on a certain
+    failure, so a 403/404 retires the model for this process and the stale
+    config heals itself without an edit on the server.
+    """
+    (tmp_path / "respond.md").write_text("respond", encoding="utf-8")
+    llm = OpenAICompatibleLLM(
+        enabled=True,
+        model="dead-model",
+        fallback_models=["live-model"],
+        base_url="https://model.example/v1",
+        api_key="test-key",
+        enable_thinking=False,
+        timeout_seconds=5,
+        prompt_dir=tmp_path,
+    )
+    attempted: list[str] = []
+
+    def fake_post(url, body, headers, timeout_seconds):
+        attempted.append(body["model"])
+        if body["model"] == "dead-model":
+            response = requests.Response()
+            response.status_code = 403
+            raise requests.HTTPError(response=response)
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    monkeypatch.setattr(llm, "_post_sync", fake_post)
+
+    assert await llm.polish_answer(draft="a", context={}) == "ok"
+    assert attempted == ["dead-model", "live-model"]
+
+    assert await llm.polish_answer(draft="b", context={}) == "ok"
+    # Second request must not spend an attempt on the retired model.
+    assert attempted == ["dead-model", "live-model", "live-model"]
+    assert llm.active_models == ("live-model",)
+
+
+@pytest.mark.asyncio
+async def test_transient_failure_keeps_the_model_in_the_chain(
+    monkeypatch,
+    tmp_path: Path,
+):
+    (tmp_path / "respond.md").write_text("respond", encoding="utf-8")
+    llm = OpenAICompatibleLLM(
+        enabled=True,
+        model="rate-limited",
+        fallback_models=["live-model"],
+        base_url="https://model.example/v1",
+        api_key="test-key",
+        enable_thinking=False,
+        timeout_seconds=5,
+        prompt_dir=tmp_path,
+    )
+    attempted: list[str] = []
+
+    def fake_post(url, body, headers, timeout_seconds):
+        attempted.append(body["model"])
+        if body["model"] == "rate-limited" and len(attempted) == 1:
+            response = requests.Response()
+            response.status_code = 429
+            raise requests.HTTPError(response=response)
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    monkeypatch.setattr(llm, "_post_sync", fake_post)
+
+    await llm.polish_answer(draft="a", context={})
+    await llm.polish_answer(draft="b", context={})
+
+    # 429 is temporary, so the primary is tried again on the next request.
+    assert attempted == ["rate-limited", "live-model", "rate-limited"]
+    assert llm.active_models == ("rate-limited", "live-model")

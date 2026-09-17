@@ -27,6 +27,14 @@ def health(request: Request) -> dict:
         "version": "0.1.0",
         "database": database_status,
         "llm": "configured" if container.llm.configured else "not_configured",
+        # A deployment keeps its own .env across releases, so the chain the
+        # server actually runs cannot be read off the repository. Model names
+        # are not secrets, and seeing them here is the difference between
+        # knowing the deployed config and guessing at it.
+        "llm_model_chain": list(container.llm.models),
+        "llm_models_retired": sorted(
+            set(container.llm.models) - set(container.llm.active_models)
+        ),
         "live_map_enabled": container.settings.live_route_enabled,
         "live_weather_enabled": container.settings.live_weather_enabled,
         "knowledge_chunks": container.rag.chunk_count,

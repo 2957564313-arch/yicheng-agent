@@ -200,9 +200,18 @@ class AgendaService:
                 # not need a synthetic lunch/dinner event in their agenda.
                 if item.item_type == "meal":
                     continue
-                if (
-                    item.task_id
-                    and item.task_id.startswith(("timetable_", "external_"))
+                # Courses reach the planner as fixed tasks so nothing gets
+                # scheduled on top of them, but the agenda already lists them
+                # from the timetable. Every prefix a course task can carry has
+                # to be skipped here or the day shows the class twice — once
+                # locked, once editable.
+                if item.task_id and item.task_id.startswith(
+                    (
+                        "timetable_",
+                        "external_",
+                        "hduhelp_course_",
+                        "client_course_",
+                    )
                 ):
                     continue
                 location = (
@@ -230,11 +239,13 @@ class AgendaService:
                     task_id=item.task_id,
                     notes=item.reason,
                 )
-                if (
-                    agenda_item.kind == "course"
-                    and self._course_identity(agenda_item)
-                    in imported_course_keys
-                ):
+                # Not gated on kind: `classify` reads the title, and a real
+                # course name ("大学物理B2") contains none of the words it
+                # looks for, so keying this on kind == "course" let every
+                # genuinely-named class through. Matching title, exact start,
+                # exact end and place is already specific enough to mean the
+                # planner is echoing the imported class.
+                if self._course_identity(agenda_item) in imported_course_keys:
                     continue
                 result.append(agenda_item)
         return result

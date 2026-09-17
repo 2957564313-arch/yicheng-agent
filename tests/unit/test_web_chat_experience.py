@@ -382,7 +382,12 @@ def test_day_schedule_allows_manual_edits_but_locks_authoritative_items() -> Non
     assert 'id="schedule-editor-start" type="time" required' in html
     assert 'id="schedule-editor-end" type="time" required' in html
     assert "固定课表和杭助预约不会被改动" in javascript
-    assert 'item?.source === "course" || item?.source === "external"' in javascript
+    # An item that reports itself locked is not editable whatever its
+    # source: a locked course arriving inside a plan used to render an
+    # edit control the server would refuse.
+    assert 'item?.locked === true' in javascript
+    assert 'item?.source === "course"' in javascript
+    assert 'item?.source === "external"' in javascript
     assert 'data-schedule-edit="${escapeHtml(item.id)}"' in javascript
     assert 'method: itemId ? "PUT" : "POST"' in javascript
     assert '{ method: "DELETE" }' in javascript
@@ -401,7 +406,7 @@ def test_day_schedule_allows_manual_edits_but_locks_authoritative_items() -> Non
     assert '<svg viewBox="0 0 24 24" aria-hidden="true">' in javascript
     assert 'title="调整时间或删除">•••' not in javascript
     assert ".schedule-event-lock" in styles
-    assert 'app.js?v=20260916-1' in (WEB_ROOT / "index.html").read_text(
+    assert 'app.js?v=20260917-1' in (WEB_ROOT / "index.html").read_text(
         encoding="utf-8"
     )
     assert "styles.css?v=20260916-1" in (WEB_ROOT / "index.html").read_text(
